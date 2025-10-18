@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Test Interface{% endblock %}
+
+{% block styles %}
+        /* Test-specific styles */
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+        }
+        .form-row input {
+            flex: 1;
+        }
+        .form-row button {
+            flex-shrink: 0;
+        }
+{% endblock %}
+
+{% block content %}
+        <h1>🧪 CloudTasks Test Interface</h1>
+
+        <div class="section">
+            <h3>Test Firestore Connection</h3>
+            <button onclick="testConnection()">Test Connection</button>
+            <div id="connectionResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>Statistics</h3>
+            <button onclick="getTaskStats()">Task Queue Stats</button>
+            <button onclick="getRewardStats()">Reward System Health</button>
+            <button onclick="getSystemHealth()">System Health</button>
+            <button onclick="getQueueManagement()">Queue Management</button>
+            <button onclick="getWeeklyPoints()">Weekly Points</button>
+            <div id="statsResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>Debug Actions</h3>
+            <button onclick="checkGenerationLocks()">Check Generation Locks</button>
+            <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
+            <div id="debugResult" class="result"></div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+        async function testConnection() {
+            const resultDiv = document.getElementById('connectionResult');
+            resultDiv.textContent = 'Testing connection...';
+            
+            try {
+                const response = await fetch('/api/test');
+                const data = await response.json();
+                
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getTaskStats() {
+            const resultDiv = document.getElementById('statsResult');
+            resultDiv.textContent = 'Loading task queue statistics...';
+            
+            try {
+                // Get task statistics from the new endpoint
+                const statsResponse = await fetch('/api/tasks/statistics');
+                const statsData = await statsResponse.json();
+                
+                if (statsData.status === 'success') {
+                    // Get active session tasks for additional info
+                    const tasksResponse = await fetch('/api/tasks');
+                    const tasksData = await tasksResponse.json();
+                    
+                    const stats = {
+                        active_session_tasks: tasksData.tasks ? tasksData.tasks.length : 0,
+                        uncompleted_tasks_by_category: statsData.uncompleted_tasks_by_category,
+                        completed_tasks_by_category: statsData.completed_tasks_by_category,
+                        minimum_threshold_status: statsData.minimum_threshold_status,
+                        total_uncompleted: statsData.total_uncompleted,
+                        total_completed: statsData.total_completed,
+                        task_age_distribution: {
+                            '0-1 days': 0,
+                            '1-3 days': 0,
+                            '3-7 days': 0,
+                            '1+ weeks': 0
+                        }
+                    };
+                    
+                    // Calculate age distribution from active session tasks
+                    if (tasksData.tasks) {
+                        const now = new Date();
+                        tasksData.tasks.forEach(task => {
+                            const createdDate = new Date(task.created_at);
+                            const ageDays = (now - createdDate) / (1000 * 60 * 60 * 24);
+                            
+                            if (ageDays <= 1) stats.task_age_distribution['0-1 days']++;
+                            else if (ageDays <= 3) stats.task_age_distribution['1-3 days']++;
+                            else if (ageDays <= 7) stats.task_age_distribution['3-7 days']++;
+                            else stats.task_age_distribution['1+ weeks']++;
+                        });
+                    }
+                    
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = JSON.stringify(stats, null, 2);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = JSON.stringify(statsData, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getRewardStats() {
+            const resultDiv = document.getElementById('statsResult');
+            resultDiv.textContent = 'Loading reward system health...';
+            
+            try {
+                // Get multiple reward-related endpoints
+                const [earnedRewardsResponse, challengesResponse] = await Promise.all([
+                    fetch('/api/earned-rewards'),
+                    fetch('/api/challenges')
+                ]);
+                
+                const earnedRewardsData = await earnedRewardsResponse.json();
+                const challengesData = await challengesResponse.json();
+                
+                if (earnedRewardsData.status === 'success' && challengesData.status === 'success') {
+                    const stats = {
+                        reward_goals: {
+                            pending: 0,
+                            completed: 0,
+                            total: 0
+                        },
+                        earned_rewards: {
+                            pending: 0,
+                            selected: 0,
+                            expired: 0,
+                            total: 0
+                        },
+                        reward_tasks: {
+                            pending: 0,
+                            completed: 0,
+                            total: 0
+                        },
+                        system_health: {
+                            has_pending_goals: false,
+                            has_pending_rewards: false,
+                            has_active_challenges: false,
+                            reward_system_active: false
+                        }
+                    };
+                    
+                    // Process earned rewards data
+                    if (earnedRewardsData.pending_rewards) {
+                        earnedRewardsData.pending_rewards.forEach(reward => {
+                            const status = reward.status || 'pending';
+                            stats.earned_rewards[status] = (stats.earned_rewards[status] || 0) + 1;
+                            stats.earned_rewards.total++;
+                        });
+                    }
+                    
+                    // Process challenges data
+                    if (challengesData.challenges) {
+                        challengesData.challenges.forEach(challenge => {
+                            const isCompleted = challenge.completed || false;
+                            if (isCompleted) {
+                                stats.reward_tasks.completed++;
+                            } else {
+                                stats.reward_tasks.pending++;
+                            }
+                            stats.reward_tasks.total++;
+                        });
+                    }
+                    
+                    // Calculate system health indicators
+                    stats.system_health.has_pending_goals = stats.reward_goals.pending > 0;
+                    stats.system_health.has_pending_rewards = stats.earned_rewards.pending > 0;
+                    stats.system_health.has_active_challenges = stats.reward_tasks.pending > 0;
+                    stats.system_health.reward_system_active = 
+                        stats.system_health.has_pending_goals || 
+                        stats.system_health.has_pending_rewards || 
+                        stats.system_health.has_active_challenges;
+                    
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = JSON.stringify(stats, null, 2);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = JSON.stringify({
+                        earned_rewards: earnedRewardsData,
+                        challenges: challengesData
+                    }, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getSystemHealth() {
+            const resultDiv = document.getElementById('statsResult');
+            resultDiv.textContent = 'Loading system health...';
+            
+            try {
+                // Test multiple endpoints to check system health
+                const [connectionTest, tasksTest, rewardsTest, weeklyTest] = await Promise.all([
+                    fetch('/api/test'),
+                    fetch('/api/tasks'),
+                    fetch('/api/earned-rewards'),
+                    fetch('/api/weekly-points')
+                ]);
+                
+                const health = {
+                    database_connection: await connectionTest.json(),
+                    tasks_endpoint: await tasksTest.json(),
+                    rewards_endpoint: await rewardsTest.json(),
+                    weekly_points_endpoint: await weeklyTest.json(),
+                    overall_health: 'unknown'
+                };
+                
+                // Determine overall health
+                const allHealthy = [
+                    health.database_connection.status === 'success',
+                    health.tasks_endpoint.status === 'success',
+                    health.rewards_endpoint.status === 'success',
+                    health.weekly_points_endpoint.status === 'success'
+                ].every(status => status);
+                
+                health.overall_health = allHealthy ? 'healthy' : 'degraded';
+                
+                resultDiv.className = 'result ' + (allHealthy ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(health, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getQueueManagement() {
+            const resultDiv = document.getElementById('statsResult');
+            resultDiv.textContent = 'Loading queue management status...';
+            
+            try {
+                // Get tasks to analyze queue status
+                const tasksResponse = await fetch('/api/tasks');
+                const tasksData = await tasksResponse.json();
+                
+                if (tasksData.status === 'success') {
+                    const queueStats = {
+                        task_generation_locks: {
+                            note: 'Check Firestore generation_locks collection for active locks',
+                            expected_timeout: '5 minutes'
+                        },
+                        category_queues: {},
+                        queue_health: {
+                            categories_below_minimum: [],
+                            oldest_uncompleted_task: null,
+                            total_queue_size: 0,
+                            queue_balance: 'unknown'
+                        }
+                    };
+                    
+                    if (tasksData.tasks) {
+                        const categories = ['Work', 'Kids', 'Spouse', 'House', 'Self'];
+                        const now = new Date();
+                        let oldestTask = null;
+                        let oldestAge = 0;
+                        
+                        categories.forEach(category => {
+                            const categoryTasks = tasksData.tasks.filter(task => 
+                                task.category === category && !task.completed
+                            );
+                            
+                            queueStats.category_queues[category] = {
+                                uncompleted_count: categoryTasks.length,
+                                below_minimum: categoryTasks.length < 5,
+                                average_age_days: 0
+                            };
+                            
+                            if (categoryTasks.length < 5) {
+                                queueStats.queue_health.categories_below_minimum.push(category);
+                            }
+                            
+                            // Calculate average age and find oldest task
+                            if (categoryTasks.length > 0) {
+                                let totalAge = 0;
+                                categoryTasks.forEach(task => {
+                                    if (task.created_at) {
+                                        const createdDate = new Date(task.created_at);
+                                        const ageDays = (now - createdDate) / (1000 * 60 * 60 * 24);
+                                        totalAge += ageDays;
+                                        
+                                        if (ageDays > oldestAge) {
+                                            oldestAge = ageDays;
+                                            oldestTask = {
+                                                id: task.id,
+                                                description: task.description,
+                                                category: task.category,
+                                                age_days: Math.round(ageDays * 100) / 100
+                                            };
+                                        }
+                                    }
+                                });
+                                
+                                queueStats.category_queues[category].average_age_days = 
+                                    Math.round((totalAge / categoryTasks.length) * 100) / 100;
+                            }
+                            
+                            queueStats.queue_health.total_queue_size += categoryTasks.length;
+                        });
+                        
+                        queueStats.queue_health.oldest_uncompleted_task = oldestTask;
+                        
+                        // Determine queue balance
+                        const categoryCounts = Object.values(queueStats.category_queues).map(q => q.uncompleted_count);
+                        const minCount = Math.min(...categoryCounts);
+                        const maxCount = Math.max(...categoryCounts);
+                        const balanceRatio = maxCount > 0 ? minCount / maxCount : 1;
+                        
+                        if (balanceRatio > 0.8) queueStats.queue_health.queue_balance = 'balanced';
+                        else if (balanceRatio > 0.5) queueStats.queue_health.queue_balance = 'moderate';
+                        else queueStats.queue_health.queue_balance = 'unbalanced';
+                    }
+                    
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = JSON.stringify(queueStats, null, 2);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = JSON.stringify(tasksData, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getWeeklyPoints() {
+            const resultDiv = document.getElementById('statsResult');
+            resultDiv.textContent = 'Loading weekly points...';
+            
+            try {
+                const response = await fetch('/api/weekly-points');
+                const data = await response.json();
+                
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+
+        async function checkGenerationLocks() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.textContent = 'Checking generation locks...';
+            
+            try {
+                const response = await fetch('/api/debug/locks');
+                const data = await response.json();
+                
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+
+        async function checkTimeAndWeights() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.textContent = 'Checking time and weights...';
+            
+            try {
+                const response = await fetch('/api/debug/time-weights', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+</script>
+{% endblock %}

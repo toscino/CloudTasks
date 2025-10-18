@@ -1,0 +1,17 @@
+runtime: python39
+
+env_variables:
+  GOOGLE_CLOUD_PROJECT: cloudtasks-app-473120
+  FLASK_ENV: production
+  FLASK_SECRET_KEY: your-production-flask-secret-key-change-this
+  USER1_SECRET_KEY: your-production-user1-secret-key-change-this  # Ian's secret key
+  USER2_SECRET_KEY: your-production-user2-secret-key-change-this  # Karleigh's secret key
+  USER3_SECRET_KEY: your-production-user3-secret-key-change-this
+
+automatic_scaling:
+  min_instances: 2
+  max_instances: 20
+
+handlers:
+- url: /.*
+  script: main.app

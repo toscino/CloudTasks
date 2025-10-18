@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Pending Rewards - CloudTasks{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1>🎁 Pending Rewards</h1>
+        <p>Claim your earned rewards!</p>
+    </div>
+
+    <div id="pending-rewards-list" class="rewards-list">
+        <!-- Rewards will be loaded here -->
+    </div>
+
+    <div id="no-rewards-message" class="empty-state" style="display: none;">
+        <h3>No Pending Rewards</h3>
+        <p>Complete difficult tasks to earn rewards!</p>
+    </div>
+</div>
+
+<style>
+.rewards-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.reward-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.reward-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.reward-card h3 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.reward-card p {
+    margin: 0.5rem 0;
+    color: #666;
+}
+
+.claim-btn {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 1rem;
+    width: 100%;
+    transition: background 0.2s;
+}
+
+.claim-btn:hover {
+    background: #45a049;
+}
+
+.claim-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+}
+
+.empty-state h3 {
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 24px;
+    background: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.btn:hover {
+    background: #0056b3;
+}
+
+.btn-primary {
+    background: #007bff;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+}
+</style>
+
+<script>
+// Load pending rewards when page loads
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadPendingRewards();
+});
+
+async function loadPendingRewards() {
+    try {
+        const response = await fetch('/api/earned-rewards');
+        const data = await response.json();
+        
+        const rewardsList = document.getElementById('pending-rewards-list');
+        const noRewardsMessage = document.getElementById('no-rewards-message');
+        
+        if (data.status === 'success' && data.pending_rewards && data.pending_rewards.length > 0) {
+            rewardsList.innerHTML = '';
+            
+            // Sort rewards alphabetically by description (or by earned date if no description)
+            const sortedRewards = data.pending_rewards.sort((a, b) => {
+                const aDesc = a.description || `Reward ${a.id}`;
+                const bDesc = b.description || `Reward ${b.id}`;
+                return aDesc.localeCompare(bDesc);
+            });
+            
+            sortedRewards.forEach((reward, index) => {
+                const rewardCard = document.createElement('div');
+                rewardCard.className = 'reward-card';
+                rewardCard.innerHTML = `
+                    <h3>🎁 Reward ${index + 1}</h3>
+                    <p><strong>Earned from:</strong> Difficulty ${reward.task_difficulty} task</p>
+                    <p><strong>Earned on:</strong> ${new Date(reward.earned_at).toLocaleDateString()}</p>
+                    <button class="claim-btn" onclick="claimReward('${reward.id}')">Claim This Reward</button>
+                `;
+                rewardsList.appendChild(rewardCard);
+            });
+            
+            noRewardsMessage.style.display = 'none';
+        } else {
+            rewardsList.style.display = 'none';
+            noRewardsMessage.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Failed to load pending rewards:', error);
+        document.getElementById('pending-rewards-list').innerHTML = '<p>Error loading rewards. Please try again.</p>';
+    }
+}
+
+async function claimReward(rewardId) {
+    try {
+        // Disable the button
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'Generating Options...';
+        
+        // Generate reward options
+        const response = await fetch(`/api/earned-rewards/${rewardId}/generate-options`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Show reward options selection
+            showRewardOptionsSelection(data.reward_options, rewardId);
+        } else {
+            alert('Failed to generate reward options. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Claim This Reward';
+        }
+    } catch (error) {
+        console.error('Error claiming reward:', error);
+        alert('Failed to claim reward. Please try again.');
+        const btn = event.target;
+        btn.disabled = false;
+        btn.textContent = 'Claim This Reward';
+    }
+}
+
+function showRewardOptionsSelection(rewardOptions, earnedRewardId) {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'reward-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    let content = `
+        <div class="reward-modal-content">
+            <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+            <h3>🎁 Choose Your Reward!</h3>
+            <p>Select one of these reward options:</p>
+            <div class="reward-options">
+    `;
+    
+    rewardOptions.forEach((option, index) => {
+        content += `
+            <div class="reward-option">
+                <h4>Option ${index + 1}</h4>
+                <p>${option.display}</p>
+                <button class="select-reward-btn" onclick="selectRewardOption('${option.id}', '${earnedRewardId}')">Select This Reward</button>
+            </div>
+        `;
+    });
+    
+    content += `
+            </div>
+            <p><em>Choose your reward to continue!</em></p>
+        </div>
+    `;
+    modal.innerHTML = content;
+    
+    // Style modal content
+    modal.querySelector('.reward-modal-content').style.cssText = `
+        background: white;
+        padding: 2rem;
+        border-radius: 10px;
+        text-align: center;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        position: relative;
+    `;
+    
+    // Style close button
+    modal.querySelector('.close-btn').style.cssText = `
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        background: #ff4444;
+        color: white;
+        border: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    
+    // Style reward options
+    modal.querySelector('.reward-options').style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    `;
+    
+    modal.querySelectorAll('.reward-option').forEach(option => {
+        option.style.cssText = `
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #f9f9f9;
+        `;
+    });
+    
+    modal.querySelectorAll('.select-reward-btn').forEach(btn => {
+        btn.style.cssText = `
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        `;
+    });
+    
+    // Add to page
+    document.body.appendChild(modal);
+}
+
+async function selectRewardOption(optionId, earnedRewardId) {
+    try {
+        const response = await fetch(`/api/earned-rewards/${earnedRewardId}/select-option`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ option_id: optionId })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Remove the modal
+            const modal = document.querySelector('.reward-modal');
+            if (modal) {
+                modal.remove();
+            }
+            
+            // Reload the page to show updated rewards
+            await loadPendingRewards();
+        }
+    } catch (error) {
+        console.error('Error selecting reward:', error);
+    }
+}
+</script>
+{% endblock %}

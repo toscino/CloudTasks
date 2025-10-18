@@ -1,0 +1,755 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Goals{% endblock %}
+
+{% block styles %}
+        /* Goals-specific styles */
+        h2 {
+            color: #1c1e21;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .goals-container {
+            max-width: 100%;
+        }
+        
+        .category-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+        
+        .category-tab {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .category-tab:hover {
+            background-color: #e9ecef;
+            border-color: #adb5bd;
+        }
+        
+        .category-tab.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .category-section {
+            display: none;
+            margin-bottom: 30px;
+        }
+        
+        .category-section.active {
+            display: block;
+        }
+        
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .category-icon {
+            font-size: 24px;
+        }
+        
+        .category-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1c1e21;
+        }
+        
+        .add-goal-form {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .goals-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .goal-item {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 15px;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .goal-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .goal-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        .goal-text {
+            flex: 1;
+            font-size: 16px;
+            color: #1c1e21;
+            line-height: 1.4;
+        }
+        
+        .goal-meta {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .goal-priority {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .goal-priority.high {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .goal-priority.medium {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .goal-priority.low {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .goal-status {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .goal-status.active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .goal-status.paused {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .goal-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px dashed #dee2e6;
+        }
+        
+        .loading-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #c3e6cb;
+        }
+        
+        @media (max-width: 768px) {
+            .category-tabs {
+                flex-direction: column;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .goal-content {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .goal-actions {
+                align-self: flex-end;
+            }
+        }
+{% endblock %}
+
+{% block content %}
+    <div class="goals-container">
+        <h2>🎯 Personal Goals</h2>
+        <p style="color: #6c757d; margin-bottom: 20px;">Manage your goals and aspirations by category. These will help generate personalized tasks for you.</p>
+        
+        <!-- Category Tabs -->
+        <div class="category-tabs" id="categoryTabs">
+            <!-- Tabs will be populated by JavaScript -->
+        </div>
+        
+        <!-- Category Sections -->
+        <div id="categorySections">
+            <!-- Sections will be populated by JavaScript -->
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+        // Goals Management JavaScript
+        let categories = [];
+        let goals = {};
+        let currentCategory = null;
+        
+        // Wait for authentication to be ready, then load data
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait for global authentication to be initialized
+            await new Promise(resolve => {
+                const checkAuth = () => {
+                    if (window.authState && window.authState.currentUsername) {
+                        resolve();
+                    } else {
+                        setTimeout(checkAuth, 100);
+                    }
+                };
+                checkAuth();
+            });
+            
+            // Load categories and goals
+            await loadCategories();
+            await loadGoals();
+            renderInterface();
+        });
+        
+        // Load available categories
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/goals/categories');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    categories = data.categories;
+                } else {
+                    console.error('Failed to load categories:', data.message);
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+        
+        // Load goals for current user
+        async function loadGoals() {
+            try {
+                const response = await fetch('/api/goals');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    goals = data.goals;
+                } else {
+                    console.error('Failed to load goals:', data.message);
+                }
+            } catch (error) {
+                console.error('Error loading goals:', error);
+            }
+        }
+        
+        // Render the entire interface
+        function renderInterface() {
+            renderCategoryTabs();
+            renderCategorySections();
+            
+            // Set "All Goals" as active on first load (no tab needed)
+            if (!currentCategory) {
+                currentCategory = 'all';
+                updateActiveSection();
+            }
+        }
+        
+        // Render category tabs
+        function renderCategoryTabs() {
+            const tabsContainer = document.getElementById('categoryTabs');
+            tabsContainer.innerHTML = '';
+            
+            // Add category tabs (no "All Goals" tab)
+            categories.forEach(category => {
+                const tab = document.createElement('div');
+                tab.className = 'category-tab';
+                tab.textContent = `${category.icon} ${category.label}`;
+                tab.dataset.category = category.value;
+                tab.onclick = () => switchCategory(category.value);
+                
+                tabsContainer.appendChild(tab);
+            });
+        }
+        
+        // Render category sections
+        function renderCategorySections() {
+            const sectionsContainer = document.getElementById('categorySections');
+            sectionsContainer.innerHTML = '';
+            
+            // Add "All Goals" section first
+            const allSection = document.createElement('div');
+            allSection.className = 'category-section';
+            allSection.id = 'section-all';
+            
+            allSection.innerHTML = `
+                <div id="all-goals-container">
+                    <div class="loading-state">Loading all goals...</div>
+                </div>
+            `;
+            
+            sectionsContainer.appendChild(allSection);
+            
+            // Add individual category sections
+            categories.forEach(category => {
+                const section = document.createElement('div');
+                section.className = 'category-section';
+                section.id = `section-${category.value}`;
+                
+                section.innerHTML = `
+                    <div class="category-header">
+                        <span class="category-icon">${category.icon}</span>
+                        <span class="category-title">${category.label} Goals</span>
+                    </div>
+                    
+                    <div class="add-goal-form">
+                        <div class="form-group">
+                            <label for="goal-description-${category.value}">What do you want to accomplish?</label>
+                            <textarea id="goal-description-${category.value}" placeholder="Describe your goal..."></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="goal-priority-${category.value}">Priority</label>
+                                <select id="goal-priority-${category.value}">
+                                    <option value="High">High</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="Low">Low</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-status-${category.value}">Status</label>
+                                <select id="goal-status-${category.value}">
+                                    <option value="Active" selected>Active</option>
+                                    <option value="Paused">Paused</option>
+                                </select>
+                            </div>
+                            <button class="btn" onclick="addGoal('${category.value}')">Add Goal</button>
+                        </div>
+                    </div>
+                    
+                    <ul class="goals-list" id="goals-list-${category.value}">
+                        <li class="loading-state">Loading goals...</li>
+                    </ul>
+                `;
+                
+                sectionsContainer.appendChild(section);
+            });
+            
+            // Render goals for each category
+            categories.forEach(category => {
+                renderGoalsForCategory(category.value);
+            });
+            
+            // Render all goals
+            renderAllGoals();
+        }
+        
+        // Render all goals grouped by category
+        function renderAllGoals() {
+            const container = document.getElementById('all-goals-container');
+            
+            // Count total goals
+            let totalGoals = 0;
+            Object.values(goals).forEach(categoryGoals => {
+                totalGoals += categoryGoals.length;
+            });
+            
+            if (totalGoals === 0) {
+                container.innerHTML = '<div class="empty-state">No goals yet. Switch to a category tab to add your first goal!</div>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            // Render each category's goals
+            categories.forEach(category => {
+                const categoryGoals = goals[category.value] || [];
+                if (categoryGoals.length === 0) return;
+                
+                // Create category header
+                const categoryHeader = document.createElement('div');
+                categoryHeader.className = 'category-header';
+                categoryHeader.style.marginBottom = '10px';
+                categoryHeader.innerHTML = `
+                    <span class="category-icon">${category.icon}</span>
+                    <span class="category-title">${category.label} (${categoryGoals.length})</span>
+                `;
+                container.appendChild(categoryHeader);
+                
+                // Create goals list for this category
+                const goalsList = document.createElement('ul');
+                goalsList.className = 'goals-list';
+                goalsList.style.marginBottom = '20px';
+                
+                categoryGoals.forEach(goal => {
+                    const li = document.createElement('li');
+                    li.className = 'goal-item';
+                    li.dataset.goalId = goal.id;
+                    
+                    li.innerHTML = `
+                        <div class="goal-content">
+                            <div class="goal-text">${goal.description}</div>
+                            <div class="goal-actions">
+                                <button class="btn btn-sm btn-secondary" onclick="editGoal('${goal.id}')">Edit</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteGoal('${goal.id}')">Delete</button>
+                            </div>
+                        </div>
+                        <div class="goal-meta">
+                            <span class="goal-priority ${goal.priority.toLowerCase()}">${goal.priority}</span>
+                            <span class="goal-status ${goal.status.toLowerCase()}">${goal.status}</span>
+                        </div>
+                    `;
+                    
+                    goalsList.appendChild(li);
+                });
+                
+                container.appendChild(goalsList);
+            });
+        }
+        
+        // Render goals for a specific category
+        function renderGoalsForCategory(categoryValue) {
+            const goalsList = document.getElementById(`goals-list-${categoryValue}`);
+            const categoryGoals = goals[categoryValue] || [];
+            
+            if (categoryGoals.length === 0) {
+                goalsList.innerHTML = '<li class="empty-state">No goals yet. Add your first goal above!</li>';
+                return;
+            }
+            
+            goalsList.innerHTML = '';
+            
+            categoryGoals.forEach(goal => {
+                const li = document.createElement('li');
+                li.className = 'goal-item';
+                li.dataset.goalId = goal.id;
+                
+                li.innerHTML = `
+                    <div class="goal-content">
+                        <div class="goal-text">${goal.description}</div>
+                        <div class="goal-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="editGoal('${goal.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteGoal('${goal.id}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="goal-meta">
+                        <span class="goal-priority ${goal.priority.toLowerCase()}">${goal.priority}</span>
+                        <span class="goal-status ${goal.status.toLowerCase()}">${goal.status}</span>
+                    </div>
+                `;
+                
+                goalsList.appendChild(li);
+            });
+        }
+        
+        // Switch to a different category (toggle behavior)
+        function switchCategory(categoryValue) {
+            // If clicking the same category, deselect it and show all goals
+            if (currentCategory === categoryValue) {
+                currentCategory = 'all';
+            } else {
+                currentCategory = categoryValue;
+            }
+            updateActiveTab();
+            updateActiveSection();
+        }
+        
+        // Update active tab styling
+        function updateActiveTab() {
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.category === currentCategory) {
+                    tab.classList.add('active');
+                }
+            });
+        }
+        
+        // Update active section display
+        function updateActiveSection() {
+            document.querySelectorAll('.category-section').forEach(section => {
+                section.classList.remove('active');
+                if (section.id === `section-${currentCategory}`) {
+                    section.classList.add('active');
+                }
+            });
+        }
+        
+        // Add a new goal
+        async function addGoal(categoryValue) {
+            const description = document.getElementById(`goal-description-${categoryValue}`).value.trim();
+            const priority = document.getElementById(`goal-priority-${categoryValue}`).value;
+            const status = document.getElementById(`goal-status-${categoryValue}`).value;
+            
+            if (!description) {
+                alert('Please enter a goal description');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/goals', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        description: description,
+                        category: categoryValue,
+                        priority: priority,
+                        status: status
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Clear form
+                    document.getElementById(`goal-description-${categoryValue}`).value = '';
+                    document.getElementById(`goal-priority-${categoryValue}`).value = 'Medium';
+                    document.getElementById(`goal-status-${categoryValue}`).value = 'Active';
+                    
+                    // Reload goals and re-render
+                    await loadGoals();
+                    renderGoalsForCategory(categoryValue);
+                    renderAllGoals();
+                } else {
+                    alert('Failed to create goal: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error creating goal:', error);
+                alert('Error creating goal. Please try again.');
+            }
+        }
+        
+        // Edit a goal
+        async function editGoal(goalId) {
+            // Find the goal
+            let goalToEdit = null;
+            let categoryValue = null;
+            
+            for (const [category, categoryGoals] of Object.entries(goals)) {
+                const goal = categoryGoals.find(g => g.id === goalId);
+                if (goal) {
+                    goalToEdit = goal;
+                    categoryValue = category;
+                    break;
+                }
+            }
+            
+            if (!goalToEdit) {
+                alert('Goal not found');
+                return;
+            }
+            
+            // Get new values from user
+            const newDescription = prompt('Edit goal description:', goalToEdit.description);
+            if (newDescription === null) return; // User cancelled
+            
+            const newPriority = prompt('Edit priority (High/Medium/Low):', goalToEdit.priority);
+            if (newPriority === null) return; // User cancelled
+            
+            const newStatus = prompt('Edit status (Active/Paused):', goalToEdit.status);
+            if (newStatus === null) return; // User cancelled
+            
+            try {
+                const response = await fetch(`/api/goals/${goalId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        description: newDescription,
+                        priority: newPriority,
+                        status: newStatus
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Reload goals and re-render
+                    await loadGoals();
+                    renderGoalsForCategory(categoryValue);
+                    renderAllGoals();
+                } else {
+                    alert('Failed to update goal: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error updating goal:', error);
+                alert('Error updating goal. Please try again.');
+            }
+        }
+        
+        // Delete a goal
+        async function deleteGoal(goalId) {
+            if (!confirm('Are you sure you want to delete this goal?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/goals/${goalId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Reload goals and re-render all categories
+                    await loadGoals();
+                    categories.forEach(category => {
+                        renderGoalsForCategory(category.value);
+                    });
+                    renderAllGoals();
+                } else {
+                    alert('Failed to delete goal: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error deleting goal:', error);
+                alert('Error deleting goal. Please try again.');
+            }
+        }
+</script>
+{% endblock %}

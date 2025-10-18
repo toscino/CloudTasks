@@ -1,0 +1,20 @@
+runtime: python311
+
+env_variables:
+  GOOGLE_CLOUD_PROJECT: cloudtasks-app-473120
+  FLASK_ENV: development
+  FLASK_SECRET_KEY: dev-flask-secret-key-change-in-production
+  USER1_SECRET_KEY: dev-user1-secret-key  # Ian's secret key
+  USER2_SECRET_KEY: dev-user2-secret-key  # Karleigh's secret key
+  USER3_SECRET_KEY: dev-user3-secret-key
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 2
+  target_cpu_utilization: 0.8
+  min_idle_instances: 0
+  max_idle_instances: 0
+
+handlers:
+- url: /.*
+  script: main.app

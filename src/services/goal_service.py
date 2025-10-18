@@ -1,0 +1,238 @@
+"""
+Goal service - handles goal-related business logic
+"""
+from google.cloud import firestore
+from google.cloud.firestore import FieldFilter
+from datetime import datetime
+from src.models.goal import GoalModel, RewardGoalModel, create_goal_from_request_data, create_reward_goal_from_option
+from src.utils.logger import logger
+from typing import List, Dict, Any
+
+
+class GoalService:
+    """Service for goal-related operations"""
+    
+    def __init__(self, db):
+        self.db = db
+    
+    def get_goals(self, username: str) -> Dict[str, Any]:
+        """Get all goals for current user organized by category"""
+        try:
+            # Query goals for this user
+            goals_query = self.db.collection('goals').where('username', '==', username)
+            goals_docs = goals_query.stream()
+            
+            goals_by_category = {}
+            for doc in goals_docs:
+                goal_data = doc.to_dict()
+                goal_data['id'] = doc.id
+                
+                category = goal_data.get('category', 'General')
+                if category not in goals_by_category:
+                    goals_by_category[category] = []
+                goals_by_category[category].append(goal_data)
+            
+            return {
+                'status': 'success',
+                'goals': goals_by_category
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to get goals: {str(e)}'
+            }
+    
+    def create_goal(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
+        """Create a new goal"""
+        try:
+            if not data or not data.get('description'):
+                return {'error': 'Goal description is required'}
+            
+            # Create goal model
+            goal_model = create_goal_from_request_data(data, username)
+            
+            if not goal_model.validate():
+                return {'error': 'Invalid goal data'}
+            
+            # Create new goal in Firestore
+            doc_ref = self.db.collection('goals').add(goal_model.to_firestore_dict())
+            
+            return {
+                'status': 'success',
+                'message': 'Goal created successfully',
+                'goal_id': doc_ref[1].id
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to create goal: {str(e)}'
+            }
+    
+    def update_goal(self, goal_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
+        """Update an existing goal"""
+        try:
+            doc_ref = self.db.collection('goals').document(goal_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                return {
+                    'status': 'error',
+                    'message': 'Goal not found'
+                }
+            
+            goal_data = doc.to_dict()
+            if goal_data.get('username') != username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Goal belongs to another user'
+                }
+            
+            # Update fields
+            update_data = {'updated_at': firestore.SERVER_TIMESTAMP}
+            if 'description' in data:
+                update_data['description'] = data['description']
+            if 'category' in data:
+                update_data['category'] = data['category']
+            if 'priority' in data:
+                update_data['priority'] = data['priority']
+            if 'status' in data:
+                update_data['status'] = data['status']
+            
+            doc_ref.update(update_data)
+            
+            return {
+                'status': 'success',
+                'message': 'Goal updated successfully'
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to update goal: {str(e)}'
+            }
+    
+    def delete_goal(self, goal_id: str, username: str) -> Dict[str, Any]:
+        """Delete a goal"""
+        try:
+            doc_ref = self.db.collection('goals').document(goal_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                return {
+                    'status': 'error',
+                    'message': 'Goal not found'
+                }
+            
+            goal_data = doc.to_dict()
+            if goal_data.get('username') != username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Goal belongs to another user'
+                }
+            
+            doc_ref.delete()
+            
+            return {
+                'status': 'success',
+                'message': 'Goal deleted successfully'
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to delete goal: {str(e)}'
+            }
+    
+    def get_categories(self) -> Dict[str, Any]:
+        """Get available goal categories"""
+        categories = [
+            {'value': 'Work', 'label': 'Work', 'icon': '💼'},
+            {'value': 'Kids', 'label': 'Kids', 'icon': '👶'},
+            {'value': 'Spouse', 'label': 'Spouse', 'icon': '💕'},
+            {'value': 'House', 'label': 'House', 'icon': '🏠'},
+            {'value': 'Self', 'label': 'Self', 'icon': '🧘'}
+        ]
+        
+        return {
+            'status': 'success',
+            'categories': categories
+        }
+    
+    def get_rewards_owed(self, username: str) -> Dict[str, Any]:
+        """Get pending rewards owed for current user"""
+        try:
+            logger.debug(f"Fetching rewards for user: {username}")
+            
+            # Query pending reward goals for this user only
+            goals_query = self.db.collection('reward_goals').where(
+                filter=firestore.And([
+                    FieldFilter('username', '==', username),
+                    FieldFilter('status', '==', 'pending')
+                ])
+            )
+            goals_docs = list(goals_query.stream())  # Convert to list to avoid iterator issues
+            logger.debug(f"Found {len(goals_docs)} reward goal documents")
+            
+            rewards = []
+            for doc in goals_docs:
+                goal_data = doc.to_dict()
+                goal_data['id'] = doc.id
+                
+                # Convert timestamps
+                if 'created_at' in goal_data and hasattr(goal_data['created_at'], 'timestamp'):
+                    goal_data['created_at'] = datetime.fromtimestamp(goal_data['created_at'].timestamp())
+                if 'updated_at' in goal_data and hasattr(goal_data['updated_at'], 'timestamp'):
+                    goal_data['updated_at'] = datetime.fromtimestamp(goal_data['updated_at'].timestamp())
+                
+                rewards.append(goal_data)
+            
+            logger.debug(f"Returning {len(rewards)} rewards")
+            return {
+                'status': 'success',
+                'rewards': rewards
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to get rewards: {str(e)}'
+            }
+    
+    def complete_reward_owed(self, goal_id: str, username: str) -> Dict[str, Any]:
+        """Complete a reward owed"""
+        try:
+            doc_ref = self.db.collection('reward_goals').document(goal_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                return {
+                    'status': 'error',
+                    'message': 'Reward not found'
+                }
+            
+            goal_data = doc.to_dict()
+            if goal_data.get('username') != username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Reward belongs to another user'
+                }
+            
+            if goal_data.get('status') != 'pending':
+                return {
+                    'status': 'error',
+                    'message': 'Reward is already completed'
+                }
+            
+            # Mark as completed
+            doc_ref.update({
+                'status': 'completed',
+                'completed_at': firestore.SERVER_TIMESTAMP,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+            
+            return {
+                'status': 'success',
+                'message': 'Reward completed successfully'
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to complete reward: {str(e)}'
+            }

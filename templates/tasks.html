@@ -1,0 +1,1338 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Tasks{% endblock %}
+
+{% block styles %}
+        /* Task-specific styles */
+        h2 {
+            color: #1c1e21;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        #task-list, #rewards-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 30px 0;
+        }
+        .task-item {
+            position: relative;
+            border-bottom: 1px solid #e0e0e0;
+            cursor: grab;
+            user-select: none;
+        }
+        .task-item:active {
+            cursor: grabbing;
+        }
+        .task-content {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        .task-item:last-child {
+            border-bottom: none;
+        }
+        .task-info {
+            flex-grow: 1;
+        }
+        .task-text {
+            font-size: 16px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .task-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+        .difficulty, .duration {
+            font-weight: 500;
+        }
+        
+        /* Center challenge content since there's no button */
+        #rewards-list .task-content {
+            justify-content: center !important;
+        }
+        .category {
+            background-color: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .complete-btn {
+            border: 2px solid #cecece;
+            background-color: transparent;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
+            margin-left: 15px;
+            transition: background-color 0.2s, border-color 0.2s;
+            flex-shrink: 0; /* Prevents the button from shrinking */
+        }
+        .complete-btn:hover {
+            background-color: #e0f2e9;
+            border-color: #34c759;
+        }
+        .complete-btn.saved {
+            background-color: #34c759;
+            border-color: #34c759;
+        }
+        .complete-btn.saved:hover {
+            background-color: #2fb84d;
+            border-color: #2fb84d;
+        }
+        .task-item {
+            position: relative;
+            overflow: hidden;
+        }
+        .swipe-confirmation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #34c759;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .swipe-confirmation.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .complete-confirm-btn {
+            background-color: white;
+            color: #34c759;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .complete-confirm-btn:hover {
+            background-color: #f0f0f0;
+        }
+        .empty-state {
+            text-align: center;
+            color: #8a8a8a;
+            font-style: italic;
+            padding: 20px;
+        }
+        .section-divider {
+            border-top: 2px solid #e0e0e0;
+            margin: 30px 0;
+        }
+        .rewards-section {
+            margin-top: 20px;
+        }
+        
+        .header-with-trophy {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .trophy-indicator {
+            font-size: 2rem;
+            cursor: pointer;
+            animation: wiggle 1s ease-in-out infinite;
+            transition: transform 0.2s;
+        }
+        
+        .trophy-indicator:hover {
+            transform: scale(1.1);
+        }
+        
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
+        
+        /* Weekly points and goal comparison styles */
+        .stats-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
+        
+        .stat-detail {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+        
+        .goal-comparison {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .comparison-detail {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        
+        .comparison-detail span {
+            opacity: 0.9;
+        }
+{% endblock %}
+
+{% block content %}
+        <div class="header-with-trophy">
+            <h2>Tasks</h2>
+            <div id="trophy-indicator" class="trophy-indicator" style="display: none;" onclick="window.location.href='/rewards'">
+                🏆
+            </div>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-card">
+                <h3>Weekly Points</h3>
+                <div class="stat-value" id="weekly-points">Loading...</div>
+                <div class="stat-detail" id="weekly-detail">Friday 5pm to Friday 5pm</div>
+            </div>
+            <div class="stat-card goal-comparison">
+                <h3>Pending Rewards</h3>
+                <div class="stat-value" id="goal-comparison">Loading...</div>
+                <div class="comparison-detail">
+                    <span id="user-rewards">You: 0</span>
+                    <span id="spouse-rewards">Spouse: 0</span>
+                </div>
+            </div>
+        </div>
+        
+        <ul id="task-list">
+            <li class="empty-state">Authenticating...</li>
+        </ul>
+
+        <div class="section-divider"></div>
+        
+        <div class="rewards-section">
+            <h2>Challenges</h2>
+            <ul id="rewards-list">
+                <li class="empty-state">Authenticating...</li>
+            </ul>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+        // JavaScript Logic
+        const taskListElement = document.getElementById('task-list');
+        const rewardsListElement = document.getElementById('rewards-list');
+
+        // Wait for authentication to be ready, then load tasks
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait for global authentication to be fully initialized
+            await new Promise(resolve => {
+                const checkAuth = () => {
+                    // Check if auth state exists and has been properly initialized
+                    if (window.authState && 
+                        window.authState.initialized &&
+                        window.authState.currentUsername && 
+                        window.authState.currentUsername !== 'Loading...' &&
+                        window.authState.currentUsername !== null) {
+                        console.log('DEBUG: Authentication ready, username:', window.authState.currentUsername);
+                        resolve();
+                    } else {
+                        console.log('DEBUG: Waiting for authentication...', window.authState);
+                        setTimeout(checkAuth, 100);
+                    }
+                };
+                checkAuth();
+            });
+            
+            console.log('DEBUG: Starting to load tasks for user:', window.authState.currentUsername);
+            
+            // Load tasks and rewards using global authentication
+            fetchAndDisplayTasks();
+            fetchAndDisplayRewards();
+            
+            // Load stats
+            loadWeeklyPoints();
+            loadPendingRewards();
+            
+            // Check for pending rewards
+            checkPendingRewards();
+        });
+
+        // Function to fetch tasks from the Python backend
+        async function fetchAndDisplayTasks() {
+            try {
+                console.log('DEBUG: Starting to fetch tasks...');
+                const response = await fetch('/api/tasks');
+                console.log('DEBUG: Got response from /api/tasks:', response.status);
+                const data = await response.json();
+                console.log('DEBUG: Parsed task data:', data);
+
+                // Clear any old tasks
+                taskListElement.innerHTML = '';
+
+                if (data.status === 'success' && data.tasks && data.tasks.length > 0) {
+                    console.log('DEBUG: Found', data.tasks.length, 'tasks to display');
+                    // Sort tasks alphabetically by description
+                    const sortedTasks = data.tasks.sort((a, b) => a.description.localeCompare(b.description));
+                    // Create and display a list item for each task (max 4)
+                    const tasksToShow = sortedTasks.slice(0, 4);
+                    tasksToShow.forEach(task => {
+                        const li = document.createElement('li');
+                        li.className = 'task-item';
+                        li.dataset.taskId = task.id;
+                        
+                        const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
+                        
+                        li.innerHTML = `
+                            <div class="task-content">
+                                <div class="task-info">
+                                    <span class="task-text">${task.description}</span>
+                                    <div class="task-meta">
+                                        <span class="category">${task.category}</span>
+                                        <span class="difficulty">Difficulty: ${task.difficulty}/10</span>
+                                        <span class="duration">Duration: ${task.duration} min</span>
+                                    </div>
+                                </div>
+                                <button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>
+                            </div>
+                            <div class="swipe-confirmation">
+                                <button class="complete-confirm-btn">Complete?</button>
+                            </div>
+                        `;
+                        
+                        taskListElement.appendChild(li);
+                    });
+                } else {
+                    taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch tasks:", error);
+                taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
+            }
+        }
+
+        // Function to display new tasks (used after task completion)
+        function displayNewTasks(tasks) {
+            // Clear any remaining old tasks
+            taskListElement.innerHTML = '';
+
+            if (tasks && tasks.length > 0) {
+                // Sort tasks alphabetically by description
+                const sortedTasks = tasks.sort((a, b) => a.description.localeCompare(b.description));
+                // Create and display a list item for each task
+                sortedTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = 'task-item';
+                    li.dataset.taskId = task.id;
+                    
+                    const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
+                    
+                    li.innerHTML = `
+                        <div class="task-content">
+                            <div class="task-info">
+                                <span class="task-text">${task.description}</span>
+                                <div class="task-meta">
+                                    <span class="category">${task.category}</span>
+                                    <span class="difficulty">Difficulty: ${task.difficulty}/10</span>
+                                    <span class="duration">Duration: ${task.duration} min</span>
+                                </div>
+                            </div>
+                            <button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>
+                        </div>
+                        <div class="swipe-confirmation">
+                            <button class="complete-confirm-btn">Complete?</button>
+                        </div>
+                    `;
+                    
+                    taskListElement.appendChild(li);
+                });
+            } else {
+                taskListElement.innerHTML = '<li class="empty-state">No tasks available. <a href="/test">Create some tasks</a></li>';
+            }
+        }
+
+        // Function to fetch challenges from the Python backend
+        async function fetchAndDisplayRewards() {
+            try {
+                // Fetch challenges (backend will generate new ones if needed)
+                const response = await fetch('/api/challenges');
+                const data = await response.json();
+
+                // Clear any old rewards
+                rewardsListElement.innerHTML = '';
+
+                if (data.status === 'success' && data.challenges && data.challenges.length > 0) {
+                    // Sort challenges alphabetically by description
+                    const sortedChallenges = data.challenges.sort((a, b) => a.description.localeCompare(b.description));
+                    // Create and display a list item for each challenge
+                    sortedChallenges.forEach(task => {
+                        const li = document.createElement('li');
+                        li.className = 'task-item';
+                        li.dataset.taskId = task.id;
+                        
+                        // Format difficulty and duration display
+                        const difficulty = task.difficulty || 'N/A';
+                        const duration = task.duration ? `${task.duration} min` : 'N/A';
+                        
+                        li.innerHTML = `
+                            <div class="task-content">
+                                <div class="task-info">
+                                    <span class="task-text">${task.description}</span>
+                                    <div class="task-meta">
+                                        <span class="category">Reward</span>
+                                        <span class="difficulty">Difficulty: ${difficulty}/10</span>
+                                        <span class="duration">Duration: ${duration}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="swipe-confirmation">
+                                <button class="complete-confirm-btn">Complete?</button>
+                            </div>
+                        `;
+                        
+                        rewardsListElement.appendChild(li);
+                    });
+                } else {
+                    rewardsListElement.innerHTML = '<li class="empty-state">No challenges yet. You\'ll get challenges when your partner earns rewards!</li>';
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch challenges:", error);
+                rewardsListElement.innerHTML = '<li class="empty-state">Error loading challenges. Please try again.</li>';
+            }
+        }
+
+        // Function to complete a challenge via API
+        async function completeChallenge(taskId) {
+            try {
+                console.log('DEBUG: Completing challenge:', taskId);
+                const response = await fetch(`/api/challenges/${taskId}/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('DEBUG: Challenge completion response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('DEBUG: Challenge completion successful:', result);
+                    return true;
+                } else {
+                    const errorText = await response.text();
+                    console.error('Failed to complete challenge:', response.status, errorText);
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error completing challenge:', error);
+                return false;
+            }
+        }
+
+        // Function to save/unsave a task via API
+        async function toggleTaskSave(taskId, isSaved) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/save`, {
+                    method: 'PUT'
+                });
+
+                if (response.ok) {
+                    return true;
+                } else {
+                    console.error('Failed to toggle task save:', await response.text());
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error toggling task save:', error);
+                return false;
+            }
+        }
+
+
+        // Add a click listener to the entire task list for event delegation
+        taskListElement.addEventListener('click', async function(event) {
+            // Check if a save button was clicked
+            if (event.target.classList.contains('complete-btn')) {
+                const taskItem = event.target.closest('.task-item');
+                const taskId = taskItem.dataset.taskId;
+                const isSaved = event.target.classList.contains('saved');
+                
+                // Toggle save state
+                const success = await toggleTaskSave(taskId, isSaved);
+                
+                if (success) {
+                    // Update visual state
+                    if (isSaved) {
+                        event.target.classList.remove('saved');
+                        event.target.title = 'Save Task';
+                    } else {
+                        event.target.classList.add('saved');
+                        event.target.title = 'Unsave Task';
+                    }
+                } else {
+                    alert('Failed to update task. Please try again.');
+                }
+            }
+            
+            // Check if complete confirmation button was clicked
+            if (event.target.classList.contains('complete-confirm-btn')) {
+                const taskItem = event.target.closest('.task-item');
+                const taskId = taskItem.dataset.taskId;
+                
+                // Hide confirmation
+                const confirmation = taskItem.querySelector('.swipe-confirmation');
+                confirmation.classList.remove('show');
+                
+                // Add visual effect for completion
+                taskItem.style.textDecoration = 'line-through';
+                taskItem.style.opacity = '0';
+                taskItem.style.transform = 'translateX(20px)';
+
+                // Complete the task via API
+                const response = await fetch(`/api/tasks/${taskId}/complete`, {
+                    method: 'PUT'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('DEBUG: Task completion response:', data);
+                    
+                    // Check if user earned a reward
+                    if (data.reward_earned) {
+                        console.log('DEBUG: Reward earned! Showing notification...');
+                        showRewardEarnedNotification();
+                        // Update the cup icon to show pending rewards
+                        checkPendingRewards();
+                    } else {
+                        console.log('DEBUG: No reward earned this time');
+                    }
+                    
+                    // Remove the task from the view after the animation completes
+                    setTimeout(() => {
+                        taskItem.remove();
+                        
+                        // Refresh stats after task completion
+                        loadWeeklyPoints();
+                        
+                        // If we got new tasks from the API, display them
+                        if (data.new_tasks && data.new_tasks.length > 0) {
+                            displayNewTasks(data.new_tasks);
+                        } else {
+                            // Fallback: fetch new tasks
+                            fetchAndDisplayTasks();
+                        }
+                    }, 400);
+                } else {
+                    // Revert the visual changes if API call failed
+                    taskItem.style.textDecoration = '';
+                    taskItem.style.opacity = '';
+                    taskItem.style.transform = '';
+                    alert('Failed to complete task. Please try again.');
+                }
+            }
+        });
+
+        // Add a click listener to the rewards list for event delegation
+        rewardsListElement.addEventListener('click', async function(event) {
+            // Challenges don't have save functionality - only completion
+            
+            // Check if complete confirmation button was clicked
+            if (event.target.classList.contains('complete-confirm-btn')) {
+                const rewardItem = event.target.closest('.task-item');
+                const taskId = rewardItem.dataset.taskId;
+                
+                // Hide confirmation
+                const confirmation = rewardItem.querySelector('.swipe-confirmation');
+                confirmation.classList.remove('show');
+                
+                // Add visual effect for completion
+                rewardItem.style.textDecoration = 'line-through';
+                rewardItem.style.opacity = '0';
+                rewardItem.style.transform = 'translateX(20px)';
+
+                // Complete the challenge via API
+                const success = await completeChallenge(taskId);
+                
+                if (success) {
+                    // Remove the reward from the view after the animation completes
+                    setTimeout(() => {
+                        rewardItem.remove();
+                        // Refresh pending goals stats after reward completion
+                        loadPendingRewards();
+                        // Fetch new rewards to replace the completed one
+                        fetchAndDisplayRewards();
+                    }, 400);
+                } else {
+                    // Revert the visual changes if API call failed
+                    rewardItem.style.textDecoration = '';
+                    rewardItem.style.opacity = '';
+                    rewardItem.style.transform = '';
+                    alert('Failed to complete reward. Please try again.');
+                }
+            }
+        });
+
+        // Add touch and mouse event listeners for swipe detection on tasks
+        let startX = 0;
+        let currentX = 0;
+        let isDragging = false;
+        let currentTaskItem = null;
+
+        function startDrag(event, clientX) {
+            const taskItem = event.target.closest('.task-item');
+            if (taskItem) {
+                startX = clientX;
+                isDragging = true;
+                currentTaskItem = taskItem;
+                const taskContent = taskItem.querySelector('.task-content');
+                taskContent.style.transition = 'none';
+                taskItem.style.cursor = 'grabbing';
+            }
+        }
+
+        function updateDrag(clientX) {
+            if (!isDragging || !currentTaskItem) return;
+            
+            currentX = clientX;
+            const deltaX = currentX - startX;
+            
+            // Only allow right swipes (positive deltaX)
+            if (deltaX > 0) {
+                const maxSwipe = 100; // Maximum swipe distance
+                const swipeDistance = Math.min(deltaX, maxSwipe);
+                
+                // Move only the task content, not the confirmation
+                const taskContent = currentTaskItem.querySelector('.task-content');
+                taskContent.style.transform = `translateX(${swipeDistance}px)`;
+                
+                // Show confirmation if swiped far enough
+                const confirmation = currentTaskItem.querySelector('.swipe-confirmation');
+                if (swipeDistance > 50) {
+                    confirmation.classList.add('show');
+                } else {
+                    confirmation.classList.remove('show');
+                }
+            }
+        }
+
+        function endDrag() {
+            if (!isDragging || !currentTaskItem) return;
+            
+            const deltaX = currentX - startX;
+            const confirmation = currentTaskItem.querySelector('.swipe-confirmation');
+            const taskContent = currentTaskItem.querySelector('.task-content');
+            
+            // Reset position if not swiped far enough
+            if (deltaX < 50) {
+                taskContent.style.transition = 'transform 0.3s ease';
+                taskContent.style.transform = 'translateX(0)';
+                confirmation.classList.remove('show');
+            }
+            
+            currentTaskItem.style.cursor = '';
+            isDragging = false;
+            currentTaskItem = null;
+        }
+
+        // Touch events for mobile (both task and reward lists)
+        [taskListElement, rewardsListElement].forEach(listElement => {
+            listElement.addEventListener('touchstart', function(event) {
+                startDrag(event, event.touches[0].clientX);
+            });
+
+            listElement.addEventListener('touchmove', function(event) {
+                updateDrag(event.touches[0].clientX);
+            });
+
+            listElement.addEventListener('touchend', function(event) {
+                endDrag();
+            });
+
+            // Mouse events for desktop
+            listElement.addEventListener('mousedown', function(event) {
+                // Only start drag if not clicking on a button
+                if (!event.target.classList.contains('complete-btn') && 
+                    !event.target.classList.contains('complete-confirm-btn')) {
+                    startDrag(event, event.clientX);
+                    event.preventDefault(); // Prevent text selection
+                }
+            });
+
+            listElement.addEventListener('mousemove', function(event) {
+                updateDrag(event.clientX);
+            });
+
+            listElement.addEventListener('mouseup', function(event) {
+                endDrag();
+            });
+
+            // Prevent default drag behavior
+            listElement.addEventListener('dragstart', function(event) {
+                event.preventDefault();
+            });
+        });
+
+        // Function to show reward notification
+        function showRewardNotification(rewardOptions = []) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = 'reward-notification';
+            
+            let content = `
+                <div class="reward-notification-content">
+                    <h3>🎉 Reward Earned!</h3>
+                    <p>You've earned a reward for completing a difficult task!</p>
+            `;
+            
+            if (rewardOptions && rewardOptions.length > 0) {
+                content += `
+                    <p>Choose one of these reward options:</p>
+                    <div class="reward-options">
+                `;
+                
+                rewardOptions.forEach((option, index) => {
+                    content += `
+                        <div class="reward-option" data-option-id="${option.id}">
+                            <h4>Option ${index + 1}</h4>
+                            <p>${option.display}</p>
+                            <button class="select-reward-btn" onclick="selectRewardOption('${option.id}')">Select This Reward</button>
+                        </div>
+                    `;
+                });
+                
+                content += `
+                    </div>
+                    <p><em>Choose your reward to continue!</em></p>
+                `;
+            } else {
+                content += `
+                    <p><em>Reward options will be available soon.</em></p>
+                    <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+                `;
+            }
+            
+            content += `</div>`;
+            notification.innerHTML = content;
+            
+            // Add styles
+            notification.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            notification.querySelector('.reward-notification-content').style.cssText = `
+                background: white;
+                padding: 2rem;
+                border-radius: 10px;
+                text-align: center;
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                position: relative;
+            `;
+            
+            // Style close button
+            notification.querySelector('.close-btn').style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #ff4444;
+                color: white;
+                border: none;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            // Style reward options
+            const rewardOptionsDiv = notification.querySelector('.reward-options');
+            if (rewardOptionsDiv) {
+                rewardOptionsDiv.style.cssText = `
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                    gap: 1rem;
+                    margin: 1rem 0;
+                `;
+                
+                notification.querySelectorAll('.reward-option').forEach(option => {
+                    option.style.cssText = `
+                        border: 2px solid #e0e0e0;
+                        border-radius: 8px;
+                        padding: 1rem;
+                        background: #f9f9f9;
+                    `;
+                });
+                
+                notification.querySelectorAll('.select-reward-btn').forEach(btn => {
+                    btn.style.cssText = `
+                        background: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin-top: 0.5rem;
+                    `;
+                });
+            }
+            
+            // Style regular button
+            const regularBtn = notification.querySelector('button');
+            if (regularBtn) {
+                regularBtn.style.cssText = `
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    margin-top: 1rem;
+                `;
+            }
+            
+            // Add to page
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 30 seconds if no reward options
+            if (!rewardOptions || rewardOptions.length === 0) {
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, 5000);
+            }
+        }
+        
+        // Function to select a reward option
+        async function selectRewardOption(optionId) {
+            try {
+                const response = await fetch(`/api/reward-options/${optionId}/select`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    
+                    // Remove the notification
+                    const notification = document.querySelector('.reward-notification');
+                    if (notification) {
+                        notification.remove();
+                    }
+                }
+            } catch (error) {
+                console.error('Error selecting reward:', error);
+            }
+        }
+
+        // Function to show reward earned notification (simpler version)
+        function showRewardEarnedNotification() {
+            console.log('DEBUG: showRewardEarnedNotification called');
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = 'reward-notification';
+            notification.innerHTML = `
+                <div class="reward-notification-content">
+                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+                    <h3>🎉 Reward Earned!</h3>
+                    <p>You've earned a reward for completing a difficult task!</p>
+                    <p><em>Check your pending rewards to claim it.</em></p>
+                    <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+                </div>
+            `;
+            
+            // Add styles
+            notification.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            notification.querySelector('.reward-notification-content').style.cssText = `
+                background: white;
+                padding: 2rem;
+                border-radius: 10px;
+                text-align: center;
+                max-width: 400px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                position: relative;
+            `;
+            
+            // Style close button
+            notification.querySelector('.close-btn').style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #ff4444;
+                color: white;
+                border: none;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            notification.querySelector('button:not(.close-btn)').style.cssText = `
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-top: 1rem;
+            `;
+            
+            // Add to page
+            document.body.appendChild(notification);
+            console.log('DEBUG: Notification added to page');
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                    console.log('DEBUG: Notification auto-removed after 5 seconds');
+                }
+            }, 5000);
+        }
+
+        // Function to check for pending rewards on page load
+        async function checkPendingRewards() {
+            try {
+                const response = await fetch('/api/earned-rewards');
+                const data = await response.json();
+                
+                const trophyIndicator = document.getElementById('trophy-indicator');
+                
+                if (data.status === 'success' && data.pending_rewards && data.pending_rewards.length > 0) {
+                    // Show trophy indicator instead of auto-popup
+                    trophyIndicator.style.display = 'block';
+                    trophyIndicator.title = `You have ${data.pending_rewards.length} pending reward${data.pending_rewards.length > 1 ? 's' : ''}! Click to claim them.`;
+                } else {
+                    trophyIndicator.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to check pending rewards:', error);
+            }
+        }
+
+        // Function to show pending rewards notification
+        function showPendingRewardsNotification(pendingRewards) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = 'reward-notification';
+            
+            let content = `
+                <div class="reward-notification-content">
+                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+                    <h3>🎁 Pending Rewards!</h3>
+                    <p>You have ${pendingRewards.length} reward${pendingRewards.length > 1 ? 's' : ''} waiting to be claimed!</p>
+                    <div class="pending-rewards">
+            `;
+            
+            pendingRewards.forEach((reward, index) => {
+                content += `
+                    <div class="pending-reward" data-reward-id="${reward.id}">
+                        <h4>Reward ${index + 1}</h4>
+                        <p>Earned from difficulty ${reward.task_difficulty} task</p>
+                        <button class="claim-reward-btn" onclick="claimReward('${reward.id}')">Claim This Reward</button>
+                    </div>
+                `;
+            });
+            
+            content += `
+                    </div>
+                    <p><em>Choose a reward to claim it!</em></p>
+                </div>
+            `;
+            notification.innerHTML = content;
+            
+            // Add styles
+            notification.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            notification.querySelector('.reward-notification-content').style.cssText = `
+                background: white;
+                padding: 2rem;
+                border-radius: 10px;
+                text-align: center;
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                position: relative;
+            `;
+            
+            // Style close button
+            notification.querySelector('.close-btn').style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #ff4444;
+                color: white;
+                border: none;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            // Style close button
+            notification.querySelector('.close-btn').style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #ff4444;
+                color: white;
+                border: none;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            // Style pending rewards
+            const pendingRewardsDiv = notification.querySelector('.pending-rewards');
+            if (pendingRewardsDiv) {
+                pendingRewardsDiv.style.cssText = `
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 1rem;
+                    margin: 1rem 0;
+                `;
+                
+                notification.querySelectorAll('.pending-reward').forEach(reward => {
+                    reward.style.cssText = `
+                        border: 2px solid #e0e0e0;
+                        border-radius: 8px;
+                        padding: 1rem;
+                        background: #f9f9f9;
+                    `;
+                });
+                
+                notification.querySelectorAll('.claim-reward-btn').forEach(btn => {
+                    btn.style.cssText = `
+                        background: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin-top: 0.5rem;
+                    `;
+                });
+            }
+            
+            // Add to page
+            document.body.appendChild(notification);
+        }
+
+        // Function to claim a reward (generate options and show selection)
+        async function claimReward(rewardId) {
+            try {
+                // Generate reward options
+                const response = await fetch(`/api/earned-rewards/${rewardId}/generate-options`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Remove the pending rewards notification
+                    const notification = document.querySelector('.reward-notification');
+                    if (notification) {
+                        notification.remove();
+                    }
+                    
+                    // Show reward options selection
+                    showRewardOptionsSelection(data.reward_options, rewardId);
+                } else {
+                    alert('Failed to generate reward options. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error claiming reward:', error);
+                alert('Failed to claim reward. Please try again.');
+            }
+        }
+
+        // Function to show reward options selection
+        function showRewardOptionsSelection(rewardOptions, earnedRewardId) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = 'reward-notification';
+            
+            let content = `
+                <div class="reward-notification-content">
+                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+                    <h3>🎁 Choose Your Reward!</h3>
+                    <p>Select one of these reward options:</p>
+                    <div class="reward-options">
+            `;
+            
+            rewardOptions.forEach((option, index) => {
+                content += `
+                    <div class="reward-option" data-option-id="${option.id}">
+                        <h4>Option ${index + 1}</h4>
+                        <p>${option.display}</p>
+                        <button class="select-reward-btn" onclick="selectRewardOption('${option.id}', '${earnedRewardId}')">Select This Reward</button>
+                    </div>
+                `;
+            });
+            
+            content += `
+                    </div>
+                    <p><em>Choose your reward to continue!</em></p>
+                </div>
+            `;
+            notification.innerHTML = content;
+            
+            // Add styles
+            notification.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            notification.querySelector('.reward-notification-content').style.cssText = `
+                background: white;
+                padding: 2rem;
+                border-radius: 10px;
+                text-align: center;
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                position: relative;
+            `;
+            
+            // Style close button
+            notification.querySelector('.close-btn').style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #ff4444;
+                color: white;
+                border: none;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            // Style reward options
+            const rewardOptionsDiv = notification.querySelector('.reward-options');
+            if (rewardOptionsDiv) {
+                rewardOptionsDiv.style.cssText = `
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                    gap: 1rem;
+                    margin: 1rem 0;
+                `;
+                
+                notification.querySelectorAll('.reward-option').forEach(option => {
+                    option.style.cssText = `
+                        border: 2px solid #e0e0e0;
+                        border-radius: 8px;
+                        padding: 1rem;
+                        background: #f9f9f9;
+                    `;
+                });
+                
+                notification.querySelectorAll('.select-reward-btn').forEach(btn => {
+                    btn.style.cssText = `
+                        background: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin-top: 0.5rem;
+                    `;
+                });
+            }
+            
+            // Add to page
+            document.body.appendChild(notification);
+        }
+
+        // Function to select a reward option
+        async function selectRewardOption(optionId, earnedRewardId) {
+            try {
+                const response = await fetch(`/api/earned-rewards/${earnedRewardId}/select-option`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ option_id: optionId })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    
+                    // Remove the notification
+                    const notification = document.querySelector('.reward-notification');
+                    if (notification) {
+                        notification.remove();
+                    }
+                }
+            } catch (error) {
+                console.error('Error selecting reward:', error);
+            }
+        }
+
+        // Function to load weekly points
+        async function loadWeeklyPoints() {
+            try {
+                const response = await fetch('/api/weekly-points');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('weekly-points').textContent = data.weekly_points;
+                    
+                    // Show different text based on whether we're showing last week's score
+                    if (data.showing_last_week) {
+                        document.getElementById('weekly-detail').textContent = 
+                            `Last week: ${data.completed_tasks} tasks completed`;
+                    } else {
+                        document.getElementById('weekly-detail').textContent = 
+                            `${data.completed_tasks} tasks completed`;
+                    }
+                } else {
+                    document.getElementById('weekly-points').textContent = 'Error';
+                    document.getElementById('weekly-detail').textContent = 'Failed to load';
+                }
+            } catch (error) {
+                console.error('Failed to load weekly points:', error);
+                document.getElementById('weekly-points').textContent = 'Error';
+                document.getElementById('weekly-detail').textContent = 'Failed to load';
+            }
+        }
+        
+        // Function to load pending rewards comparison
+        async function loadPendingRewards() {
+            try {
+                const response = await fetch('/api/reward-comparison');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const userRewards = data.user_rewards;
+                    const spouseRewards = data.spouse_rewards;
+                    const totalRewards = userRewards + spouseRewards;
+                    
+                    document.getElementById('goal-comparison').textContent = totalRewards;
+                    document.getElementById('user-rewards').textContent = `${data.user_name}: ${userRewards}`;
+                    document.getElementById('spouse-rewards').textContent = `${data.spouse_name}: ${spouseRewards}`;
+                } else {
+                    document.getElementById('goal-comparison').textContent = 'Error';
+                    document.getElementById('user-rewards').textContent = 'Error';
+                    document.getElementById('spouse-rewards').textContent = 'Error';
+                }
+            } catch (error) {
+                console.error('Failed to load reward comparison:', error);
+                document.getElementById('goal-comparison').textContent = 'Error';
+                document.getElementById('user-rewards').textContent = 'Error';
+                document.getElementById('spouse-rewards').textContent = 'Error';
+            }
+        }
+
+        // Tasks and rewards are now loaded in the DOMContentLoaded event
+        // after authentication is established
+</script>
+{% endblock %}
