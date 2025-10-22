@@ -7,6 +7,7 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import pytz
 from src.core.task_master import TaskMaster
 from src.auth.auth_service import get_username_from_secret_key, get_spouse_username, get_user_info, get_auth_status
 from src.utils.background_tasks import ensure_minimums
@@ -15,6 +16,8 @@ from src.services.task_service import TaskService
 from src.services.reward_service import RewardService
 from src.services.goal_service import GoalService
 from src.services.statistics_service import StatisticsService
+from src.services.daily_task_service import DailyTaskService
+from src.services.collaboration_service import CollaborationService
 from src.utils.logger import logger
 
 # Load environment variables
@@ -61,6 +64,8 @@ def create_app():
     reward_service = RewardService(db, task_master)
     goal_service = GoalService(db)
     statistics_service = StatisticsService(db, task_master)
+    daily_task_service = DailyTaskService(db)
+    collaboration_service = CollaborationService(db)
     
     
     # Error handler for rate limit exceeded
@@ -74,7 +79,7 @@ def create_app():
         # Ensure minimum content is available for any user accessing the site
         try:
             username = get_user_info()
-            ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=True)
+            ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
         except Exception as e:
             # Don't fail the page load if ensure_minimums fails
             logger.debug(f"Background ensure_minimums failed on index load: {e}")
@@ -118,7 +123,7 @@ def create_app():
             session['is_authenticated'] = True
             
             # Ensure minimum content is available for the user (non-blocking)
-            ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=True)
+            ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
             
             return jsonify({
                 'status': 'success',
@@ -387,7 +392,7 @@ def create_app():
         username = get_user_info()
         
         # Ensure minimum content is available (non-blocking background task)
-        ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=True)
+        ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
         
         result = task_service.get_tasks(username)
         
@@ -622,16 +627,22 @@ def create_app():
     
     
     # Goals Management Routes
-    @app.route('/rewards')
-    def rewards_page():
-        """Rewards management page"""
-        return render_template('reward_claim.html')
+    # DISABLED: Rewards page temporarily disabled
+    # @app.route('/rewards')
+    # def rewards_page():
+    #     """Rewards management page"""
+    #     return render_template('reward_claim.html')
 
     
     @app.route('/goals')
     def goals_page():
         """Goals management page"""
         return render_template('goals.html')
+    
+    @app.route('/daily-tasks')
+    def daily_tasks_page():
+        """Daily tasks management page"""
+        return render_template('daily_tasks.html')
     
     @app.route('/rewards-owed')
     def rewards_owed_page():
@@ -712,6 +723,252 @@ def create_app():
             'timestamp': datetime.now().isoformat()
         })
     
+    # Daily Tasks API Routes
+    @app.route('/api/daily-tasks', methods=['GET'])
+    @limiter.limit("50 per minute")  # Limit reads
+    def get_daily_tasks():
+        """Get all daily task templates for current user"""
+        username = get_user_info()
+        result = daily_task_service.get_daily_tasks(username)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks', methods=['POST'])
+    @limiter.limit("20 per minute")  # Limit creates
+    def create_daily_task():
+        """Create a new daily task template"""
+        username = get_user_info()
+        data = request.get_json()
+        
+        result = daily_task_service.create_daily_task(data, username)
+        
+        if result['status'] == 'error':
+            status_code = 400
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            elif 'unauthorized' in result['message'].lower():
+                status_code = 403
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks/<task_id>', methods=['PUT'])
+    @limiter.limit("20 per minute")  # Limit updates
+    def update_daily_task(task_id):
+        """Update an existing daily task template"""
+        username = get_user_info()
+        data = request.get_json()
+        
+        result = daily_task_service.update_daily_task(task_id, data, username)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            elif 'unauthorized' in result['message'].lower():
+                status_code = 403
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks/<task_id>', methods=['DELETE'])
+    @limiter.limit("20 per minute")  # Limit deletes
+    def delete_daily_task(task_id):
+        """Delete a daily task template"""
+        username = get_user_info()
+        result = daily_task_service.delete_daily_task(task_id, username)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            elif 'unauthorized' in result['message'].lower():
+                status_code = 403
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks/today', methods=['GET'])
+    @limiter.limit("50 per minute")  # Limit reads
+    def get_todays_daily_tasks():
+        """Get today's daily task instances"""
+        username = get_user_info()
+        result = daily_task_service.get_todays_instances(username)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks/today/<instance_id>/complete', methods=['PUT'])
+    @limiter.limit("20 per minute")  # Limit completions
+    def complete_daily_task(instance_id):
+        """Complete a daily task instance"""
+        username = get_user_info()
+        result = daily_task_service.complete_daily_task(instance_id, username)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            elif 'unauthorized' in result['message'].lower():
+                status_code = 403
+            elif 'already completed' in result['message'].lower():
+                status_code = 400
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/daily-tasks/reset', methods=['POST'])
+    @limiter.limit("5 per minute")  # Limit resets
+    def reset_daily_tasks():
+        """Reset daily tasks (for testing) - deletes today's instances and recreates them"""
+        username = get_user_info()
+        
+        # Delete today's instances
+        today_central = datetime.now(pytz.timezone('America/Chicago')).date()
+        instances_query = db.collection('daily_task_instances').where(
+            filter=firestore.And([
+                FieldFilter('username', '==', username),
+                FieldFilter('date', '==', today_central.isoformat())
+            ])
+        )
+        deleted_count = 0
+        for instance in instances_query.stream():
+            instance.reference.delete()
+            deleted_count += 1
+        
+        # Delete today's reset record to force a fresh reset
+        reset_query = db.collection('daily_task_resets').where(
+            filter=firestore.And([
+                FieldFilter('username', '==', username),
+                FieldFilter('last_reset_date', '==', today_central.isoformat())
+            ])
+        )
+        for reset_doc in reset_query.stream():
+            reset_doc.reference.delete()
+        
+        # Force reset by calling check_and_reset_daily_tasks
+        result = daily_task_service.check_and_reset_daily_tasks(username)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Daily tasks reset successfully - deleted {deleted_count} instances',
+            'result': result
+        })
+    
+    @app.route('/api/collaboration/tracker', methods=['GET'])
+    @limiter.limit("50 per minute")  # Limit reads
+    def get_collaboration_tracker():
+        """Get current tracker value and user's goals"""
+        username = get_user_info()
+        result = collaboration_service.get_tracker_display(username)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/collaboration/todays-points', methods=['GET'])
+    @limiter.limit("50 per minute")
+    def get_todays_points():
+        """Get today's total points for current user"""
+        username = get_user_info()
+        result = collaboration_service.get_todays_total_points(username)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/collaboration/goals', methods=['POST'])
+    @limiter.limit("20 per minute")  # Limit updates
+    def set_collaboration_goals():
+        """Set user's stretch setting and adjustment multiplier"""
+        username = get_user_info()
+        data = request.get_json()
+        
+        if not data or 'stretch_setting' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Stretch setting is required'
+            }), 400
+        
+        # Get adjustment multiplier if provided
+        adjustment_multiplier = data.get('adjustment_multiplier', None)
+        
+        result = collaboration_service.set_user_stretch_setting(username, data['stretch_setting'], adjustment_multiplier)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 400
+        return jsonify(result)
+    
+    @app.route('/api/collaboration/history', methods=['GET'])
+    @limiter.limit("20 per minute")
+    def get_collaboration_history():
+        """Get last 7 days of tracker history"""
+        username = get_user_info()
+        
+        # Query tracker_history collection, ordered by date desc, limit 7
+        history_query = db.collection('tracker_history').order_by(
+            'date', direction=firestore.Query.DESCENDING
+        ).limit(7)
+        
+        history_docs = history_query.stream()
+        history = []
+        
+        for doc in history_docs:
+            data = doc.to_dict()
+            history.append({
+                'date': data['date'],
+                'ian_points': data['user_points'],
+                'karleigh_points': data['spouse_points'],
+                'ian_adjustment': data['user_adjustment'],
+                'karleigh_adjustment': data['spouse_adjustment'],
+                'old_tracker': data['old_value'],
+                'new_tracker': data['new_value']
+            })
+        
+        return jsonify({'status': 'success', 'history': history})
+    
+    @app.route('/api/collaboration/progress-day', methods=['POST'])
+    @limiter.limit("5 per minute")
+    def progress_day_testing():
+        """Manually trigger day progression for testing with optional point overrides"""
+        username = get_user_info()
+        data = request.get_json() or {}
+        
+        ian_points = data.get('ian_points')
+        karleigh_points = data.get('karleigh_points')
+        
+        # Validate if provided
+        if ian_points is not None:
+            try:
+                ian_points = int(ian_points)
+            except (ValueError, TypeError):
+                return jsonify({'status': 'error', 'message': 'Invalid ian_points value'}), 400
+        
+        if karleigh_points is not None:
+            try:
+                karleigh_points = int(karleigh_points)
+            except (ValueError, TypeError):
+                return jsonify({'status': 'error', 'message': 'Invalid karleigh_points value'}), 400
+        
+        result = collaboration_service.progress_day_for_testing(ian_points, karleigh_points)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/collaboration/reset-history', methods=['POST'])
+    @limiter.limit("5 per minute")
+    def reset_tracker_history():
+        """Reset tracker history for testing"""
+        username = get_user_info()
+        
+        # Simple check - in production you'd want more security
+        # For now, just allow in test environment
+        result = collaboration_service.reset_tracker_history()
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
     @app.route('/api/rewards-owed', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
     def get_rewards_owed():
@@ -741,58 +998,61 @@ def create_app():
             return jsonify(result), status_code
         return jsonify(result)
     
-    @app.route('/api/challenges', methods=['GET'])
-    @limiter.limit("50 per minute")  # Limit reads
-    def get_challenges():
-        """Get active challenges for current user, with background pregeneration"""
-        username = get_user_info()
-        
-        # Ensure minimum content is available (non-blocking background task)
-        ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=True)
-        
-        result = statistics_service.get_challenges(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+    # DISABLED: Challenges system temporarily disabled
+    # @app.route('/api/challenges', methods=['GET'])
+    # @limiter.limit("50 per minute")  # Limit reads
+    # def get_challenges():
+    #     """Get active challenges for current user, with background pregeneration"""
+    #     username = get_user_info()
+    #     
+    #     # Ensure minimum content is available (non-blocking background task)
+    #     ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
+    #     
+    #     result = statistics_service.get_challenges(username)
+    #     
+    #     if result['status'] == 'error':
+    #         return jsonify(result), 500
+    #     return jsonify(result)
     
     
+    # DISABLED: Challenges system temporarily disabled
+    # @app.route('/api/challenges/<task_id>/complete', methods=['POST'])
+    # @limiter.limit("10 per minute")  # Limit completions
+    # def complete_challenge(task_id):
+    #     """Complete a challenge and mark associated reward goal as completed"""
+    #     username = get_user_info()
+    #     result = statistics_service.complete_challenge(task_id, username)
+    #     
+    #     if result['status'] == 'error':
+    #         status_code = 500
+    #         if 'not found' in result['message'].lower() or 'unauthorized' in result['message'].lower():
+    #             status_code = 404
+    #         return jsonify(result), status_code
+    #     return jsonify(result)
     
-    @app.route('/api/challenges/<task_id>/complete', methods=['POST'])
-    @limiter.limit("10 per minute")  # Limit completions
-    def complete_challenge(task_id):
-        """Complete a challenge and mark associated reward goal as completed"""
-        username = get_user_info()
-        result = statistics_service.complete_challenge(task_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower() or 'unauthorized' in result['message'].lower():
-                status_code = 404
-            return jsonify(result), status_code
-        return jsonify(result)
+    # DISABLED: Weekly points system temporarily disabled (part of challenges)
+    # @app.route('/api/weekly-points', methods=['GET'])
+    # @limiter.limit("50 per minute")  # Limit reads
+    # def get_weekly_points():
+    #     """Get weekly difficulty points for current user"""
+    #     username = get_user_info()
+    #     result = statistics_service.get_weekly_points(username)
+    #     
+    #     if result['status'] == 'error':
+    #         return jsonify(result), 500
+    #     return jsonify(result)
     
-    @app.route('/api/weekly-points', methods=['GET'])
-    @limiter.limit("50 per minute")  # Limit reads
-    def get_weekly_points():
-        """Get weekly difficulty points for current user"""
-        username = get_user_info()
-        result = statistics_service.get_weekly_points(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
-    
-    @app.route('/api/reward-comparison', methods=['GET'])
-    @limiter.limit("50 per minute")  # Limit reads
-    def get_reward_comparison():
-        """Get pending rewards comparison between spouses"""
-        username = get_user_info()
-        spouse_username = get_spouse_username(username)
-        result = statistics_service.get_reward_comparison(username, spouse_username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+    # DISABLED: Reward comparison system temporarily disabled (part of challenges)
+    # @app.route('/api/reward-comparison', methods=['GET'])
+    # @limiter.limit("50 per minute")  # Limit reads
+    # def get_reward_comparison():
+    #     """Get pending rewards comparison between spouses"""
+    #     username = get_user_info()
+    #     spouse_username = get_spouse_username(username)
+    #     result = statistics_service.get_reward_comparison(username, spouse_username)
+    #     
+    #     if result['status'] == 'error':
+    #         return jsonify(result), 500
+    #     return jsonify(result)
     
     return app

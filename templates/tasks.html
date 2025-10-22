@@ -138,6 +138,56 @@
             margin-top: 20px;
         }
         
+        .daily-tasks-section {
+            margin-top: 20px;
+        }
+        
+        .collaboration-tracker {
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .tracker-slider {
+            position: relative;
+            height: 40px;
+            margin: 20px 0;
+        }
+        
+        .tracker-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .tracker-marker {
+            position: absolute;
+            top: 0;
+            width: 50px;
+            height: 50px;
+            margin-left: -25px;
+            background: #007bff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: left 0.5s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 2;
+        }
+        
+        .tracker-value {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
         .header-with-trophy {
             display: flex;
             justify-content: space-between;
@@ -199,6 +249,42 @@
             margin-top: 4px;
         }
         
+        .progress-indicator {
+            margin-top: 10px;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #dc3545; /* Red by default */
+            border-radius: 4px;
+            transition: width 0.5s ease, background-color 0.5s ease;
+            width: 0%;
+        }
+        
+        .progress-fill.par-reached {
+            background: #ffc107; /* Yellow when par is reached */
+        }
+        
+        .progress-fill.stretch-reached {
+            background: #28a745; /* Green when stretch is reached */
+        }
+        
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
         .goal-comparison {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         }
@@ -223,18 +309,29 @@
             </div>
         </div>
         
+        <!-- Stats Section -->
         <div class="stats-container">
             <div class="stat-card">
-                <h3>Weekly Points</h3>
-                <div class="stat-value" id="weekly-points">Loading...</div>
-                <div class="stat-detail" id="weekly-detail">Friday 5pm to Friday 5pm</div>
+                <h3>🎯 Today's Points</h3>
+                <div class="stat-detail" id="daily-points-detail">Total points earned today</div>
+                <div class="progress-indicator" id="progress-indicator">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                </div>
             </div>
-            <div class="stat-card goal-comparison">
-                <h3>Pending Rewards</h3>
-                <div class="stat-value" id="goal-comparison">Loading...</div>
-                <div class="comparison-detail">
-                    <span id="user-rewards">You: 0</span>
-                    <span id="spouse-rewards">Spouse: 0</span>
+        </div>
+        
+        <!-- Collaboration Tracker -->
+        <div class="collaboration-tracker">
+            <h3>🤝 Collaboration Tracker</h3>
+            <div class="tracker-slider">
+                <div class="tracker-scale">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    <span>6</span><span>7</span><span>8</span><span>9</span>
+                </div>
+                <div class="tracker-marker" id="tracker-marker" style="left: 50%;">
+                    <div class="tracker-value">5</div>
                 </div>
             </div>
         </div>
@@ -243,6 +340,7 @@
             <li class="empty-state">Authenticating...</li>
         </ul>
 
+        <!-- DISABLED: Challenges section temporarily disabled
         <div class="section-divider"></div>
         
         <div class="rewards-section">
@@ -251,6 +349,7 @@
                 <li class="empty-state">Authenticating...</li>
             </ul>
         </div>
+        -->
 {% endblock %}
 
 {% block scripts %}
@@ -282,40 +381,91 @@
             
             console.log('DEBUG: Starting to load tasks for user:', window.authState.currentUsername);
             
-            // Load tasks and rewards using global authentication
+            // Load tasks using global authentication
             fetchAndDisplayTasks();
-            fetchAndDisplayRewards();
             
-            // Load stats
-            loadWeeklyPoints();
-            loadPendingRewards();
+            // Load collaboration tracker
+            loadCollaborationTracker();
             
-            // Check for pending rewards
-            checkPendingRewards();
+            // DISABLED: Challenges and stats temporarily disabled
+            // fetchAndDisplayRewards();
+            // loadWeeklyPoints();
+            // loadPendingRewards();
+            // checkPendingRewards();
         });
 
         // Function to fetch tasks from the Python backend
         async function fetchAndDisplayTasks() {
             try {
                 console.log('DEBUG: Starting to fetch tasks...');
-                const response = await fetch('/api/tasks');
-                console.log('DEBUG: Got response from /api/tasks:', response.status);
-                const data = await response.json();
-                console.log('DEBUG: Parsed task data:', data);
+                
+                // Fetch both regular tasks and daily tasks
+                const [tasksResponse, dailyTasksResponse] = await Promise.all([
+                    fetch('/api/tasks'),
+                    fetch('/api/daily-tasks/today')
+                ]);
+                
+                const tasksData = await tasksResponse.json();
+                const dailyTasksData = await dailyTasksResponse.json();
+                
+                console.log('DEBUG: Got regular tasks:', tasksData);
+                console.log('DEBUG: Got daily tasks:', dailyTasksData);
 
                 // Clear any old tasks
                 taskListElement.innerHTML = '';
 
-                if (data.status === 'success' && data.tasks && data.tasks.length > 0) {
-                    console.log('DEBUG: Found', data.tasks.length, 'tasks to display');
-                    // Sort tasks alphabetically by description
-                    const sortedTasks = data.tasks.sort((a, b) => a.description.localeCompare(b.description));
-                    // Create and display a list item for each task (max 4)
-                    const tasksToShow = sortedTasks.slice(0, 4);
-                    tasksToShow.forEach(task => {
+                // Combine tasks
+                let allTasks = [];
+                
+                // Add regular tasks
+                if (tasksData.status === 'success' && tasksData.tasks && tasksData.tasks.length > 0) {
+                    const regularTasks = tasksData.tasks.map(task => ({
+                        ...task,
+                        type: 'regular',
+                        points: task.difficulty // Use difficulty as points for regular tasks
+                    }));
+                    allTasks = allTasks.concat(regularTasks);
+                }
+                
+                // Add daily tasks (only incomplete ones)
+                if (dailyTasksData.status === 'success' && dailyTasksData.instances && dailyTasksData.instances.length > 0) {
+                    const incompleteDailyTasks = dailyTasksData.instances
+                        .filter(instance => !instance.completed)
+                        .map(instance => ({
+                            id: instance.id,
+                            description: instance.description,
+                            category: 'Daily',
+                            difficulty: instance.points, // Use points as difficulty for display
+                            duration: null, // No duration for daily tasks
+                            saved: false,
+                            type: 'daily',
+                            points: instance.points
+                        }));
+                    allTasks = allTasks.concat(incompleteDailyTasks);
+                }
+
+                if (allTasks.length > 0) {
+                    console.log('DEBUG: Found', allTasks.length, 'total tasks to display');
+                    
+                    // Sort regular tasks alphabetically, then daily tasks alphabetically
+                    const regularTasks = allTasks.filter(task => task.type === 'regular')
+                        .sort((a, b) => a.description.localeCompare(b.description));
+                    const dailyTasks = allTasks.filter(task => task.type === 'daily')
+                        .sort((a, b) => a.description.localeCompare(b.description));
+                    
+                    const sortedTasks = [...regularTasks, ...dailyTasks];
+                    
+                    // Create and display a list item for each task
+                    sortedTasks.forEach(task => {
                         const li = document.createElement('li');
                         li.className = 'task-item';
                         li.dataset.taskId = task.id;
+                        li.dataset.taskType = task.type; // Add task type for completion detection
+                        
+                        // Add completion timestamp if task is completed
+                        if (task.completed && task.completed_at) {
+                            li.dataset.completedAt = task.completed_at;
+                        }
                         
                         const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
                         
@@ -325,11 +475,11 @@
                                     <span class="task-text">${task.description}</span>
                                     <div class="task-meta">
                                         <span class="category">${task.category}</span>
-                                        <span class="difficulty">Difficulty: ${task.difficulty}/10</span>
-                                        <span class="duration">Duration: ${task.duration} min</span>
+                                        <span class="difficulty">Points: ${task.difficulty}</span>
+                                        ${task.duration ? `<span class="duration">Duration: ${task.duration} min</span>` : ''}
                                     </div>
                                 </div>
-                                <button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>
+                                ${task.type === 'regular' ? `<button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>` : ''}
                             </div>
                             <div class="swipe-confirmation">
                                 <button class="complete-confirm-btn">Complete?</button>
@@ -341,10 +491,210 @@
                 } else {
                     taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
                 }
+                
+                // Update stats
+                updateDailyTasksStats(dailyTasksData);
 
             } catch (error) {
                 console.error("Failed to fetch tasks:", error);
                 taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
+            }
+        }
+
+        // Function to load and display daily tasks
+        async function loadDailyTasks() {
+            try {
+                console.log('DEBUG: Loading daily tasks...');
+                const response = await fetch('/api/daily-tasks/today');
+                const data = await response.json();
+                console.log('DEBUG: Daily tasks data:', data);
+
+                if (data.status === 'success') {
+                    const instances = data.instances || [];
+                    const completed = instances.filter(instance => instance.completed).length;
+                    const total = instances.length;
+                    const completedPoints = instances.filter(instance => instance.completed).reduce((sum, instance) => sum + instance.points, 0);
+                    const totalPoints = instances.reduce((sum, instance) => sum + instance.points, 0);
+
+                    // Update daily tasks progress
+                    document.getElementById('daily-tasks-progress').textContent = `${completed}/${total}`;
+                    document.getElementById('daily-tasks-detail').textContent = total > 0 ? `${completed}/${total} completed` : 'No tasks today';
+
+                    // Update daily points
+                    document.getElementById('daily-points').textContent = `${completedPoints}/${totalPoints}`;
+                    document.getElementById('daily-points-detail').textContent = totalPoints > 0 ? `${completedPoints}/${totalPoints} points` : 'No points today';
+                } else {
+                    console.error('Failed to load daily tasks:', data.message);
+                    document.getElementById('daily-tasks-progress').textContent = 'Error';
+                    document.getElementById('daily-points').textContent = 'Error';
+                }
+            } catch (error) {
+                console.error('Error loading daily tasks:', error);
+                document.getElementById('daily-tasks-progress').textContent = 'Error';
+                document.getElementById('daily-points').textContent = 'Error';
+            }
+        }
+
+        
+        // Function to load collaboration tracker and goals
+        async function loadCollaborationTracker() {
+            try {
+                const response = await fetch('/api/collaboration/tracker');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const value = data.tracker_value;
+                    const marker = document.getElementById('tracker-marker');
+                    const leftPercent = ((value - 1) / 8) * 100; // 1-9 mapped to 0-100%
+                    marker.style.left = leftPercent + '%';
+                    marker.querySelector('.tracker-value').textContent = value;
+                    
+                    // Update progress indicator using backend data
+                    await updateProgressIndicatorFromBackend(data.par, data.stretch_goal);
+                } else {
+                    console.error('Failed to load collaboration tracker:', data.message);
+                }
+            } catch (error) {
+                console.error('Error loading collaboration tracker:', error);
+            }
+        }
+        
+        // Function to update progress indicator
+        function updateProgressIndicator(par, stretchGoal) {
+            const progressFill = document.getElementById('progress-fill');
+            
+            // Get current total points from all completed tasks
+            const currentPoints = calculateTotalPoints();
+            
+            // Calculate progress percentage based on stretch goal
+            let progressPercent = 0;
+            if (currentPoints >= stretchGoal) {
+                progressPercent = 100;
+            } else if (currentPoints > 0) {
+                progressPercent = (currentPoints / stretchGoal) * 100;
+            }
+            
+            // Update progress bar width
+            progressFill.style.width = progressPercent + '%';
+            
+            // Update color based on progress
+            progressFill.classList.remove('par-reached', 'stretch-reached');
+            if (currentPoints >= stretchGoal) {
+                progressFill.classList.add('stretch-reached'); // Green
+            } else if (currentPoints >= par) {
+                progressFill.classList.add('par-reached'); // Yellow
+            }
+            // Otherwise stays red (default)
+        }
+
+        // Update progress indicator with backend data
+        async function updateProgressIndicatorFromBackend(par, stretchGoal) {
+            const progressFill = document.getElementById('progress-fill');
+            
+            // Get current points from backend
+            const currentPoints = await getTodaysTotalPoints();
+            
+            // Update stats text
+            document.getElementById('daily-points-detail').textContent = 
+                currentPoints > 0 ? `${currentPoints} points earned today` : 'No points earned today';
+            
+            // Calculate progress percentage based on stretch goal
+            let progressPercent = 0;
+            if (currentPoints >= stretchGoal) {
+                progressPercent = 100;
+            } else if (currentPoints > 0) {
+                progressPercent = (currentPoints / stretchGoal) * 100;
+            }
+            
+            // Update progress bar width
+            progressFill.style.width = progressPercent + '%';
+            
+            // Update color based on progress
+            progressFill.classList.remove('par-reached', 'stretch-reached');
+            console.log(`DEBUG: Progress update - currentPoints: ${currentPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
+            if (currentPoints >= stretchGoal) {
+                progressFill.classList.add('stretch-reached'); // Green
+                console.log('DEBUG: Added stretch-reached class (green)');
+            } else if (currentPoints >= par) {
+                progressFill.classList.add('par-reached'); // Yellow
+                console.log('DEBUG: Added par-reached class (yellow)');
+            } else {
+                console.log('DEBUG: No color class added (red default)');
+            }
+        }
+        
+        // Function to update daily tasks stats
+        // Update to use backend API
+        async function updateDailyTasksStats(dailyTasksData) {
+            // Fetch total points from backend instead of calculating
+            const totalPoints = await getTodaysTotalPoints();
+            
+            // Update the detail text
+            document.getElementById('daily-points-detail').textContent = 
+                totalPoints > 0 ? `${totalPoints} points earned today` : 'No points earned today';
+            
+            // Get par and stretch goal from collaboration tracker API
+            try {
+                const response = await fetch('/api/collaboration/tracker');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const par = data.par;
+                    const stretchGoal = data.stretch_goal;
+                    
+                    // Update progress indicator with current points
+                    const progressFill = document.getElementById('progress-fill');
+                    if (progressFill && progressFill.style.width !== '0%') {
+                        // Update progress bar color based on current points
+                        let progressPercent = 0;
+                        if (totalPoints >= stretchGoal) {
+                            progressPercent = 100;
+                        } else if (totalPoints > 0) {
+                            progressPercent = (totalPoints / stretchGoal) * 100;
+                        }
+                        
+                        // Update progress bar width
+                        progressFill.style.width = progressPercent + '%';
+                        
+                        // Update color based on progress
+                        progressFill.classList.remove('par-reached', 'stretch-reached');
+                        console.log(`DEBUG: Stats update - totalPoints: ${totalPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
+                        if (totalPoints >= stretchGoal) {
+                            progressFill.classList.add('stretch-reached'); // Green
+                            console.log('DEBUG: Added stretch-reached class (green)');
+                        } else if (totalPoints >= par) {
+                            progressFill.classList.add('par-reached'); // Yellow
+                            console.log('DEBUG: Added par-reached class (yellow)');
+                        } else {
+                            console.log('DEBUG: No color class added (red default)');
+                        }
+                    }
+                } else {
+                    console.error('Failed to get collaboration tracker data:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching collaboration tracker:', error);
+            }
+        }
+        
+        // Function to calculate total points from all completed tasks TODAY
+        // Function to get today's total points from backend
+        async function getTodaysTotalPoints() {
+            try {
+                const response = await fetch('/api/collaboration/todays-points');
+                const data = await response.json();
+                
+                console.log('DEBUG: getTodaysTotalPoints response:', data);
+                
+                if (data.status === 'success') {
+                    return data.total_points;
+                } else {
+                    console.error('Failed to get points:', data.message);
+                    return 0;
+                }
+            } catch (error) {
+                console.error('Error fetching points:', error);
+                return 0;
             }
         }
 
@@ -388,84 +738,86 @@
             }
         }
 
+        // DISABLED: Challenges system temporarily disabled
         // Function to fetch challenges from the Python backend
-        async function fetchAndDisplayRewards() {
-            try {
-                // Fetch challenges (backend will generate new ones if needed)
-                const response = await fetch('/api/challenges');
-                const data = await response.json();
+        // async function fetchAndDisplayRewards() {
+        //     try {
+        //         // Fetch challenges (backend will generate new ones if needed)
+        //         const response = await fetch('/api/challenges');
+        //         const data = await response.json();
 
-                // Clear any old rewards
-                rewardsListElement.innerHTML = '';
+        //         // Clear any old rewards
+        //         rewardsListElement.innerHTML = '';
 
-                if (data.status === 'success' && data.challenges && data.challenges.length > 0) {
-                    // Sort challenges alphabetically by description
-                    const sortedChallenges = data.challenges.sort((a, b) => a.description.localeCompare(b.description));
-                    // Create and display a list item for each challenge
-                    sortedChallenges.forEach(task => {
-                        const li = document.createElement('li');
-                        li.className = 'task-item';
-                        li.dataset.taskId = task.id;
+        //         if (data.status === 'success' && data.challenges && data.challenges.length > 0) {
+        //             // Sort challenges alphabetically by description
+        //             const sortedChallenges = data.challenges.sort((a, b) => a.description.localeCompare(b.description));
+        //             // Create and display a list item for each challenge
+        //             sortedChallenges.forEach(task => {
+        //                 const li = document.createElement('li');
+        //                 li.className = 'task-item';
+        //                 li.dataset.taskId = task.id;
                         
-                        // Format difficulty and duration display
-                        const difficulty = task.difficulty || 'N/A';
-                        const duration = task.duration ? `${task.duration} min` : 'N/A';
+        //                 // Format difficulty and duration display
+        //                 const difficulty = task.difficulty || 'N/A';
+        //                 const duration = task.duration ? `${task.duration} min` : 'N/A';
                         
-                        li.innerHTML = `
-                            <div class="task-content">
-                                <div class="task-info">
-                                    <span class="task-text">${task.description}</span>
-                                    <div class="task-meta">
-                                        <span class="category">Reward</span>
-                                        <span class="difficulty">Difficulty: ${difficulty}/10</span>
-                                        <span class="duration">Duration: ${duration}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="swipe-confirmation">
-                                <button class="complete-confirm-btn">Complete?</button>
-                            </div>
-                        `;
+        //                 li.innerHTML = `
+        //                     <div class="task-content">
+        //                         <div class="task-info">
+        //                             <span class="task-text">${task.description}</span>
+        //                             <div class="task-meta">
+        //                                 <span class="category">Reward</span>
+        //                                 <span class="difficulty">Difficulty: ${difficulty}/10</span>
+        //                                 <span class="duration">Duration: ${duration}</span>
+        //                             </div>
+        //                         </div>
+        //                     </div>
+        //                     <div class="swipe-confirmation">
+        //                         <button class="complete-confirm-btn">Complete?</button>
+        //                     </div>
+        //                 `;
                         
-                        rewardsListElement.appendChild(li);
-                    });
-                } else {
-                    rewardsListElement.innerHTML = '<li class="empty-state">No challenges yet. You\'ll get challenges when your partner earns rewards!</li>';
-                }
+        //                 rewardsListElement.appendChild(li);
+        //             });
+        //         } else {
+        //             rewardsListElement.innerHTML = '<li class="empty-state">No challenges yet. You\'ll get challenges when your partner earns rewards!</li>';
+        //         }
 
-            } catch (error) {
-                console.error("Failed to fetch challenges:", error);
-                rewardsListElement.innerHTML = '<li class="empty-state">Error loading challenges. Please try again.</li>';
-            }
-        }
+        //     } catch (error) {
+        //         console.error("Failed to fetch challenges:", error);
+        //         rewardsListElement.innerHTML = '<li class="empty-state">Error loading challenges. Please try again.</li>';
+        //     }
+        // }
 
+        // DISABLED: Challenges system temporarily disabled
         // Function to complete a challenge via API
-        async function completeChallenge(taskId) {
-            try {
-                console.log('DEBUG: Completing challenge:', taskId);
-                const response = await fetch(`/api/challenges/${taskId}/complete`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
+        // async function completeChallenge(taskId) {
+        //     try {
+        //         console.log('DEBUG: Completing challenge:', taskId);
+        //         const response = await fetch(`/api/challenges/${taskId}/complete`, {
+        //             method: 'POST',
+        //             headers: {
+        //                 'Content-Type': 'application/json'
+        //             }
+        //         });
 
-                console.log('DEBUG: Challenge completion response status:', response.status);
+        //         console.log('DEBUG: Challenge completion response status:', response.status);
                 
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('DEBUG: Challenge completion successful:', result);
-                    return true;
-                } else {
-                    const errorText = await response.text();
-                    console.error('Failed to complete challenge:', response.status, errorText);
-                    return false;
-                }
-            } catch (error) {
-                console.error('Error completing challenge:', error);
-                return false;
-            }
-        }
+        //         if (response.ok) {
+        //             const result = await response.json();
+        //             console.log('DEBUG: Challenge completion successful:', result);
+        //             return true;
+        //         } else {
+        //             const errorText = await response.text();
+        //             console.error('Failed to complete challenge:', response.status, errorText);
+        //             return false;
+        //         }
+        //     } catch (error) {
+        //         console.error('Error completing challenge:', error);
+        //         return false;
+        //     }
+        // }
 
         // Function to save/unsave a task via API
         async function toggleTaskSave(taskId, isSaved) {
@@ -526,8 +878,14 @@
                 taskItem.style.opacity = '0';
                 taskItem.style.transform = 'translateX(20px)';
 
+                // Determine if this is a daily task or regular task
+                // Check if the task has a 'type' data attribute or if it's in the daily tasks section
+                const taskType = taskItem.dataset.taskType || (taskItem.closest('#daily-task-list') !== null ? 'daily' : 'regular');
+                const isDailyTask = taskType === 'daily';
+                const apiEndpoint = isDailyTask ? `/api/daily-tasks/today/${taskId}/complete` : `/api/tasks/${taskId}/complete`;
+
                 // Complete the task via API
-                const response = await fetch(`/api/tasks/${taskId}/complete`, {
+                const response = await fetch(apiEndpoint, {
                     method: 'PUT'
                 });
                 
@@ -535,31 +893,40 @@
                     const data = await response.json();
                     console.log('DEBUG: Task completion response:', data);
                     
-                    // Check if user earned a reward
-                    if (data.reward_earned) {
-                        console.log('DEBUG: Reward earned! Showing notification...');
-                        showRewardEarnedNotification();
-                        // Update the cup icon to show pending rewards
-                        checkPendingRewards();
+                    if (isDailyTask) {
+                        // Handle daily task completion
+                        console.log('DEBUG: Daily task completed!');
+                        
+                        // Remove the task from the view after the animation completes
+                        setTimeout(() => {
+                            taskItem.remove();
+                            // Add small delay to ensure database is updated before fetching
+                            setTimeout(() => {
+                                fetchAndDisplayTasks();
+                            }, 100);
+                        }, 400);
                     } else {
-                        console.log('DEBUG: No reward earned this time');
-                    }
-                    
-                    // Remove the task from the view after the animation completes
-                    setTimeout(() => {
-                        taskItem.remove();
-                        
-                        // Refresh stats after task completion
-                        loadWeeklyPoints();
-                        
-                        // If we got new tasks from the API, display them
-                        if (data.new_tasks && data.new_tasks.length > 0) {
-                            displayNewTasks(data.new_tasks);
+                        // Handle regular task completion
+                        // Check if user earned a reward
+                        if (data.reward_earned) {
+                            console.log('DEBUG: Reward earned! (notifications disabled)');
+                            // DISABLED: Reward notifications temporarily disabled
+                            // showRewardEarnedNotification();
+                            // checkPendingRewards();
                         } else {
-                            // Fallback: fetch new tasks
-                            fetchAndDisplayTasks();
+                            console.log('DEBUG: No reward earned this time');
                         }
-                    }, 400);
+                        
+                        // Remove the task from the view after the animation completes
+                        setTimeout(() => {
+                            taskItem.remove();
+                            
+                            // Add small delay to ensure database is updated before fetching
+                            setTimeout(() => {
+                                fetchAndDisplayTasks();
+                            }, 100);
+                        }, 400);
+                    }
                 } else {
                     // Revert the visual changes if API call failed
                     taskItem.style.textDecoration = '';
@@ -570,45 +937,46 @@
             }
         });
 
+        // DISABLED: Challenges system temporarily disabled
         // Add a click listener to the rewards list for event delegation
-        rewardsListElement.addEventListener('click', async function(event) {
-            // Challenges don't have save functionality - only completion
+        // rewardsListElement.addEventListener('click', async function(event) {
+        //     // Challenges don't have save functionality - only completion
             
-            // Check if complete confirmation button was clicked
-            if (event.target.classList.contains('complete-confirm-btn')) {
-                const rewardItem = event.target.closest('.task-item');
-                const taskId = rewardItem.dataset.taskId;
+        //     // Check if complete confirmation button was clicked
+        //     if (event.target.classList.contains('complete-confirm-btn')) {
+        //         const rewardItem = event.target.closest('.task-item');
+        //         const taskId = rewardItem.dataset.taskId;
                 
-                // Hide confirmation
-                const confirmation = rewardItem.querySelector('.swipe-confirmation');
-                confirmation.classList.remove('show');
+        //         // Hide confirmation
+        //         const confirmation = rewardItem.querySelector('.swipe-confirmation');
+        //         confirmation.classList.remove('show');
                 
-                // Add visual effect for completion
-                rewardItem.style.textDecoration = 'line-through';
-                rewardItem.style.opacity = '0';
-                rewardItem.style.transform = 'translateX(20px)';
+        //         // Add visual effect for completion
+        //         rewardItem.style.textDecoration = 'line-through';
+        //         rewardItem.style.opacity = '0';
+        //         rewardItem.style.transform = 'translateX(20px)';
 
-                // Complete the challenge via API
-                const success = await completeChallenge(taskId);
+        //         // Complete the challenge via API
+        //         const success = await completeChallenge(taskId);
                 
-                if (success) {
-                    // Remove the reward from the view after the animation completes
-                    setTimeout(() => {
-                        rewardItem.remove();
-                        // Refresh pending goals stats after reward completion
-                        loadPendingRewards();
-                        // Fetch new rewards to replace the completed one
-                        fetchAndDisplayRewards();
-                    }, 400);
-                } else {
-                    // Revert the visual changes if API call failed
-                    rewardItem.style.textDecoration = '';
-                    rewardItem.style.opacity = '';
-                    rewardItem.style.transform = '';
-                    alert('Failed to complete reward. Please try again.');
-                }
-            }
-        });
+        //         if (success) {
+        //             // Remove the reward from the view after the animation completes
+        //             setTimeout(() => {
+        //                 rewardItem.remove();
+        //                 // Refresh pending goals stats after reward completion
+        //                 loadPendingRewards();
+        //                 // Fetch new rewards to replace the completed one
+        //                 fetchAndDisplayRewards();
+        //             }, 400);
+        //         } else {
+        //             // Revert the visual changes if API call failed
+        //             rewardItem.style.textDecoration = '';
+        //             rewardItem.style.opacity = '';
+        //             rewardItem.style.transform = '';
+        //             alert('Failed to complete reward. Please try again.');
+        //         }
+        //     }
+        // });
 
         // Add touch and mouse event listeners for swipe detection on tasks
         let startX = 0;
@@ -672,665 +1040,674 @@
             currentTaskItem = null;
         }
 
-        // Touch events for mobile (both task and reward lists)
-        [taskListElement, rewardsListElement].forEach(listElement => {
-            listElement.addEventListener('touchstart', function(event) {
-                startDrag(event, event.touches[0].clientX);
-            });
-
-            listElement.addEventListener('touchmove', function(event) {
-                updateDrag(event.touches[0].clientX);
-            });
-
-            listElement.addEventListener('touchend', function(event) {
-                endDrag();
-            });
-
-            // Mouse events for desktop
-            listElement.addEventListener('mousedown', function(event) {
-                // Only start drag if not clicking on a button
-                if (!event.target.classList.contains('complete-btn') && 
-                    !event.target.classList.contains('complete-confirm-btn')) {
-                    startDrag(event, event.clientX);
-                    event.preventDefault(); // Prevent text selection
-                }
-            });
-
-            listElement.addEventListener('mousemove', function(event) {
-                updateDrag(event.clientX);
-            });
-
-            listElement.addEventListener('mouseup', function(event) {
-                endDrag();
-            });
-
-            // Prevent default drag behavior
-            listElement.addEventListener('dragstart', function(event) {
-                event.preventDefault();
-            });
+        // Touch events for mobile (only task list now)
+        taskListElement.addEventListener('touchstart', function(event) {
+            startDrag(event, event.touches[0].clientX);
         });
 
+        taskListElement.addEventListener('touchmove', function(event) {
+            updateDrag(event.touches[0].clientX);
+        });
+
+        taskListElement.addEventListener('touchend', function(event) {
+            endDrag();
+        });
+
+        // Mouse events for desktop
+        taskListElement.addEventListener('mousedown', function(event) {
+            // Only start drag if not clicking on a button
+            if (!event.target.classList.contains('complete-btn') && 
+                !event.target.classList.contains('complete-confirm-btn')) {
+                startDrag(event, event.clientX);
+                event.preventDefault(); // Prevent text selection
+            }
+        });
+
+        
+        taskListElement.addEventListener('mousemove', function(event) {
+            updateDrag(event.clientX);
+        });
+
+        taskListElement.addEventListener('mouseup', function(event) {
+            endDrag();
+        });
+
+        // Prevent default drag behavior
+        taskListElement.addEventListener('dragstart', function(event) {
+            event.preventDefault();
+        });
+
+        // DISABLED: Rewards system temporarily disabled
         // Function to show reward notification
-        function showRewardNotification(rewardOptions = []) {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = 'reward-notification';
+        // function showRewardNotification(rewardOptions = []) {
+        //     // Create notification element
+        //     const notification = document.createElement('div');
+        //     notification.className = 'reward-notification';
             
-            let content = `
-                <div class="reward-notification-content">
-                    <h3>🎉 Reward Earned!</h3>
-                    <p>You've earned a reward for completing a difficult task!</p>
-            `;
+        //     let content = `
+        //         <div class="reward-notification-content">
+        //             <h3>🎉 Reward Earned!</h3>
+        //             <p>You've earned a reward for completing a difficult task!</p>
+        //     `;
             
-            if (rewardOptions && rewardOptions.length > 0) {
-                content += `
-                    <p>Choose one of these reward options:</p>
-                    <div class="reward-options">
-                `;
+        //     if (rewardOptions && rewardOptions.length > 0) {
+        //         content += `
+        //             <p>Choose one of these reward options:</p>
+        //             <div class="reward-options">
+        //         `;
                 
-                rewardOptions.forEach((option, index) => {
-                    content += `
-                        <div class="reward-option" data-option-id="${option.id}">
-                            <h4>Option ${index + 1}</h4>
-                            <p>${option.display}</p>
-                            <button class="select-reward-btn" onclick="selectRewardOption('${option.id}')">Select This Reward</button>
-                        </div>
-                    `;
-                });
+        //         rewardOptions.forEach((option, index) => {
+        //             content += `
+        //                 <div class="reward-option" data-option-id="${option.id}">
+        //                     <h4>Option ${index + 1}</h4>
+        //                     <p>${option.display}</p>
+        //                     <button class="select-reward-btn" onclick="selectRewardOption('${option.id}')">Select This Reward</button>
+        //                 </div>
+        //             `;
+        //         });
                 
-                content += `
-                    </div>
-                    <p><em>Choose your reward to continue!</em></p>
-                `;
-            } else {
-                content += `
-                    <p><em>Reward options will be available soon.</em></p>
-                    <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
-                `;
-            }
+        //         content += `
+        //             </div>
+        //             <p><em>Choose your reward to continue!</em></p>
+        //         `;
+        //     } else {
+        //         content += `
+        //             <p><em>Reward options will be available soon.</em></p>
+        //             <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+        //         `;
+        //     }
             
-            content += `</div>`;
-            notification.innerHTML = content;
+        //     content += `</div>`;
+        //     notification.innerHTML = content;
             
-            // Add styles
-            notification.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            `;
+        //     // Add styles
+        //     notification.style.cssText = `
+        //         position: fixed;
+        //         top: 0;
+        //         left: 0;
+        //         width: 100%;
+        //         height: 100%;
+        //         background: rgba(0, 0, 0, 0.5);
+        //         display: flex;
+        //         justify-content: center;
+        //         align-items: center;
+        //         z-index: 1000;
+        //     `;
             
-            notification.querySelector('.reward-notification-content').style.cssText = `
-                background: white;
-                padding: 2rem;
-                border-radius: 10px;
-                text-align: center;
-                max-width: 600px;
-                max-height: 80vh;
-                overflow-y: auto;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                position: relative;
-            `;
+        //     notification.querySelector('.reward-notification-content').style.cssText = `
+        //         background: white;
+        //         padding: 2rem;
+        //         border-radius: 10px;
+        //         text-align: center;
+        //         max-width: 600px;
+        //         max-height: 80vh;
+        //         overflow-y: auto;
+        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        //         position: relative;
+        //     `;
             
-            // Style close button
-            notification.querySelector('.close-btn').style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 15px;
-                background: #ff4444;
-                color: white;
-                border: none;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 18px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `;
+        //     // Style close button
+        //     notification.querySelector('.close-btn').style.cssText = `
+        //         position: absolute;
+        //         top: 10px;
+        //         right: 15px;
+        //         background: #ff4444;
+        //         color: white;
+        //         border: none;
+        //         width: 30px;
+        //         height: 30px;
+        //         border-radius: 50%;
+        //         cursor: pointer;
+        //         font-size: 18px;
+        //         font-weight: bold;
+        //         display: flex;
+        //         align-items: center;
+        //         justify-content: center;
+        //     `;
             
-            // Style reward options
-            const rewardOptionsDiv = notification.querySelector('.reward-options');
-            if (rewardOptionsDiv) {
-                rewardOptionsDiv.style.cssText = `
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                    gap: 1rem;
-                    margin: 1rem 0;
-                `;
+        //     // Style reward options
+        //     const rewardOptionsDiv = notification.querySelector('.reward-options');
+        //     if (rewardOptionsDiv) {
+        //         rewardOptionsDiv.style.cssText = `
+        //             display: grid;
+        //             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        //             gap: 1rem;
+        //             margin: 1rem 0;
+        //         `;
                 
-                notification.querySelectorAll('.reward-option').forEach(option => {
-                    option.style.cssText = `
-                        border: 2px solid #e0e0e0;
-                        border-radius: 8px;
-                        padding: 1rem;
-                        background: #f9f9f9;
-                    `;
-                });
+        //         notification.querySelectorAll('.reward-option').forEach(option => {
+        //             option.style.cssText = `
+        //                 border: 2px solid #e0e0e0;
+        //                 border-radius: 8px;
+        //                 padding: 1rem;
+        //                 background: #f9f9f9;
+        //             `;
+        //         });
                 
-                notification.querySelectorAll('.select-reward-btn').forEach(btn => {
-                    btn.style.cssText = `
-                        background: #4CAF50;
-                        color: white;
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        margin-top: 0.5rem;
-                    `;
-                });
-            }
+        //         notification.querySelectorAll('.select-reward-btn').forEach(btn => {
+        //             btn.style.cssText = `
+        //                 background: #4CAF50;
+        //                 color: white;
+        //                 border: none;
+        //                 padding: 8px 16px;
+        //                 border-radius: 5px;
+        //                 cursor: pointer;
+        //                 margin-top: 0.5rem;
+        //             `;
+        //         });
+        //     }
             
-            // Style regular button
-            const regularBtn = notification.querySelector('button');
-            if (regularBtn) {
-                regularBtn.style.cssText = `
-                    background: #4CAF50;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    margin-top: 1rem;
-                `;
-            }
+        //     // Style regular button
+        //     const regularBtn = notification.querySelector('button');
+        //     if (regularBtn) {
+        //         regularBtn.style.cssText = `
+        //             background: #4CAF50;
+        //             color: white;
+        //             border: none;
+        //             padding: 10px 20px;
+        //             border-radius: 5px;
+        //             cursor: pointer;
+        //             margin-top: 1rem;
+        //         `;
+        //     }
             
-            // Add to page
-            document.body.appendChild(notification);
+        //     // Add to page
+        //     document.body.appendChild(notification);
             
-            // Auto-remove after 30 seconds if no reward options
-            if (!rewardOptions || rewardOptions.length === 0) {
-                setTimeout(() => {
-                    if (notification.parentElement) {
-                        notification.remove();
-                    }
-                }, 5000);
-            }
-        }
+        //     // Auto-remove after 30 seconds if no reward options
+        //     if (!rewardOptions || rewardOptions.length === 0) {
+        //         setTimeout(() => {
+        //             if (notification.parentElement) {
+        //                 notification.remove();
+        //             }
+        //         }, 5000);
+        //     }
+        // }
         
+        // DISABLED: Rewards system temporarily disabled
         // Function to select a reward option
-        async function selectRewardOption(optionId) {
-            try {
-                const response = await fetch(`/api/reward-options/${optionId}/select`, {
-                    method: 'POST'
-                });
+        // async function selectRewardOption(optionId) {
+        //     try {
+        //         const response = await fetch(`/api/reward-options/${optionId}/select`, {
+        //             method: 'POST'
+        //         });
                 
-                if (response.ok) {
-                    const data = await response.json();
+        //         if (response.ok) {
+        //             const data = await response.json();
                     
                     
-                    // Remove the notification
-                    const notification = document.querySelector('.reward-notification');
-                    if (notification) {
-                        notification.remove();
-                    }
-                }
-            } catch (error) {
-                console.error('Error selecting reward:', error);
-            }
-        }
+        //             // Remove the notification
+        //             const notification = document.querySelector('.reward-notification');
+        //             if (notification) {
+        //                 notification.remove();
+        //             }
+        //         }
+        //     } catch (error) {
+        //         console.error('Error selecting reward:', error);
+        //     }
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to show reward earned notification (simpler version)
-        function showRewardEarnedNotification() {
-            console.log('DEBUG: showRewardEarnedNotification called');
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = 'reward-notification';
-            notification.innerHTML = `
-                <div class="reward-notification-content">
-                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-                    <h3>🎉 Reward Earned!</h3>
-                    <p>You've earned a reward for completing a difficult task!</p>
-                    <p><em>Check your pending rewards to claim it.</em></p>
-                    <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
-                </div>
-            `;
+        // function showRewardEarnedNotification() {
+        //     console.log('DEBUG: showRewardEarnedNotification called');
+        //     // Create notification element
+        //     const notification = document.createElement('div');
+        //     notification.className = 'reward-notification';
+        //     notification.innerHTML = `
+        //         <div class="reward-notification-content">
+        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+        //             <h3>🎉 Reward Earned!</h3>
+        //             <p>You've earned a reward for completing a difficult task!</p>
+        //             <p><em>Check your pending rewards to claim it.</em></p>
+        //             <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+        //         </div>
+        //     `;
             
-            // Add styles
-            notification.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            `;
+        //     // Add styles
+        //     notification.style.cssText = `
+        //         position: fixed;
+        //         top: 0;
+        //         left: 0;
+        //         width: 100%;
+        //         height: 100%;
+        //         background: rgba(0, 0, 0, 0.5);
+        //         display: flex;
+        //         justify-content: center;
+        //         align-items: center;
+        //         z-index: 1000;
+        //     `;
             
-            notification.querySelector('.reward-notification-content').style.cssText = `
-                background: white;
-                padding: 2rem;
-                border-radius: 10px;
-                text-align: center;
-                max-width: 400px;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                position: relative;
-            `;
+        //     notification.querySelector('.reward-notification-content').style.cssText = `
+        //         background: white;
+        //         padding: 2rem;
+        //         border-radius: 10px;
+        //         text-align: center;
+        //         max-width: 400px;
+        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        //         position: relative;
+        //     `;
             
-            // Style close button
-            notification.querySelector('.close-btn').style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 15px;
-                background: #ff4444;
-                color: white;
-                border: none;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 18px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `;
+        //     // Style close button
+        //     notification.querySelector('.close-btn').style.cssText = `
+        //         position: absolute;
+        //         top: 10px;
+        //         right: 15px;
+        //         background: #ff4444;
+        //         color: white;
+        //         border: none;
+        //         width: 30px;
+        //         height: 30px;
+        //         border-radius: 50%;
+        //         cursor: pointer;
+        //         font-size: 18px;
+        //         font-weight: bold;
+        //         display: flex;
+        //         align-items: center;
+        //         justify-content: center;
+        //     `;
             
-            notification.querySelector('button:not(.close-btn)').style.cssText = `
-                background: #4CAF50;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                margin-top: 1rem;
-            `;
+        //     notification.querySelector('button:not(.close-btn)').style.cssText = `
+        //         background: #4CAF50;
+        //         color: white;
+        //         border: none;
+        //         padding: 10px 20px;
+        //         border-radius: 5px;
+        //         cursor: pointer;
+        //         margin-top: 1rem;
+        //     `;
             
-            // Add to page
-            document.body.appendChild(notification);
-            console.log('DEBUG: Notification added to page');
+        //     // Add to page
+        //     document.body.appendChild(notification);
+        //     console.log('DEBUG: Notification added to page');
             
-            // Auto-remove after 5 seconds
-            setTimeout(() => {
-                if (notification.parentElement) {
-                    notification.remove();
-                    console.log('DEBUG: Notification auto-removed after 5 seconds');
-                }
-            }, 5000);
-        }
+        //     // Auto-remove after 5 seconds
+        //     setTimeout(() => {
+        //         if (notification.parentElement) {
+        //             notification.remove();
+        //             console.log('DEBUG: Notification auto-removed after 5 seconds');
+        //         }
+        //     }, 5000);
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to check for pending rewards on page load
-        async function checkPendingRewards() {
-            try {
-                const response = await fetch('/api/earned-rewards');
-                const data = await response.json();
+        // async function checkPendingRewards() {
+        //     try {
+        //         const response = await fetch('/api/earned-rewards');
+        //         const data = await response.json();
                 
-                const trophyIndicator = document.getElementById('trophy-indicator');
+        //         const trophyIndicator = document.getElementById('trophy-indicator');
                 
-                if (data.status === 'success' && data.pending_rewards && data.pending_rewards.length > 0) {
-                    // Show trophy indicator instead of auto-popup
-                    trophyIndicator.style.display = 'block';
-                    trophyIndicator.title = `You have ${data.pending_rewards.length} pending reward${data.pending_rewards.length > 1 ? 's' : ''}! Click to claim them.`;
-                } else {
-                    trophyIndicator.style.display = 'none';
-                }
-            } catch (error) {
-                console.error('Failed to check pending rewards:', error);
-            }
-        }
+        //         if (data.status === 'success' && data.pending_rewards && data.pending_rewards.length > 0) {
+        //             // Show trophy indicator instead of auto-popup
+        //             trophyIndicator.style.display = 'block';
+        //             trophyIndicator.title = `You have ${data.pending_rewards.length} pending reward${data.pending_rewards.length > 1 ? 's' : ''}! Click to claim them.`;
+        //         } else {
+        //             trophyIndicator.style.display = 'none';
+        //         }
+        //     } catch (error) {
+        //         console.error('Failed to check pending rewards:', error);
+        //     }
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to show pending rewards notification
-        function showPendingRewardsNotification(pendingRewards) {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = 'reward-notification';
+        // function showPendingRewardsNotification(pendingRewards) {
+        //     // Create notification element
+        //     const notification = document.createElement('div');
+        //     notification.className = 'reward-notification';
             
-            let content = `
-                <div class="reward-notification-content">
-                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-                    <h3>🎁 Pending Rewards!</h3>
-                    <p>You have ${pendingRewards.length} reward${pendingRewards.length > 1 ? 's' : ''} waiting to be claimed!</p>
-                    <div class="pending-rewards">
-            `;
+        //     let content = `
+        //         <div class="reward-notification-content">
+        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+        //             <h3>🎁 Pending Rewards!</h3>
+        //             <p>You have ${pendingRewards.length} reward${pendingRewards.length > 1 ? 's' : ''} waiting to be claimed!</p>
+        //             <div class="pending-rewards">
+        //     `;
             
-            pendingRewards.forEach((reward, index) => {
-                content += `
-                    <div class="pending-reward" data-reward-id="${reward.id}">
-                        <h4>Reward ${index + 1}</h4>
-                        <p>Earned from difficulty ${reward.task_difficulty} task</p>
-                        <button class="claim-reward-btn" onclick="claimReward('${reward.id}')">Claim This Reward</button>
-                    </div>
-                `;
-            });
+        //     pendingRewards.forEach((reward, index) => {
+        //         content += `
+        //             <div class="pending-reward" data-reward-id="${reward.id}">
+        //                 <h4>Reward ${index + 1}</h4>
+        //                 <p>Earned from difficulty ${reward.task_difficulty} task</p>
+        //                 <button class="claim-reward-btn" onclick="claimReward('${reward.id}')">Claim This Reward</button>
+        //             </div>
+        //         `;
+        //     });
             
-            content += `
-                    </div>
-                    <p><em>Choose a reward to claim it!</em></p>
-                </div>
-            `;
-            notification.innerHTML = content;
+        //     content += `
+        //             </div>
+        //             <p><em>Choose a reward to claim it!</em></p>
+        //         </div>
+        //     `;
+        //     notification.innerHTML = content;
             
-            // Add styles
-            notification.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            `;
+        //     // Add styles
+        //     notification.style.cssText = `
+        //         position: fixed;
+        //         top: 0;
+        //         left: 0;
+        //         width: 100%;
+        //         height: 100%;
+        //         background: rgba(0, 0, 0, 0.5);
+        //         display: flex;
+        //         justify-content: center;
+        //         align-items: center;
+        //         z-index: 1000;
+        //     `;
             
-            notification.querySelector('.reward-notification-content').style.cssText = `
-                background: white;
-                padding: 2rem;
-                border-radius: 10px;
-                text-align: center;
-                max-width: 600px;
-                max-height: 80vh;
-                overflow-y: auto;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                position: relative;
-            `;
+        //     notification.querySelector('.reward-notification-content').style.cssText = `
+        //         background: white;
+        //         padding: 2rem;
+        //         border-radius: 10px;
+        //         text-align: center;
+        //         max-width: 600px;
+        //         max-height: 80vh;
+        //         overflow-y: auto;
+        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        //         position: relative;
+        //     `;
             
-            // Style close button
-            notification.querySelector('.close-btn').style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 15px;
-                background: #ff4444;
-                color: white;
-                border: none;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 18px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `;
+        //     // Style close button
+        //     notification.querySelector('.close-btn').style.cssText = `
+        //         position: absolute;
+        //         top: 10px;
+        //         right: 15px;
+        //         background: #ff4444;
+        //         color: white;
+        //         border: none;
+        //         width: 30px;
+        //         height: 30px;
+        //         border-radius: 50%;
+        //         cursor: pointer;
+        //         font-size: 18px;
+        //         font-weight: bold;
+        //         display: flex;
+        //         align-items: center;
+        //         justify-content: center;
+        //     `;
             
-            // Style close button
-            notification.querySelector('.close-btn').style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 15px;
-                background: #ff4444;
-                color: white;
-                border: none;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 18px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `;
+        //     // Style close button
+        //     notification.querySelector('.close-btn').style.cssText = `
+        //         position: absolute;
+        //         top: 10px;
+        //         right: 15px;
+        //         background: #ff4444;
+        //         color: white;
+        //         border: none;
+        //         width: 30px;
+        //         height: 30px;
+        //         border-radius: 50%;
+        //         cursor: pointer;
+        //         font-size: 18px;
+        //         font-weight: bold;
+        //         display: flex;
+        //         align-items: center;
+        //         justify-content: center;
+        //     `;
             
-            // Style pending rewards
-            const pendingRewardsDiv = notification.querySelector('.pending-rewards');
-            if (pendingRewardsDiv) {
-                pendingRewardsDiv.style.cssText = `
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 1rem;
-                    margin: 1rem 0;
-                `;
+        //     // Style pending rewards
+        //     const pendingRewardsDiv = notification.querySelector('.pending-rewards');
+        //     if (pendingRewardsDiv) {
+        //         pendingRewardsDiv.style.cssText = `
+        //             display: grid;
+        //             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        //             gap: 1rem;
+        //             margin: 1rem 0;
+        //         `;
                 
-                notification.querySelectorAll('.pending-reward').forEach(reward => {
-                    reward.style.cssText = `
-                        border: 2px solid #e0e0e0;
-                        border-radius: 8px;
-                        padding: 1rem;
-                        background: #f9f9f9;
-                    `;
-                });
+        //         notification.querySelectorAll('.pending-reward').forEach(reward => {
+        //             reward.style.cssText = `
+        //                 border: 2px solid #e0e0e0;
+        //                 border-radius: 8px;
+        //                 padding: 1rem;
+        //                 background: #f9f9f9;
+        //             `;
+        //         });
                 
-                notification.querySelectorAll('.claim-reward-btn').forEach(btn => {
-                    btn.style.cssText = `
-                        background: #4CAF50;
-                        color: white;
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        margin-top: 0.5rem;
-                    `;
-                });
-            }
+        //         notification.querySelectorAll('.claim-reward-btn').forEach(btn => {
+        //             btn.style.cssText = `
+        //                 background: #4CAF50;
+        //                 color: white;
+        //                 border: none;
+        //                 padding: 8px 16px;
+        //                 border-radius: 5px;
+        //                 cursor: pointer;
+        //                 margin-top: 0.5rem;
+        //             `;
+        //         });
+        //     }
             
-            // Add to page
-            document.body.appendChild(notification);
-        }
+        //     // Add to page
+        //     document.body.appendChild(notification);
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to claim a reward (generate options and show selection)
-        async function claimReward(rewardId) {
-            try {
-                // Generate reward options
-                const response = await fetch(`/api/earned-rewards/${rewardId}/generate-options`, {
-                    method: 'POST'
-                });
+        // async function claimReward(rewardId) {
+        //     try {
+        //         // Generate reward options
+        //         const response = await fetch(`/api/earned-rewards/${rewardId}/generate-options`, {
+        //             method: 'POST'
+        //         });
                 
-                if (response.ok) {
-                    const data = await response.json();
+        //         if (response.ok) {
+        //             const data = await response.json();
                     
-                    // Remove the pending rewards notification
-                    const notification = document.querySelector('.reward-notification');
-                    if (notification) {
-                        notification.remove();
-                    }
+        //             // Remove the pending rewards notification
+        //             const notification = document.querySelector('.reward-notification');
+        //             if (notification) {
+        //                 notification.remove();
+        //             }
                     
-                    // Show reward options selection
-                    showRewardOptionsSelection(data.reward_options, rewardId);
-                } else {
-                    alert('Failed to generate reward options. Please try again.');
-                }
-            } catch (error) {
-                console.error('Error claiming reward:', error);
-                alert('Failed to claim reward. Please try again.');
-            }
-        }
+        //             // Show reward options selection
+        //             showRewardOptionsSelection(data.reward_options, rewardId);
+        //         } else {
+        //             alert('Failed to generate reward options. Please try again.');
+        //         }
+        //     } catch (error) {
+        //         console.error('Error claiming reward:', error);
+        //         alert('Failed to claim reward. Please try again.');
+        //     }
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to show reward options selection
-        function showRewardOptionsSelection(rewardOptions, earnedRewardId) {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = 'reward-notification';
+        // function showRewardOptionsSelection(rewardOptions, earnedRewardId) {
+        //     // Create notification element
+        //     const notification = document.createElement('div');
+        //     notification.className = 'reward-notification';
             
-            let content = `
-                <div class="reward-notification-content">
-                    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-                    <h3>🎁 Choose Your Reward!</h3>
-                    <p>Select one of these reward options:</p>
-                    <div class="reward-options">
-            `;
+        //     let content = `
+        //         <div class="reward-notification-content">
+        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+        //             <h3>🎁 Choose Your Reward!</h3>
+        //             <p>Select one of these reward options:</p>
+        //             <div class="reward-options">
+        //     `;
             
-            rewardOptions.forEach((option, index) => {
-                content += `
-                    <div class="reward-option" data-option-id="${option.id}">
-                        <h4>Option ${index + 1}</h4>
-                        <p>${option.display}</p>
-                        <button class="select-reward-btn" onclick="selectRewardOption('${option.id}', '${earnedRewardId}')">Select This Reward</button>
-                    </div>
-                `;
-            });
+        //     rewardOptions.forEach((option, index) => {
+        //         content += `
+        //             <div class="reward-option" data-option-id="${option.id}">
+        //                 <h4>Option ${index + 1}</h4>
+        //                 <p>${option.display}</p>
+        //                 <button class="select-reward-btn" onclick="selectRewardOption('${option.id}', '${earnedRewardId}')">Select This Reward</button>
+        //             </div>
+        //         `;
+        //     });
             
-            content += `
-                    </div>
-                    <p><em>Choose your reward to continue!</em></p>
-                </div>
-            `;
-            notification.innerHTML = content;
+        //     content += `
+        //             </div>
+        //             <p><em>Choose your reward to continue!</em></p>
+        //         </div>
+        //     `;
+        //     notification.innerHTML = content;
             
-            // Add styles
-            notification.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            `;
+        //     // Add styles
+        //     notification.style.cssText = `
+        //         position: fixed;
+        //         top: 0;
+        //         left: 0;
+        //         width: 100%;
+        //         height: 100%;
+        //         background: rgba(0, 0, 0, 0.5);
+        //         display: flex;
+        //         justify-content: center;
+        //         align-items: center;
+        //         z-index: 1000;
+        //     `;
             
-            notification.querySelector('.reward-notification-content').style.cssText = `
-                background: white;
-                padding: 2rem;
-                border-radius: 10px;
-                text-align: center;
-                max-width: 600px;
-                max-height: 80vh;
-                overflow-y: auto;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                position: relative;
-            `;
+        //     notification.querySelector('.reward-notification-content').style.cssText = `
+        //         background: white;
+        //         padding: 2rem;
+        //         border-radius: 10px;
+        //         text-align: center;
+        //         max-width: 600px;
+        //         max-height: 80vh;
+        //         overflow-y: auto;
+        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        //         position: relative;
+        //     `;
             
-            // Style close button
-            notification.querySelector('.close-btn').style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 15px;
-                background: #ff4444;
-                color: white;
-                border: none;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 18px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `;
+        //     // Style close button
+        //     notification.querySelector('.close-btn').style.cssText = `
+        //         position: absolute;
+        //         top: 10px;
+        //         right: 15px;
+        //         background: #ff4444;
+        //         color: white;
+        //         border: none;
+        //         width: 30px;
+        //         height: 30px;
+        //         border-radius: 50%;
+        //         cursor: pointer;
+        //         font-size: 18px;
+        //         font-weight: bold;
+        //         display: flex;
+        //         align-items: center;
+        //         justify-content: center;
+        //     `;
             
-            // Style reward options
-            const rewardOptionsDiv = notification.querySelector('.reward-options');
-            if (rewardOptionsDiv) {
-                rewardOptionsDiv.style.cssText = `
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                    gap: 1rem;
-                    margin: 1rem 0;
-                `;
+        //     // Style reward options
+        //     const rewardOptionsDiv = notification.querySelector('.reward-options');
+        //     if (rewardOptionsDiv) {
+        //         rewardOptionsDiv.style.cssText = `
+        //             display: grid;
+        //             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        //             gap: 1rem;
+        //             margin: 1rem 0;
+        //         `;
                 
-                notification.querySelectorAll('.reward-option').forEach(option => {
-                    option.style.cssText = `
-                        border: 2px solid #e0e0e0;
-                        border-radius: 8px;
-                        padding: 1rem;
-                        background: #f9f9f9;
-                    `;
-                });
+        //         notification.querySelectorAll('.reward-option').forEach(option => {
+        //             option.style.cssText = `
+        //                 border: 2px solid #e0e0e0;
+        //                 border-radius: 8px;
+        //                 padding: 1rem;
+        //                 background: #f9f9f9;
+        //             `;
+        //         });
                 
-                notification.querySelectorAll('.select-reward-btn').forEach(btn => {
-                    btn.style.cssText = `
-                        background: #4CAF50;
-                        color: white;
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        margin-top: 0.5rem;
-                    `;
-                });
-            }
+        //         notification.querySelectorAll('.select-reward-btn').forEach(btn => {
+        //             btn.style.cssText = `
+        //                 background: #4CAF50;
+        //                 color: white;
+        //                 border: none;
+        //                 padding: 8px 16px;
+        //                 border-radius: 5px;
+        //                 cursor: pointer;
+        //                 margin-top: 0.5rem;
+        //             `;
+        //         });
+        //     }
             
-            // Add to page
-            document.body.appendChild(notification);
-        }
+        //     // Add to page
+        //     document.body.appendChild(notification);
+        // }
 
+        // DISABLED: Rewards system temporarily disabled
         // Function to select a reward option
-        async function selectRewardOption(optionId, earnedRewardId) {
-            try {
-                const response = await fetch(`/api/earned-rewards/${earnedRewardId}/select-option`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ option_id: optionId })
-                });
+        // async function selectRewardOption(optionId, earnedRewardId) {
+        //     try {
+        //         const response = await fetch(`/api/earned-rewards/${earnedRewardId}/select-option`, {
+        //             method: 'POST',
+        //             headers: {
+        //                 'Content-Type': 'application/json'
+        //             },
+        //             body: JSON.stringify({ option_id: optionId })
+        //         });
                 
-                if (response.ok) {
-                    const data = await response.json();
+        //         if (response.ok) {
+        //             const data = await response.json();
                     
                     
-                    // Remove the notification
-                    const notification = document.querySelector('.reward-notification');
-                    if (notification) {
-                        notification.remove();
-                    }
-                }
-            } catch (error) {
-                console.error('Error selecting reward:', error);
-            }
-        }
+        //             // Remove the notification
+        //             const notification = document.querySelector('.reward-notification');
+        //             if (notification) {
+        //                 notification.remove();
+        //             }
+        //         }
+        //     } catch (error) {
+        //         console.error('Error selecting reward:', error);
+        //     }
+        // }
 
+        // DISABLED: Stats system temporarily disabled
         // Function to load weekly points
-        async function loadWeeklyPoints() {
-            try {
-                const response = await fetch('/api/weekly-points');
-                const data = await response.json();
+        // async function loadWeeklyPoints() {
+        //     try {
+        //         const response = await fetch('/api/weekly-points');
+        //         const data = await response.json();
                 
-                if (data.status === 'success') {
-                    document.getElementById('weekly-points').textContent = data.weekly_points;
+        //         if (data.status === 'success') {
+        //             document.getElementById('weekly-points').textContent = data.weekly_points;
                     
-                    // Show different text based on whether we're showing last week's score
-                    if (data.showing_last_week) {
-                        document.getElementById('weekly-detail').textContent = 
-                            `Last week: ${data.completed_tasks} tasks completed`;
-                    } else {
-                        document.getElementById('weekly-detail').textContent = 
-                            `${data.completed_tasks} tasks completed`;
-                    }
-                } else {
-                    document.getElementById('weekly-points').textContent = 'Error';
-                    document.getElementById('weekly-detail').textContent = 'Failed to load';
-                }
-            } catch (error) {
-                console.error('Failed to load weekly points:', error);
-                document.getElementById('weekly-points').textContent = 'Error';
-                document.getElementById('weekly-detail').textContent = 'Failed to load';
-            }
-        }
+        //             // Show different text based on whether we're showing last week's score
+        //             if (data.showing_last_week) {
+        //                 document.getElementById('weekly-detail').textContent = 
+        //                     `Last week: ${data.completed_tasks} tasks completed`;
+        //             } else {
+        //                 document.getElementById('weekly-detail').textContent = 
+        //                     `${data.completed_tasks} tasks completed`;
+        //             }
+        //         } else {
+        //             document.getElementById('weekly-points').textContent = 'Error';
+        //             document.getElementById('weekly-detail').textContent = 'Failed to load';
+        //         }
+        //     } catch (error) {
+        //         console.error('Failed to load weekly points:', error);
+        //         document.getElementById('weekly-points').textContent = 'Error';
+        //         document.getElementById('weekly-detail').textContent = 'Failed to load';
+        //     }
+        // }
         
+        // DISABLED: Stats system temporarily disabled
         // Function to load pending rewards comparison
-        async function loadPendingRewards() {
-            try {
-                const response = await fetch('/api/reward-comparison');
-                const data = await response.json();
+        // async function loadPendingRewards() {
+        //     try {
+        //         const response = await fetch('/api/reward-comparison');
+        //         const data = await response.json();
                 
-                if (data.status === 'success') {
-                    const userRewards = data.user_rewards;
-                    const spouseRewards = data.spouse_rewards;
-                    const totalRewards = userRewards + spouseRewards;
+        //         if (data.status === 'success') {
+        //             const userRewards = data.user_rewards;
+        //             const spouseRewards = data.spouse_rewards;
+        //             const totalRewards = userRewards + spouseRewards;
                     
-                    document.getElementById('goal-comparison').textContent = totalRewards;
-                    document.getElementById('user-rewards').textContent = `${data.user_name}: ${userRewards}`;
-                    document.getElementById('spouse-rewards').textContent = `${data.spouse_name}: ${spouseRewards}`;
-                } else {
-                    document.getElementById('goal-comparison').textContent = 'Error';
-                    document.getElementById('user-rewards').textContent = 'Error';
-                    document.getElementById('spouse-rewards').textContent = 'Error';
-                }
-            } catch (error) {
-                console.error('Failed to load reward comparison:', error);
-                document.getElementById('goal-comparison').textContent = 'Error';
-                document.getElementById('user-rewards').textContent = 'Error';
-                document.getElementById('spouse-rewards').textContent = 'Error';
-            }
-        }
+        //             document.getElementById('goal-comparison').textContent = totalRewards;
+        //             document.getElementById('user-rewards').textContent = `${data.user_name}: ${userRewards}`;
+        //             document.getElementById('spouse-rewards').textContent = `${data.spouse_name}: ${spouseRewards}`;
+        //         } else {
+        //             document.getElementById('goal-comparison').textContent = 'Error';
+        //             document.getElementById('user-rewards').textContent = 'Error';
+        //             document.getElementById('spouse-rewards').textContent = 'Error';
+        //         }
+        //     } catch (error) {
+        //         console.error('Failed to load reward comparison:', error);
+        //         document.getElementById('goal-comparison').textContent = 'Error';
+        //         document.getElementById('user-rewards').textContent = 'Error';
+        //         document.getElementById('spouse-rewards').textContent = 'Error';
+        //     }
+        // }
 
         // Tasks and rewards are now loaded in the DOMContentLoaded event
         // after authentication is established

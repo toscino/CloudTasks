@@ -5,7 +5,7 @@ import threading
 from src.utils.logger import logger
 
 
-def ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=True):
+def ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False):
     """Centralized function to ensure minimum counts for tasks, rewards, and challenges"""
     
     logger.debug(f"ensure_minimums called for {username} - tasks:{check_tasks}, rewards:{check_rewards}, challenges:{check_challenges}")
@@ -26,13 +26,14 @@ def ensure_minimums(task_master, username, check_tasks=True, check_rewards=True,
         except Exception as e:
             logger.error(f"Background: ensure_minimum_reward_options failed for {username}: {e}")
     
-    def ensure_challenges():
-        try:
-            logger.debug(f"Background: Running ensure_minimum_challenges for {username}")
-            task_master.challenge_master.ensure_minimum_challenges(username)
-            logger.debug(f"Background: ensure_minimum_challenges completed for {username}")
-        except Exception as e:
-            logger.error(f"Background: ensure_minimum_challenges failed for {username}: {e}")
+    # DISABLED: Challenges system temporarily disabled
+    # def ensure_challenges():
+    #     try:
+    #         logger.debug(f"Background: Running ensure_minimum_challenges for {username}")
+    #         task_master.challenge_master.ensure_minimum_challenges(username)
+    #         logger.debug(f"Background: ensure_minimum_challenges completed for {username}")
+    #     except Exception as e:
+    #         logger.error(f"Background: ensure_minimum_challenges failed for {username}: {e}")
     
     # Start separate threads for each check - run in parallel
     if check_tasks:
@@ -41,8 +42,9 @@ def ensure_minimums(task_master, username, check_tasks=True, check_rewards=True,
     if check_rewards:
         logger.debug(f"Starting reward generation thread for {username}")
         threading.Thread(target=ensure_rewards, daemon=True).start()
-    if check_challenges:
-        logger.debug(f"Starting challenge generation thread for {username}")
-        threading.Thread(target=ensure_challenges, daemon=True).start()
+    # DISABLED: Challenges system temporarily disabled
+    # if check_challenges:
+    #     logger.debug(f"Starting challenge generation thread for {username}")
+    #     threading.Thread(target=ensure_challenges, daemon=True).start()
     
-    logger.debug(f"Background ensure_minimums started for {username} - {sum([check_tasks, check_rewards, check_challenges])} threads")
+    logger.debug(f"Background ensure_minimums started for {username} - {sum([check_tasks, check_rewards])} threads")

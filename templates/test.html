@@ -50,6 +50,43 @@
             border: 1px solid #f5c6cb;
             color: #721c24;
         }
+        
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .history-table th,
+        .history-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .history-table th {
+            background-color: #4285f4;
+            color: white;
+        }
+
+        .history-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .neutral {
+            color: #6c757d;
+        }
         .form-row {
             display: flex;
             gap: 10px;
@@ -86,6 +123,26 @@
             <h3>Debug Actions</h3>
             <button onclick="checkGenerationLocks()">Check Generation Locks</button>
             <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
+            <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
+            <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
+            <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+                <h4>Progress Day Simulation</h4>
+                <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
+                    <div>
+                        <label for="ian-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Ian's Points</label>
+                        <input type="number" id="ian-points" placeholder="Auto" style="width: 100px; padding: 5px;">
+                        <small style="display: block; color: #666;">Leave blank to use actual</small>
+                    </div>
+                    <div>
+                        <label for="karleigh-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Karleigh's Points</label>
+                        <input type="number" id="karleigh-points" placeholder="Auto" style="width: 100px; padding: 5px;">
+                        <small style="display: block; color: #666;">Leave blank to use actual</small>
+                    </div>
+                    <button onclick="progressDay()">Progress Day</button>
+                </div>
+                <small style="color: #666;">Simulates end-of-day processing (2am reset). Enter custom points or leave blank to calculate from completed tasks.</small>
+            </div>
+            <button onclick="resetTrackerHistory()" style="background-color: #dc3545;">Reset Tracker History</button>
             <div id="debugResult" class="result"></div>
         </div>
     </div>
@@ -437,6 +494,166 @@
                 
                 resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
                 resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function resetDailyTasks() {
+            if (!confirm('This will reset all daily tasks for today. Continue?')) {
+                return;
+            }
+            
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Resetting daily tasks...';
+            
+            try {
+                const response = await fetch('/api/daily-tasks/reset', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = 'Daily tasks reset successfully! ' + JSON.stringify(data.result, null, 2);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to reset: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function viewTrackerHistory() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = 'Loading history...';
+            
+            try {
+                const response = await fetch('/api/collaboration/history');
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.history.length > 0) {
+                    let html = '<table class="history-table">';
+                    html += '<thead><tr>';
+                    html += '<th>Date</th>';
+                    html += '<th>Ian Pts</th>';
+                    html += '<th>K Pts</th>';
+                    html += '<th>Ian Δ</th>';
+                    html += '<th>K Δ</th>';
+                    html += '<th>Tracker</th>';
+                    html += '</tr></thead><tbody>';
+                    
+                    data.history.forEach(day => {
+                        const ianClass = day.ian_adjustment > 0 ? 'positive' : day.ian_adjustment < 0 ? 'negative' : 'neutral';
+                        const kClass = day.karleigh_adjustment > 0 ? 'positive' : day.karleigh_adjustment < 0 ? 'negative' : 'neutral';
+                        const trackerChange = day.new_tracker - day.old_tracker;
+                        const trackerClass = trackerChange > 0 ? 'positive' : trackerChange < 0 ? 'negative' : 'neutral';
+                        
+                        html += '<tr>';
+                        html += `<td>${day.date}</td>`;
+                        html += `<td>${day.ian_points}</td>`;
+                        html += `<td>${day.karleigh_points}</td>`;
+                        html += `<td class="${ianClass}">${day.ian_adjustment > 0 ? '+' : ''}${day.ian_adjustment}</td>`;
+                        html += `<td class="${kClass}">${day.karleigh_adjustment > 0 ? '+' : ''}${day.karleigh_adjustment}</td>`;
+                        html += `<td>${day.old_tracker} → ${day.new_tracker} <span class="${trackerClass}">(${trackerChange > 0 ? '+' : ''}${trackerChange})</span></td>`;
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table>';
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.className = 'result';
+                    resultDiv.innerHTML = 'No history found.';
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error loading history: ' + error.message;
+            }
+        }
+        
+        async function progressDay() {
+            const ianPointsInput = document.getElementById('ian-points');
+            const karleighPointsInput = document.getElementById('karleigh-points');
+            
+            const ianPoints = ianPointsInput.value.trim() ? parseInt(ianPointsInput.value) : null;
+            const karleighPoints = karleighPointsInput.value.trim() ? parseInt(karleighPointsInput.value) : null;
+            
+            let confirmMessage = 'This will process today as complete and update the tracker. Continue?';
+            if (ianPoints !== null || karleighPoints !== null) {
+                confirmMessage = `This will simulate a day with:\n- Ian: ${ianPoints !== null ? ianPoints : 'auto'} points\n- Karleigh: ${karleighPoints !== null ? karleighPoints : 'auto'} points\n\nContinue?`;
+            }
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Processing day...';
+            
+            try {
+                const response = await fetch('/api/collaboration/progress-day', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ian_points: ianPoints,
+                        karleigh_points: karleighPoints
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    let message = `Day processed successfully! Date: ${data.date}\n\n`;
+                    message += `Ian: ${data.ian_points} points (${data.ian_adjustment > 0 ? '+' : ''}${data.ian_adjustment})\n`;
+                    message += `Karleigh: ${data.karleigh_points} points (${data.karleigh_adjustment > 0 ? '+' : ''}${data.karleigh_adjustment})\n`;
+                    message += `Tracker: ${data.old_tracker} → ${data.new_tracker}\n\n`;
+                    message += `View tracker history to see all results.`;
+                    resultDiv.textContent = message;
+                    
+                    // Clear inputs
+                    ianPointsInput.value = '';
+                    karleighPointsInput.value = '';
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to progress day: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function resetTrackerHistory() {
+            if (!confirm('⚠️ WARNING: This will DELETE ALL tracker history and reset the tracker to 5. This cannot be undone! Continue?')) {
+                return;
+            }
+            
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Resetting tracker history...';
+            
+            try {
+                const response = await fetch('/api/collaboration/reset-history', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `Tracker history reset successfully!\nDeleted ${data.deleted} history records.\nTracker reset to 5.`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to reset history: ' + data.message;
+                }
             } catch (error) {
                 resultDiv.className = 'result error';
                 resultDiv.textContent = 'Error: ' + error.message;

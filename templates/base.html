@@ -160,8 +160,7 @@
             </button>
         <div class="nav-menu" id="navMenu">
             <a href="/" class="nav-menu-item {% if request.endpoint == 'index' %}active{% endif %}">📋 Tasks</a>
-            <a href="/rewards" class="nav-menu-item {% if request.endpoint == 'rewards_page' %}active{% endif %}">🎁 Rewards</a>
-            <a href="/rewards-owed" class="nav-menu-item {% if request.endpoint == 'rewards_owed_page' %}active{% endif %}">💝 Rewards Owed</a>
+            <a href="/daily-tasks" class="nav-menu-item {% if request.endpoint == 'daily_tasks_page' %}active{% endif %}">📅 Daily Tasks</a>
             <a href="/goals" class="nav-menu-item {% if request.endpoint == 'goals_page' %}active{% endif %}">🎯 Goals</a>
             <a href="/test" class="nav-menu-item {% if request.endpoint == 'test_interface' %}active{% endif %}">🧪 Test</a>
             <a href="/about" class="nav-menu-item {% if request.endpoint == 'about' %}active{% endif %}">ℹ️ About</a>
