@@ -168,7 +168,7 @@
         
         .tracker-marker {
             position: absolute;
-            top: 0;
+            top: -15px;
             width: 50px;
             height: 50px;
             margin-left: -25px;
@@ -277,6 +277,24 @@
             background: #28a745; /* Green when stretch is reached */
         }
         
+        .goal-marker {
+            position: absolute;
+            top: -2px;
+            width: 2px;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 1px;
+            z-index: 10;
+        }
+        
+        .goal-marker.par-marker {
+            background: rgba(108, 117, 125, 0.6); /* Subtle gray */
+        }
+        
+        .goal-marker.stretch-marker {
+            background: rgba(40, 167, 69, 0.6); /* Subtle green */
+        }
+        
         .progress-labels {
             display: flex;
             justify-content: space-between;
@@ -303,7 +321,6 @@
 
 {% block content %}
         <div class="header-with-trophy">
-            <h2>Tasks</h2>
             <div id="trophy-indicator" class="trophy-indicator" style="display: none;" onclick="window.location.href='/rewards'">
                 🏆
             </div>
@@ -312,11 +329,12 @@
         <!-- Stats Section -->
         <div class="stats-container">
             <div class="stat-card">
-                <h3>🎯 Today's Points</h3>
                 <div class="stat-detail" id="daily-points-detail">Total points earned today</div>
                 <div class="progress-indicator" id="progress-indicator">
                     <div class="progress-bar">
                         <div class="progress-fill" id="progress-fill"></div>
+                        <div class="goal-marker par-marker" id="par-marker"></div>
+                        <div class="goal-marker stretch-marker" id="stretch-marker"></div>
                     </div>
                 </div>
             </div>
@@ -324,7 +342,6 @@
         
         <!-- Collaboration Tracker -->
         <div class="collaboration-tracker">
-            <h3>🤝 Collaboration Tracker</h3>
             <div class="tracker-slider">
                 <div class="tracker-scale">
                     <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
@@ -551,11 +568,34 @@
                     
                     // Update progress indicator using backend data
                     await updateProgressIndicatorFromBackend(data.par, data.stretch_goal);
+                    
+                    // Update goal markers
+                    updateGoalMarkers(data.par, data.stretch_goal);
                 } else {
                     console.error('Failed to load collaboration tracker:', data.message);
                 }
             } catch (error) {
                 console.error('Error loading collaboration tracker:', error);
+            }
+        }
+        
+        // Function to update goal markers on progress bar
+        function updateGoalMarkers(par, stretchGoal) {
+            const parMarker = document.getElementById('par-marker');
+            const stretchMarker = document.getElementById('stretch-marker');
+            
+            if (parMarker && stretchMarker && stretchGoal > 0) {
+                // Calculate positions as percentages
+                const parPercent = (par / stretchGoal) * 100;
+                const stretchPercent = 100; // Always at 100%
+                
+                // Position the markers
+                parMarker.style.left = parPercent + '%';
+                stretchMarker.style.left = stretchPercent + '%';
+                
+                // Show/hide markers based on whether they're meaningful
+                parMarker.style.display = par > 0 ? 'block' : 'none';
+                stretchMarker.style.display = 'block';
             }
         }
         
@@ -585,6 +625,9 @@
                 progressFill.classList.add('par-reached'); // Yellow
             }
             // Otherwise stays red (default)
+            
+            // Update goal markers
+            updateGoalMarkers(par, stretchGoal);
         }
 
         // Update progress indicator with backend data
@@ -621,6 +664,9 @@
             } else {
                 console.log('DEBUG: No color class added (red default)');
             }
+            
+            // Update goal markers
+            updateGoalMarkers(par, stretchGoal);
         }
         
         // Function to update daily tasks stats
@@ -644,7 +690,7 @@
                     
                     // Update progress indicator with current points
                     const progressFill = document.getElementById('progress-fill');
-                    if (progressFill && progressFill.style.width !== '0%') {
+                    if (progressFill) {
                         // Update progress bar color based on current points
                         let progressPercent = 0;
                         if (totalPoints >= stretchGoal) {
@@ -668,6 +714,9 @@
                         } else {
                             console.log('DEBUG: No color class added (red default)');
                         }
+                        
+                        // Update goal markers
+                        updateGoalMarkers(par, stretchGoal);
                     }
                 } else {
                     console.error('Failed to get collaboration tracker data:', data.message);
