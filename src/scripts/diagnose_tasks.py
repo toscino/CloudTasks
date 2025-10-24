@@ -107,14 +107,14 @@ def diagnose_tasks(username=None):
     print(f"Total tasks in database: {len(all_tasks_docs)}")
     print(f"Completed tasks: {len(completed_tasks)}")
     print(f"Incomplete tasks: {len(incomplete_tasks)}")
-    print(f"  ├─ Saved tasks: {len(saved_tasks)}")
-    print(f"  ├─ Presented tasks: {len(presented_tasks)}")
-    print(f"  │   ├─ Active (< 2h): {len(presented_tasks) - len(expired_tasks)}")
-    print(f"  │   └─ Expired (≥ 2h): {len(expired_tasks)}")
-    print(f"  └─ Unpresented tasks: {len(unpresented_tasks)}")
+    print(f"  - Saved tasks: {len(saved_tasks)}")
+    print(f"  - Presented tasks: {len(presented_tasks)}")
+    print(f"    - Active (< 2h): {len(presented_tasks) - len(expired_tasks)}")
+    print(f"    - Expired (>= 2h): {len(expired_tasks)}")
+    print(f"  - Unpresented tasks: {len(unpresented_tasks)}")
     
     if expired_tasks:
-        print(f"\n🚨 FOUND {len(expired_tasks)} EXPIRED TASKS:")
+        print(f"\n[WARNING] FOUND {len(expired_tasks)} EXPIRED TASKS:")
         for doc in expired_tasks:
             task_data = doc.to_dict()
             print(f"  - {doc.id}: {task_data.get('description', 'No description')[:50]}")

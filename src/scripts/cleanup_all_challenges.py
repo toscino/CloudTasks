@@ -23,7 +23,7 @@ def cleanup_all_challenges(username=None, dry_run=True):
     current_time = datetime.now(local_tz)
     
     print("=" * 80)
-    print("🧹 CHALLENGE CLEANUP TOOL")
+    print(" CHALLENGE CLEANUP TOOL")
     print("=" * 80)
     print(f"Current time: {current_time}")
     print(f"Username filter: {username if username else 'ALL USERS'}")
@@ -39,10 +39,10 @@ def cleanup_all_challenges(username=None, dry_run=True):
     challenges_docs = list(challenges_query.stream())
     
     if not challenges_docs:
-        print("✅ No challenges found to clean up!")
+        print("[SUCCESS] No challenges found to clean up!")
         return
     
-    print(f"📋 Found {len(challenges_docs)} challenges to clean up")
+    print(f" Found {len(challenges_docs)} challenges to clean up")
     print()
     
     # Categorize challenges
@@ -61,7 +61,7 @@ def cleanup_all_challenges(username=None, dry_run=True):
         else:
             other_status_challenges.append(challenge_doc)
     
-    print("📊 CHALLENGE BREAKDOWN:")
+    print(" CHALLENGE BREAKDOWN:")
     print(f"   Pending challenges: {len(pending_challenges)}")
     print(f"   Completed challenges: {len(completed_challenges)}")
     print(f"   Other status challenges: {len(other_status_challenges)}")
@@ -69,7 +69,7 @@ def cleanup_all_challenges(username=None, dry_run=True):
     
     # Show details of challenges to be deleted
     if pending_challenges:
-        print("🔄 PENDING CHALLENGES (will be deleted):")
+        print(" PENDING CHALLENGES (will be deleted):")
         for challenge_doc in pending_challenges[:10]:  # Show first 10
             challenge_data = challenge_doc.to_dict()
             presented_at = challenge_data.get('presented_at')
@@ -101,7 +101,7 @@ def cleanup_all_challenges(username=None, dry_run=True):
         print()
     
     if completed_challenges:
-        print("✅ COMPLETED CHALLENGES (will be deleted):")
+        print("[SUCCESS] COMPLETED CHALLENGES (will be deleted):")
         for challenge_doc in completed_challenges[:5]:  # Show first 5
             challenge_data = challenge_doc.to_dict()
             completed_at = challenge_data.get('completed_at')
@@ -120,7 +120,7 @@ def cleanup_all_challenges(username=None, dry_run=True):
         print()
     
     if other_status_challenges:
-        print("⚠️  OTHER STATUS CHALLENGES (will be deleted):")
+        print("  OTHER STATUS CHALLENGES (will be deleted):")
         for challenge_doc in other_status_challenges:
             challenge_data = challenge_doc.to_dict()
             status = challenge_data.get('status', 'unknown')
@@ -129,20 +129,20 @@ def cleanup_all_challenges(username=None, dry_run=True):
     
     # Confirmation and deletion
     if dry_run:
-        print("🔍 DRY RUN MODE - No challenges were actually deleted")
-        print("💡 To actually delete challenges, run with --live flag")
+        print(" DRY RUN MODE - No challenges were actually deleted")
+        print(" To actually delete challenges, run with --live flag")
     else:
-        print("⚠️  WARNING: This will permanently delete all challenges!")
-        print("💡 Make sure you want to proceed before continuing")
+        print("  WARNING: This will permanently delete all challenges!")
+        print(" Make sure you want to proceed before continuing")
         print()
         
         # Ask for confirmation
         response = input("Type 'DELETE' to confirm deletion: ")
         if response != 'DELETE':
-            print("❌ Deletion cancelled")
+            print("[ERROR] Deletion cancelled")
             return
         
-        print("🗑️  Deleting challenges...")
+        print("  Deleting challenges...")
         
         deleted_count = 0
         failed_count = 0
@@ -151,20 +151,20 @@ def cleanup_all_challenges(username=None, dry_run=True):
             try:
                 challenge_doc.reference.delete()
                 deleted_count += 1
-                print(f"   ✅ Deleted {challenge_doc.id}")
+                print(f"   [SUCCESS] Deleted {challenge_doc.id}")
             except Exception as e:
                 failed_count += 1
-                print(f"   ❌ Failed to delete {challenge_doc.id}: {e}")
+                print(f"   [ERROR] Failed to delete {challenge_doc.id}: {e}")
         
         print()
-        print("🎉 CLEANUP COMPLETE!")
+        print(" CLEANUP COMPLETE!")
         print(f"   Successfully deleted: {deleted_count}")
         print(f"   Failed to delete: {failed_count}")
         
         if failed_count == 0:
-            print("   ✅ All challenges cleaned up successfully!")
+            print("   [SUCCESS] All challenges cleaned up successfully!")
         else:
-            print(f"   ⚠️  {failed_count} challenges could not be deleted")
+            print(f"     {failed_count} challenges could not be deleted")
     
     print("\n" + "=" * 80)
 
@@ -181,15 +181,15 @@ def quick_cleanup(username=None, live=False):
     challenges_docs = list(challenges_query.stream())
     
     if not challenges_docs:
-        print("✅ No challenges found")
+        print("[SUCCESS] No challenges found")
         return
     
-    print(f"🧹 Found {len(challenges_docs)} challenges")
+    print(f" Found {len(challenges_docs)} challenges")
     
     if live:
         response = input(f"Delete all {len(challenges_docs)} challenges? (y/N): ")
         if response.lower() != 'y':
-            print("❌ Cancelled")
+            print("[ERROR] Cancelled")
             return
         
         deleted_count = 0
@@ -198,11 +198,11 @@ def quick_cleanup(username=None, live=False):
                 challenge_doc.reference.delete()
                 deleted_count += 1
             except Exception as e:
-                print(f"❌ Failed to delete {challenge_doc.id}: {e}")
+                print(f"[ERROR] Failed to delete {challenge_doc.id}: {e}")
         
-        print(f"✅ Deleted {deleted_count} challenges")
+        print(f"[SUCCESS] Deleted {deleted_count} challenges")
     else:
-        print(f"💡 Run with --live to actually delete them")
+        print(f" Run with --live to actually delete them")
 
 
 if __name__ == "__main__":

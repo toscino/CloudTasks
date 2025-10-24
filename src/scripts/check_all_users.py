@@ -86,15 +86,15 @@ def check_all_users():
     print("=" * 80)
     
     for username, stats in users.items():
-        print(f"\n👤 USER: {username}")
+        print(f"\nUSER: {username}")
         print(f"   Total tasks: {stats['total']}")
-        print(f"   ├─ Completed: {stats['completed']}")
-        print(f"   └─ Incomplete: {stats['incomplete']}")
-        print(f"       ├─ Saved: {stats['saved']}")
-        print(f"       ├─ Presented: {stats['presented']}")
-        print(f"       │   ├─ Active: {stats['presented'] - stats['expired']}")
-        print(f"       │   └─ Expired: {stats['expired']}")
-        print(f"       └─ Unpresented: {stats['unpresented']}")
+        print(f"   - Completed: {stats['completed']}")
+        print(f"   - Incomplete: {stats['incomplete']}")
+        print(f"     - Saved: {stats['saved']}")
+        print(f"     - Presented: {stats['presented']}")
+        print(f"       - Active: {stats['presented'] - stats['expired']}")
+        print(f"       - Expired: {stats['expired']}")
+        print(f"     - Unpresented: {stats['unpresented']}")
         
         # Show some task examples
         if stats['tasks']:
@@ -107,7 +107,7 @@ def check_all_users():
                 print(f"     - {task_id[:12]}...: {desc} (completed:{completed}, saved:{saved}, presented:{presented})")
     
     # Look for users with similar names to "Karleigh"
-    print(f"\n🔍 Looking for users similar to 'Karleigh':")
+    print(f"\nLooking for users similar to 'Karleigh':")
     karleigh_variants = []
     for username in users.keys():
         if 'karleigh' in username.lower() or 'kar' in username.lower():
@@ -126,9 +126,9 @@ def main():
         users = check_all_users()
         
         if users:
-            print(f"\n✅ Check complete! Found {len(users)} users with tasks.")
+            print(f"\n[SUCCESS] Check complete! Found {len(users)} users with tasks.")
         else:
-            print(f"\n⚠️  No users with tasks found.")
+            print(f"\n[WARNING] No users with tasks found.")
         
     except Exception as e:
         print(f"Error during check: {e}")

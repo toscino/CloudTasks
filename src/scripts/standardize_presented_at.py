@@ -62,11 +62,11 @@ def migrate_presented_at_field(dry_run=True, limit=None):
         logger.info(f"Found {len(tasks_to_update)} tasks missing presented_at field")
         
         if not tasks_to_update:
-            logger.info("✅ All tasks already have presented_at field!")
+            logger.info("[SUCCESS] All tasks already have presented_at field!")
             return
         
         # Show sample of tasks to be updated
-        logger.info("\n📋 Sample tasks to be updated:")
+        logger.info("\n Sample tasks to be updated:")
         for i, task in enumerate(tasks_to_update[:10]):
             logger.info(f"  {i+1}. {task['username']}: {task['description']}... (ID: {task['id'][:8]}...)")
         
@@ -74,7 +74,7 @@ def migrate_presented_at_field(dry_run=True, limit=None):
             logger.info(f"  ... and {len(tasks_to_update) - 10} more tasks")
         
         if dry_run:
-            logger.info(f"\n🔍 DRY RUN: Would update {len(tasks_to_update)} tasks")
+            logger.info(f"\n DRY RUN: Would update {len(tasks_to_update)} tasks")
             logger.info("Run with dry_run=False to perform actual migration")
             return
         
@@ -99,7 +99,7 @@ def migrate_presented_at_field(dry_run=True, limit=None):
                 error_count += 1
                 logger.error(f"Error updating task {task['id']}: {e}")
         
-        logger.info(f"\n✅ Migration completed!")
+        logger.info(f"\n[SUCCESS] Migration completed!")
         logger.info(f"  - Successfully updated: {updated_count} tasks")
         logger.info(f"  - Errors: {error_count} tasks")
         logger.info(f"  - Total processed: {len(tasks_to_update)} tasks")
@@ -126,7 +126,7 @@ def main():
     dry_run = not args.live
     
     if dry_run:
-        logger.info("🔍 Running in DRY RUN mode - no changes will be made")
+        logger.info(" Running in DRY RUN mode - no changes will be made")
     else:
         logger.info("🚀 Running in LIVE mode - changes will be made to database")
         response = input("Are you sure you want to modify the database? (yes/no): ")

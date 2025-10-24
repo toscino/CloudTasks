@@ -58,10 +58,10 @@ def show_uncompleted_tasks(username=None):
         tasks.append(task_data)
     
     if not tasks:
-        print(f"\n✅ No uncompleted tasks found!")
+        print(f"\n[SUCCESS] No uncompleted tasks found!")
         return
     
-    print(f"\n📋 Found {len(tasks)} uncompleted task(s)")
+    print(f"\n Found {len(tasks)} uncompleted task(s)")
     print("-" * 60)
     
     # Group by category
@@ -74,7 +74,7 @@ def show_uncompleted_tasks(username=None):
     
     # Display tasks by category
     for category, category_tasks in sorted(categories.items()):
-        print(f"\n🏷️  {category.upper()} ({len(category_tasks)} tasks)")
+        print(f"\n  {category.upper()} ({len(category_tasks)} tasks)")
         print("-" * 40)
         
         for i, task in enumerate(category_tasks, 1):
@@ -104,7 +104,7 @@ def show_uncompleted_tasks(username=None):
     
     # Summary by user (if showing all users)
     if not username:
-        print("\n📊 SUMMARY BY USER")
+        print("\n SUMMARY BY USER")
         print("-" * 30)
         by_user = {}
         for task in tasks:
@@ -125,7 +125,7 @@ def main():
     try:
         show_uncompleted_tasks(username)
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

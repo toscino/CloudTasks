@@ -23,14 +23,14 @@ def check_challenge_queue(username=None):
     current_time = datetime.now(local_tz)
     
     print("=" * 80)
-    print("🔍 CHALLENGE SYSTEM HEALTH DIAGNOSTIC")
+    print(" CHALLENGE SYSTEM HEALTH DIAGNOSTIC")
     print("=" * 80)
     print(f"Current time: {current_time}")
     print(f"Username filter: {username if username else 'ALL USERS'}")
     print()
     
     # Get all reward goals
-    print("1. 🎯 REWARD GOALS ANALYSIS")
+    print("1.  REWARD GOALS ANALYSIS")
     print("-" * 40)
     
     if username:
@@ -81,7 +81,7 @@ def check_challenge_queue(username=None):
     print()
     
     # Get all challenges (reward_tasks)
-    print("2. 🏆 CHALLENGE QUEUE ANALYSIS")
+    print("2.  CHALLENGE QUEUE ANALYSIS")
     print("-" * 40)
     
     if username:
@@ -192,7 +192,7 @@ def check_challenge_queue(username=None):
     print()
     
     # Analyze challenge-goal relationships
-    print("3. 🔗 CHALLENGE-GOAL RELATIONSHIP ANALYSIS")
+    print("3.  CHALLENGE-GOAL RELATIONSHIP ANALYSIS")
     print("-" * 40)
     
     print(f"Active goals with challenges: {len(challenges_by_goal)}")
@@ -254,11 +254,11 @@ def check_challenge_queue(username=None):
     total_presented_challenges = len([c for c in active_challenges if c.to_dict().get('presented_at') is not None])
     min_unpresented_challenges_needed = total_active_goals * 2  # MIN_CHALLENGES_PER_GOAL = 2 (unpresented only)
     
-    print(f"📊 CHALLENGE INVENTORY:")
+    print(f" CHALLENGE INVENTORY:")
     print(f"   Active reward goals: {total_active_goals}")
     print(f"   Total active challenges: {total_active_challenges}")
-    print(f"   ├─ Unpresented (available): {total_unpresented_challenges}")
-    print(f"   └─ Presented (expiring): {total_presented_challenges}")
+    print(f"   - Unpresented (available): {total_unpresented_challenges}")
+    print(f"   - Presented (expiring): {total_presented_challenges}")
     print(f"   Minimum unpresented challenges needed: {min_unpresented_challenges_needed}")
     print(f"   Unpresented challenge deficit: {max(0, min_unpresented_challenges_needed - total_unpresented_challenges)}")
     
@@ -311,10 +311,10 @@ def check_challenge_queue(username=None):
             health_score -= 10
     
     # Display health score and status
-    print(f"\n🏥 SYSTEM HEALTH SCORE: {max(0, health_score)}/100")
+    print(f"\n SYSTEM HEALTH SCORE: {max(0, health_score)}/100")
     
     if health_score >= 90:
-        print("   ✅ EXCELLENT - System is healthy and functioning optimally")
+        print("   [SUCCESS] EXCELLENT - System is healthy and functioning optimally")
     elif health_score >= 75:
         print("   🟡 GOOD - System is mostly healthy with minor issues")
     elif health_score >= 50:
@@ -324,14 +324,14 @@ def check_challenge_queue(username=None):
     
     # Display health issues
     if health_issues:
-        print(f"\n⚠️  HEALTH ISSUES DETECTED:")
+        print(f"\n  HEALTH ISSUES DETECTED:")
         for i, issue in enumerate(health_issues, 1):
             print(f"   {i}. {issue}")
     else:
-        print(f"\n✅ No health issues detected - system is running smoothly!")
+        print(f"\n[SUCCESS] No health issues detected - system is running smoothly!")
     
     # Recommendations
-    print(f"\n💡 RECOMMENDATIONS:")
+    print(f"\n RECOMMENDATIONS:")
     if total_unpresented_challenges < min_unpresented_challenges_needed:
         print(f"   • Generate {min_unpresented_challenges_needed - total_unpresented_challenges} more unpresented challenges")
     if expired_challenges:
@@ -345,7 +345,7 @@ def check_challenge_queue(username=None):
     
     # Detailed stale challenge analysis
     if stale_challenges:
-        print(f"\n📋 STALE CHALLENGE DETAILS:")
+        print(f"\n STALE CHALLENGE DETAILS:")
         for challenge_id, age_hours in stale_challenges[:5]:  # Show first 5
             print(f"   Challenge {challenge_id}: unpresented for {age_hours:.1f} hours")
         if len(stale_challenges) > 5:
@@ -406,11 +406,11 @@ def quick_health_check(username=None):
     if expired_challenges > 0:
         health_score -= min(25, expired_challenges * 5)
     
-    print(f"🏥 Challenge Health: {health_score}/100")
+    print(f" Challenge Health: {health_score}/100")
     print(f"   Goals: {len(active_goals)} | Total: {active_challenges} | Unpresented: {unpresented_challenges}/{min_unpresented_needed} | Expired: {expired_challenges}")
     
     if health_score >= 90:
-        print("   ✅ HEALTHY")
+        print("   [SUCCESS] HEALTHY")
     elif health_score >= 75:
         print("   🟡 GOOD")
     elif health_score >= 50:

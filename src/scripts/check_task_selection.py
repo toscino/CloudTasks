@@ -99,7 +99,7 @@ def check_task_selection(username):
         for category, count in below_minimum:
             print(f"  {category}: {count} tasks (needs {5-count} more)")
     else:
-        print(f"\n✅ All categories have sufficient tasks")
+        print(f"\n[SUCCESS] All categories have sufficient tasks")
     
     # Show some sample unpresented tasks from each category
     print(f"\nSample unpresented tasks by category:")

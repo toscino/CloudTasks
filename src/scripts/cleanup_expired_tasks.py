@@ -99,9 +99,9 @@ def cleanup_expired_tasks(username=None):
     print(f"Tasks deleted: {deleted_tasks}")
     
     if deleted_tasks > 0:
-        print(f"\n✅ Cleanup completed! Removed {deleted_tasks} expired tasks.")
+        print(f"\n[SUCCESS] Cleanup completed! Removed {deleted_tasks} expired tasks.")
     else:
-        print(f"\n✅ No expired tasks found. Database is clean!")
+        print(f"\n[SUCCESS] No expired tasks found. Database is clean!")
     
     return {
         'total_scanned': total_tasks,
@@ -129,7 +129,7 @@ def main():
         result = cleanup_expired_tasks(args.username)
         
         if args.dry_run:
-            print(f"\n🔍 DRY RUN: Would delete {result['expired_tasks']} expired tasks")
+            print(f"\n DRY RUN: Would delete {result['expired_tasks']} expired tasks")
             print("Run without --dry-run to actually perform the cleanup")
         
     except Exception as e:
