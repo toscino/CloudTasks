@@ -8,6 +8,7 @@ import random
 from src.utils.logger import logger
 from src.utils.config import get_timezone
 from src.utils.firestore_helpers import prepare_firestore_document
+from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
 
@@ -34,11 +35,7 @@ class MorningCardService:
                 'templates': templates
             }
         except Exception as e:
-            logger.error(f"Failed to get card templates: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to get card templates: {str(e)}'
-            }
+            return handle_exception(e, "Failed to get card templates")
     
     def create_card_template(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new card template"""
@@ -88,11 +85,7 @@ class MorningCardService:
                 'template_id': template_id
             }
         except Exception as e:
-            logger.error(f"Failed to create card template: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to create card template: {str(e)}'
-            }
+            return handle_exception(e, "Failed to create card template")
     
     def update_card_template(self, card_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing card template"""
@@ -137,11 +130,7 @@ class MorningCardService:
                 'message': 'Card template updated successfully'
             }
         except Exception as e:
-            logger.error(f"Failed to update card template {card_id}: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to update card template: {str(e)}'
-            }
+            return handle_exception(e, f"Failed to update card template {card_id}")
     
     def delete_card_template(self, card_id: str) -> Dict[str, Any]:
         """Delete a card template"""
@@ -165,11 +154,7 @@ class MorningCardService:
                 'message': 'Card template deleted successfully'
             }
         except Exception as e:
-            logger.error(f"Failed to delete card template {card_id}: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to delete card template: {str(e)}'
-            }
+            return handle_exception(e, f"Failed to delete card template {card_id}")
     
     def get_todays_selection(self) -> Dict[str, Any]:
         """Get today's card selection (creates if needed)"""
@@ -218,11 +203,7 @@ class MorningCardService:
                     'selection': selection_data
                 }
         except Exception as e:
-            logger.error(f"Failed to get today's selection: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to get today\'s selection: {str(e)}'
-            }
+            return handle_exception(e, "Failed to get today's selection")
     
     def select_cards(self, card_ids: List[str], username: str) -> Dict[str, Any]:
         """Lock in card selection (Karleigh only)"""
@@ -348,11 +329,7 @@ class MorningCardService:
                 }
             }
         except Exception as e:
-            logger.error(f"Failed to select cards: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to select cards: {str(e)}'
-            }
+            return handle_exception(e, "Failed to select cards")
     
     def check_and_reset_cards(self) -> Dict[str, Any]:
         """Check if card selections need to be reset (lazy reset after 2am)"""
@@ -408,11 +385,7 @@ class MorningCardService:
                 'message': f'Reset completed, deleted {deleted_count} old selections'
             }
         except Exception as e:
-            logger.error(f"Failed to reset morning cards: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to reset morning cards: {str(e)}'
-            }
+            return handle_exception(e, "Failed to reset morning cards")
     
     def unlock_todays_selection(self) -> Dict[str, Any]:
         """Unlock today's selection for testing (doesn't delete the selection, just unlocks it)"""
@@ -450,9 +423,5 @@ class MorningCardService:
                 'message': 'Selection unlocked successfully'
             }
         except Exception as e:
-            logger.error(f"Failed to unlock selection: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to unlock selection: {str(e)}'
-            }
+            return handle_exception(e, "Failed to unlock selection")
 

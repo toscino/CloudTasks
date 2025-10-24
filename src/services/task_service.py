@@ -5,6 +5,7 @@ from google.cloud import firestore
 from src.models.task import TaskModel, create_task_from_request_data
 from src.utils.background_tasks import ensure_minimums
 from src.utils.logger import logger
+from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
 
@@ -33,11 +34,7 @@ class TaskService:
                 'tasks': tasks
             }
         except Exception as e:
-            logger.error(f"Failed to get tasks for {username}: {str(e)}")
-            return {
-                'status': 'error',
-                'message': f'Failed to get tasks: {str(e)}'
-            }
+            return handle_exception(e, f"Failed to get tasks for {username}")
     
     def get_task_statistics(self, username: str) -> Dict[str, Any]:
         """Get task statistics including counts by category"""
@@ -88,11 +85,7 @@ class TaskService:
                 'total_completed': total_completed
             }
         except Exception as e:
-            logger.error(f"Failed to get task statistics for {username}: {str(e)}")
-            return {
-                'status': 'error',
-                'message': f'Failed to get task statistics: {str(e)}'
-            }
+            return handle_exception(e, f"Failed to get task statistics for {username}")
     
     def create_task(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Create a new task"""
@@ -115,10 +108,7 @@ class TaskService:
                 'task_id': doc_ref[1].id
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to create task: {str(e)}'
-            }
+            return handle_exception(e, "Failed to create task")
     
     def complete_task(self, task_id: str, username: str) -> Dict[str, Any]:
         """Mark a task as completed and refresh the task session"""
@@ -158,11 +148,7 @@ class TaskService:
                 'reward_earned': result['reward_earned']
             }
         except Exception as e:
-            logger.error(f"Error completing task {task_id}: {str(e)}")
-            return {
-                'status': 'error',
-                'message': f'Failed to complete task: {str(e)}'
-            }
+            return handle_exception(e, f"Error completing task {task_id}")
     
     def save_task(self, task_id: str, username: str) -> Dict[str, Any]:
         """Toggle save status for a task"""
@@ -194,7 +180,4 @@ class TaskService:
                 'message': f'Task {"saved" if not current_saved else "unsaved"} successfully'
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to update task: {str(e)}'
-            }
+            return handle_exception(e, "Failed to update task")

@@ -7,6 +7,8 @@ from datetime import datetime
 from src.models.reward import RewardModel, EarnedRewardModel, create_reward_from_request_data, create_earned_reward_from_task
 from src.utils.background_tasks import ensure_minimums
 from src.utils.firestore_helpers import prepare_firestore_document
+from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
+from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
 
@@ -43,10 +45,7 @@ class RewardService:
                 'rewards': rewards
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to get rewards: {str(e)}'
-            }
+            return handle_exception(e, "Failed to get rewards")
     
     def create_reward(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Create a new reward"""
@@ -69,10 +68,7 @@ class RewardService:
                 'reward_id': doc_ref[1].id
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to create reward: {str(e)}'
-            }
+            return handle_exception(e, "Failed to create reward")
     
     def complete_reward(self, reward_id: str, username: str) -> Dict[str, Any]:
         """Mark a reward as completed"""
@@ -104,10 +100,7 @@ class RewardService:
                 'message': 'Reward completed successfully'
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to complete reward: {str(e)}'
-            }
+            return handle_exception(e, "Failed to complete reward")
     
     def save_reward(self, reward_id: str, username: str) -> Dict[str, Any]:
         """Toggle save status for a reward"""
@@ -139,10 +132,7 @@ class RewardService:
                 'message': f'Reward {"saved" if not current_saved else "unsaved"} successfully'
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to update reward: {str(e)}'
-            }
+            return handle_exception(e, "Failed to update reward")
     
     def get_pending_rewards(self, username: str) -> Dict[str, Any]:
         """Get pending earned rewards for current user"""
@@ -175,10 +165,7 @@ class RewardService:
                 'pending_rewards': pending_rewards
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to get pending rewards: {str(e)}'
-            }
+            return handle_exception(e, "Failed to get pending rewards")
     
     def generate_reward_options(self, reward_id: str, username: str) -> Dict[str, Any]:
         """Generate reward options for a specific earned reward"""
@@ -216,10 +203,7 @@ class RewardService:
                 'earned_reward_id': reward_id
             }
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to generate reward options: {str(e)}'
-            }
+            return handle_exception(e, "Failed to generate reward options")
     
     def select_reward_option(self, reward_id: str, option_id: str, username: str) -> Dict[str, Any]:
         """Select a reward option for a specific earned reward"""
@@ -263,7 +247,4 @@ class RewardService:
                 }
                 
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to select reward option: {str(e)}'
-            }
+            return handle_exception(e, "Failed to select reward option")

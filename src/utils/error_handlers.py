@@ -4,6 +4,8 @@ Error handling utilities - centralized error handlers and responses
 from functools import wraps
 from typing import Dict, Any, Callable, Tuple
 from flask import jsonify
+from src.utils.exceptions import CloudTasksException, NotFoundError, UnauthorizedError, ValidationError, FirestoreError
+from src.utils.logger import logger
 
 
 def create_error_response(message: str, status_code: int = 500, retry_after: str = None) -> Tuple[Any, int]:
@@ -110,3 +112,85 @@ def with_error_handling(f: Callable) -> Callable:
         return result
     
     return decorated_function
+
+
+def handle_exception(e: Exception, context: str = "") -> Dict[str, Any]:
+    """
+    Handle exceptions and convert to service response format.
+    
+    Maps specific exception types to appropriate error messages and status codes.
+    Logs the error for debugging while returning user-friendly messages.
+    
+    Args:
+        e: Exception that was raised
+        context: Additional context about where the error occurred
+        
+    Returns:
+        Dict with 'status' and 'message' keys
+        
+    Example:
+        try:
+            # operation
+        except NotFoundError as e:
+            return handle_exception(e, "Failed to get tasks")
+        except Exception as e:
+            return handle_exception(e, "Unexpected error")
+    """
+    # Log the error with context
+    if context:
+        logger.error(f"{context}: {str(e)}")
+    else:
+        logger.error(f"Exception: {str(e)}")
+    
+    # Handle custom exceptions
+    if isinstance(e, NotFoundError):
+        return {
+            'status': 'error',
+            'message': e.user_message or 'Resource not found'
+        }
+    elif isinstance(e, UnauthorizedError):
+        return {
+            'status': 'error',
+            'message': e.user_message or 'Unauthorized access'
+        }
+    elif isinstance(e, ValidationError):
+        return {
+            'status': 'error',
+            'message': e.user_message or 'Validation failed'
+        }
+    elif isinstance(e, FirestoreError):
+        return {
+            'status': 'error',
+            'message': e.user_message or 'Database operation failed'
+        }
+    elif isinstance(e, CloudTasksException):
+        return {
+            'status': 'error',
+            'message': e.user_message or str(e)
+        }
+    
+    # Handle standard exceptions
+    error_type = type(e).__name__
+    
+    # Map common exceptions to user-friendly messages
+    if 'NotFound' in error_type or 'NotExist' in error_type:
+        return {
+            'status': 'error',
+            'message': 'Resource not found'
+        }
+    elif 'Permission' in error_type or 'Access' in error_type:
+        return {
+            'status': 'error',
+            'message': 'Unauthorized access'
+        }
+    elif 'Validation' in error_type or 'Value' in error_type:
+        return {
+            'status': 'error',
+            'message': 'Invalid input provided'
+        }
+    
+    # Default: return original error message
+    return {
+        'status': 'error',
+        'message': str(e)
+    }

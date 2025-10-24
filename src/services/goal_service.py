@@ -7,6 +7,8 @@ from datetime import datetime
 from src.models.goal import GoalModel, RewardGoalModel, create_goal_from_request_data, create_reward_goal_from_option
 from src.utils.logger import logger
 from src.utils.firestore_helpers import prepare_firestore_document
+from src.utils.exceptions import NotFoundError, UnauthorizedError, ValidationError, FirestoreError
+from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
 
@@ -46,13 +48,19 @@ class GoalService:
         """Create a new goal"""
         try:
             if not data or not data.get('description'):
-                return {'error': 'Goal description is required'}
+                raise ValidationError(
+                    "Goal description is required",
+                    user_message="Goal description is required"
+                )
             
             # Create goal model
             goal_model = create_goal_from_request_data(data, username)
             
             if not goal_model.validate():
-                return {'error': 'Invalid goal data'}
+                raise ValidationError(
+                    "Invalid goal data",
+                    user_message="Invalid goal data"
+                )
             
             # Create new goal in Firestore
             doc_ref = self.db.collection('goals').add(goal_model.to_firestore_dict())
@@ -62,11 +70,10 @@ class GoalService:
                 'message': 'Goal created successfully',
                 'goal_id': doc_ref[1].id
             }
+        except ValidationError as e:
+            return handle_exception(e, "Failed to create goal")
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to create goal: {str(e)}'
-            }
+            return handle_exception(e, "Unexpected error creating goal")
     
     def update_goal(self, goal_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Update an existing goal"""
@@ -75,17 +82,17 @@ class GoalService:
             doc = doc_ref.get()
             
             if not doc.exists:
-                return {
-                    'status': 'error',
-                    'message': 'Goal not found'
-                }
+                raise NotFoundError(
+                    f"Goal {goal_id} not found",
+                    user_message="Goal not found"
+                )
             
             goal_data = doc.to_dict()
             if goal_data.get('username') != username:
-                return {
-                    'status': 'error',
-                    'message': 'Unauthorized: Goal belongs to another user'
-                }
+                raise UnauthorizedError(
+                    f"Goal {goal_id} belongs to {goal_data.get('username')}, not {username}",
+                    user_message="Unauthorized: Goal belongs to another user"
+                )
             
             # Update fields
             update_data = {'updated_at': firestore.SERVER_TIMESTAMP}
@@ -106,11 +113,10 @@ class GoalService:
                 'status': 'success',
                 'message': 'Goal updated successfully'
             }
+        except (NotFoundError, UnauthorizedError) as e:
+            return handle_exception(e, "Failed to update goal")
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to update goal: {str(e)}'
-            }
+            return handle_exception(e, "Unexpected error updating goal")
     
     def delete_goal(self, goal_id: str, username: str) -> Dict[str, Any]:
         """Delete a goal"""
@@ -119,17 +125,17 @@ class GoalService:
             doc = doc_ref.get()
             
             if not doc.exists:
-                return {
-                    'status': 'error',
-                    'message': 'Goal not found'
-                }
+                raise NotFoundError(
+                    f"Goal {goal_id} not found",
+                    user_message="Goal not found"
+                )
             
             goal_data = doc.to_dict()
             if goal_data.get('username') != username:
-                return {
-                    'status': 'error',
-                    'message': 'Unauthorized: Goal belongs to another user'
-                }
+                raise UnauthorizedError(
+                    f"Goal {goal_id} belongs to {goal_data.get('username')}, not {username}",
+                    user_message="Unauthorized: Goal belongs to another user"
+                )
             
             doc_ref.delete()
             
@@ -137,11 +143,10 @@ class GoalService:
                 'status': 'success',
                 'message': 'Goal deleted successfully'
             }
+        except (NotFoundError, UnauthorizedError) as e:
+            return handle_exception(e, "Failed to delete goal")
         except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to delete goal: {str(e)}'
-            }
+            return handle_exception(e, "Unexpected error deleting goal")
     
     def get_categories(self) -> Dict[str, Any]:
         """Get available goal categories"""

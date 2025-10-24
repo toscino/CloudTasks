@@ -7,6 +7,8 @@ from datetime import datetime, date, timedelta
 from src.utils.logger import logger
 from src.utils.config import get_timezone, get_collection
 from src.utils.firestore_helpers import prepare_firestore_document
+from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
+from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
 
@@ -44,20 +46,35 @@ class DailyTaskService:
         """Create a new daily task template"""
         try:
             if not data or not data.get('description'):
-                return {'status': 'error', 'message': 'Task description is required'}
+                raise ValidationError(
+                    "Task description is required",
+                    user_message="Task description is required"
+                )
             
             if not data.get('points') or data.get('points') == 0:
-                return {'status': 'error', 'message': 'Points cannot be zero'}
+                raise ValidationError(
+                    "Points cannot be zero",
+                    user_message="Points cannot be zero"
+                )
             if data.get('points') < -100 or data.get('points') > 100:
-                return {'status': 'error', 'message': 'Points must be between -100 and 100'}
+                raise ValidationError(
+                    "Points must be between -100 and 100",
+                    user_message="Points must be between -100 and 100"
+                )
             
             if not data.get('days_of_week') or len(data.get('days_of_week', [])) == 0:
-                return {'status': 'error', 'message': 'At least one day of week must be selected'}
+                raise ValidationError(
+                    "At least one day of week must be selected",
+                    user_message="At least one day of week must be selected"
+                )
             
             # Validate days_of_week (0=Monday, 6=Sunday)
             days_of_week = data.get('days_of_week', [])
             if not all(0 <= day <= 6 for day in days_of_week):
-                return {'status': 'error', 'message': 'Invalid days of week'}
+                raise ValidationError(
+                    "Invalid days of week",
+                    user_message="Invalid days of week"
+                )
             
             # Create template data
             template_data = {
@@ -95,12 +112,10 @@ class DailyTaskService:
                 'message': 'Daily task created successfully',
                 'template_id': template_id
             }
+        except ValidationError as e:
+            return handle_exception(e, f"Failed to create daily task for {username}")
         except Exception as e:
-            logger.error(f"Failed to create daily task for {username}: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to create daily task: {str(e)}'
-            }
+            return handle_exception(e, f"Unexpected error creating daily task for {username}")
     
     def update_daily_task(self, task_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Update an existing daily task template"""

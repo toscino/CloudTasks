@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from src.utils.background_tasks import ensure_minimums
 from src.utils.logger import logger
 from src.utils.config import get_timezone
+from src.utils.error_handlers import handle_exception
 from typing import Dict, Any
 
 

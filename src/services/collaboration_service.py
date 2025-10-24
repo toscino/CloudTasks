@@ -7,6 +7,7 @@ from google.cloud.firestore import FieldFilter
 from src.utils.logger import logger
 from src.utils.config import get_timezone, get_spouse
 from src.auth.auth_service import get_spouse_username
+from src.utils.error_handlers import handle_exception
 
 
 class CollaborationService:
