@@ -3,6 +3,8 @@
 ## Overview
 This document tracks the documentation status of service methods across the application.
 
+**Note**: This project uses simple docstrings focused on what the method does, not comprehensive API documentation. For AI-assisted development, concise descriptions are preferred over verbose documentation.
+
 ## Services with Complete Documentation ✅
 
 ### goal_service.py
@@ -88,58 +90,24 @@ This document tracks the documentation status of service methods across the appl
 ## Documentation Standards
 
 ### Docstring Format
-Follow this format for all service methods:
+Keep it simple and concise:
 
 ```python
 def method_name(self, param1: str, param2: int) -> Dict[str, Any]:
-    """
-    Brief description of what the method does.
-    
-    More detailed description if needed. Can include context,
-    business logic, or important notes.
-    
-    Args:
-        param1: Description of param1
-        param2: Description of param2
-        
-    Returns:
-        Dict containing:
-            - status: 'success' or 'error'
-            - data: Description of data field
-            - message: Description of message field
-            
-    Raises:
-        SpecificException: When this exception occurs
-        
-    Example:
-        result = service.method('value', 123)
-        if result['status'] == 'success':
-            # Handle success
-    """
+    """Brief description of what the method does"""
 ```
 
 ### Class Docstrings
 ```python
 class ServiceName:
-    """
-    Service for [domain] operations.
-    
-    Handles [primary responsibilities]. Also manages [secondary responsibilities].
-    Provides [key features] for [target users].
-    """
+    """Service for [domain] operations"""
 ```
 
-### Required Elements
-- **Brief description**: One line summary
-- **Detailed description**: Context and important notes
-- **Args**: All parameters with types and descriptions
-- **Returns**: Return value structure
-- **Raises**: Specific exceptions that may be raised
-
-### Optional Elements
-- **Example**: Usage examples
-- **Note**: Important notes or warnings
-- **See also**: References to related methods
+### Guidelines
+- **One line**: Keep docstrings to a single line when possible
+- **Clear purpose**: Describe what the method does, not how
+- **Type hints**: Let type hints convey parameter and return types
+- **Code clarity**: Clear code is better than documentation
 
 ## Implementation Priority
 
