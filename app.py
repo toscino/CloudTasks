@@ -18,6 +18,7 @@ from src.services.goal_service import GoalService
 from src.services.statistics_service import StatisticsService
 from src.services.daily_task_service import DailyTaskService
 from src.services.collaboration_service import CollaborationService
+from src.services.morning_card_service import MorningCardService
 from src.utils.logger import logger
 
 # Load environment variables
@@ -66,6 +67,7 @@ def create_app():
     statistics_service = StatisticsService(db, task_master)
     daily_task_service = DailyTaskService(db)
     collaboration_service = CollaborationService(db)
+    morning_card_service = MorningCardService(db)
     
     
     # Error handler for rate limit exceeded
@@ -649,6 +651,16 @@ def create_app():
         """Rewards owed management page"""
         return render_template('rewards_owed.html')
     
+    @app.route('/morning-cards')
+    def morning_cards_page():
+        """Morning cards selection page"""
+        return render_template('morning_cards.html')
+    
+    @app.route('/morning-cards/manage')
+    def morning_cards_manage_page():
+        """Morning cards management page"""
+        return render_template('morning_cards_manage.html')
+    
     
     @app.route('/api/goals', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
@@ -995,6 +1007,103 @@ def create_app():
                 status_code = 403
             elif 'already completed' in result['message'].lower():
                 status_code = 400
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    # Morning Card API Routes
+    @app.route('/api/morning-cards', methods=['GET'])
+    @limiter.limit("50 per minute")  # Limit reads
+    def get_morning_cards():
+        """Get all morning card templates"""
+        result = morning_card_service.get_card_templates()
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards', methods=['POST'])
+    @limiter.limit("20 per minute")  # Limit creates
+    def create_morning_card():
+        """Create a new morning card template"""
+        data = request.get_json()
+        result = morning_card_service.create_card_template(data)
+        
+        if result['status'] == 'error':
+            return jsonify(result), 400
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards/<card_id>', methods=['PUT'])
+    @limiter.limit("20 per minute")  # Limit updates
+    def update_morning_card(card_id):
+        """Update an existing morning card template"""
+        data = request.get_json()
+        result = morning_card_service.update_card_template(card_id, data)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards/<card_id>', methods=['DELETE'])
+    @limiter.limit("20 per minute")  # Limit deletes
+    def delete_morning_card(card_id):
+        """Delete a morning card template"""
+        result = morning_card_service.delete_card_template(card_id)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards/today', methods=['GET'])
+    @limiter.limit("50 per minute")  # Limit reads
+    def get_todays_morning_cards():
+        """Get today's morning card selection"""
+        result = morning_card_service.get_todays_selection()
+        
+        if result['status'] == 'error':
+            return jsonify(result), 500
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards/today/select', methods=['POST'])
+    @limiter.limit("10 per minute")  # Limit selections
+    def select_morning_cards():
+        """Lock in card selection (Karleigh only)"""
+        username = get_user_info()
+        data = request.get_json()
+        
+        if not data or 'card_ids' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Card IDs are required'
+            }), 400
+        
+        card_ids = data['card_ids']
+        result = morning_card_service.select_cards(card_ids, username)
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'already locked' in result['message'].lower():
+                status_code = 400
+            elif 'only karleigh' in result['message'].lower():
+                status_code = 403
+            return jsonify(result), status_code
+        return jsonify(result)
+    
+    @app.route('/api/morning-cards/today/unlock', methods=['POST'])
+    @limiter.limit("10 per minute")  # Limit unlocks (testing only)
+    def unlock_morning_cards():
+        """Unlock today's card selection for testing"""
+        result = morning_card_service.unlock_todays_selection()
+        
+        if result['status'] == 'error':
+            status_code = 500
+            if 'not found' in result['message'].lower():
+                status_code = 404
             return jsonify(result), status_code
         return jsonify(result)
     

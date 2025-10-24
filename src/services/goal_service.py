@@ -97,6 +97,8 @@ class GoalService:
                 update_data['priority'] = data['priority']
             if 'status' in data:
                 update_data['status'] = data['status']
+            if 'delete_on_complete' in data:
+                update_data['delete_on_complete'] = data['delete_on_complete']
             
             doc_ref.update(update_data)
             

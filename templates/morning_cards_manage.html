@@ -1,0 +1,545 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Manage Morning Cards{% endblock %}
+
+{% block styles %}
+        /* Card Management styles */
+        h2 {
+            color: #1c1e21;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .add-card-form {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-row .form-group:has(input[type="number"]) {
+            flex: 0 0 100px;
+        }
+        
+        .form-row .btn {
+            flex: 0 0 auto;
+            margin-left: auto;
+        }
+        
+        .rules-section {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .rules-section h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .rule-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        
+        .rule-input-group input {
+            flex: 1;
+        }
+        
+        .rule-input-group button {
+            padding: 8px 12px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .add-rule-btn {
+            padding: 8px 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .cards-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .card-item {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 15px;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .card-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        .card-text {
+            flex: 1;
+            font-size: 16px;
+            color: #1c1e21;
+            line-height: 1.4;
+        }
+        
+        .card-meta {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6c757d;
+            flex-wrap: wrap;
+        }
+        
+        .card-tag {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        
+        .tag-clothes {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .tag-timer {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .tag-rules {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        
+        
+        .loading-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #c3e6cb;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .card-content {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .card-actions {
+                align-self: flex-end;
+            }
+        }
+{% endblock %}
+
+{% block content %}
+    <div class="daily-tasks-container">
+        <h2>🃏 Manage Morning Cards</h2>
+        <p style="color: #6c757d; margin-bottom: 20px;">Create and manage morning card templates. Cards reset at 2am Central time.</p>
+        
+        <!-- Add Card Form -->
+        <div class="add-card-form">
+            <div class="form-group">
+                <label for="card-text">Card Description</label>
+                <textarea id="card-text" placeholder="Describe what's written on the physical card..."></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="clothes-points">Clothes Points</label>
+                    <input type="number" id="clothes-points" min="0" max="100" value="0" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label for="timer-minutes">Timer Minutes</label>
+                    <input type="number" id="timer-minutes" min="0" max="120" value="0" placeholder="0">
+                </div>
+            </div>
+            
+            <!-- Ian's Rules Section -->
+            <div class="rules-section">
+                <h3>Ian's Rules</h3>
+                <div id="ian-rules-container">
+                    <!-- Dynamic rule inputs will be added here -->
+                </div>
+                <button class="add-rule-btn" onclick="addRule('ian')">+ Add Ian Rule</button>
+            </div>
+            
+            <!-- Karleigh's Rules Section -->
+            <div class="rules-section">
+                <h3>Karleigh's Rules</h3>
+                <div id="karleigh-rules-container">
+                    <!-- Dynamic rule inputs will be added here -->
+                </div>
+                <button class="add-rule-btn" onclick="addRule('karleigh')">+ Add Karleigh Rule</button>
+            </div>
+            
+            <div class="form-row" style="margin-top: 20px;">
+                <button class="btn" onclick="addCard()">Create Card</button>
+            </div>
+        </div>
+        
+        <!-- Cards List -->
+        <div class="cards-section">
+            <h3>📝 Card Templates</h3>
+            <ul class="cards-list" id="cards-list">
+                <li class="loading-state">Loading cards...</li>
+            </ul>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+        // Card Management JavaScript
+        let cards = [];
+        let ianRuleCount = 0;
+        let karleighRuleCount = 0;
+        
+        // Wait for authentication to be ready, then load data
+        document.addEventListener('DOMContentLoaded', async function() {
+            await new Promise(resolve => {
+                const checkAuth = () => {
+                    if (window.authState && window.authState.currentUsername) {
+                        resolve();
+                    } else {
+                        setTimeout(checkAuth, 100);
+                    }
+                };
+                checkAuth();
+            });
+            
+            await loadCards();
+            renderCards();
+        });
+        
+        // Load all card templates
+        async function loadCards() {
+            try {
+                const response = await fetch('/api/morning-cards');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    cards = data.templates;
+                } else {
+                    console.error('Failed to load cards:', data.message);
+                }
+            } catch (error) {
+                console.error('Error loading cards:', error);
+            }
+        }
+        
+        // Render cards list
+        function renderCards() {
+            const cardsList = document.getElementById('cards-list');
+            
+            if (cards.length === 0) {
+                cardsList.innerHTML = '<li class="empty-state">No cards yet. Add your first card above!</li>';
+                return;
+            }
+            
+            cardsList.innerHTML = '';
+            
+            cards.forEach(card => {
+                const li = document.createElement('li');
+                li.className = 'card-item';
+                li.dataset.cardId = card.id;
+                
+                const cardTags = [];
+                if (card.clothes_points !== 0) {
+                    const sign = card.clothes_points > 0 ? '+' : '';
+                    cardTags.push(`👔 ${sign}${card.clothes_points}`);
+                }
+                if (card.timer_minutes !== 0) {
+                    const sign = card.timer_minutes > 0 ? '+' : '';
+                    cardTags.push(`⏰ ${sign}${card.timer_minutes}`);
+                }
+                if (card.ian_rules && card.ian_rules.length > 0) cardTags.push(`Ian: ${card.ian_rules.length} rule${card.ian_rules.length > 1 ? 's' : ''}`);
+                if (card.karleigh_rules && card.karleigh_rules.length > 0) cardTags.push(`Karleigh: ${card.karleigh_rules.length} rule${card.karleigh_rules.length > 1 ? 's' : ''}`);
+                
+                const tagsHtml = cardTags.map(tag => `<span class="card-tag">${tag}</span>`).join('');
+                
+                li.innerHTML = `
+                    <div class="card-content">
+                        <div class="card-text">${card.card_text}</div>
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="editCard('${card.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteCard('${card.id}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="card-meta">${tagsHtml}</div>
+                `;
+                
+                cardsList.appendChild(li);
+            });
+        }
+        
+        // Add a new card
+        async function addCard() {
+            const cardText = document.getElementById('card-text').value.trim();
+            const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
+            const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
+            
+            // Get Ian's rules
+            const ianRules = [];
+            document.querySelectorAll('#ian-rules-container .rule-input').forEach(input => {
+                const value = input.value.trim();
+                if (value) ianRules.push(value);
+            });
+            
+            // Get Karleigh's rules
+            const karleighRules = [];
+            document.querySelectorAll('#karleigh-rules-container .rule-input').forEach(input => {
+                const value = input.value.trim();
+                if (value) karleighRules.push(value);
+            });
+            
+            if (!cardText) {
+                alert('Please enter a card description');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/morning-cards', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        card_text: cardText,
+                        clothes_points: clothesPoints,
+                        timer_minutes: timerMinutes,
+                        ian_rules: ianRules,
+                        karleigh_rules: karleighRules,
+                        active: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Clear form
+                    document.getElementById('card-text').value = '';
+                    document.getElementById('clothes-points').value = '0';
+                    document.getElementById('timer-minutes').value = '0';
+                    document.getElementById('ian-rules-container').innerHTML = '';
+                    document.getElementById('karleigh-rules-container').innerHTML = '';
+                    ianRuleCount = 0;
+                    karleighRuleCount = 0;
+                    
+                    // Reload cards
+                    await loadCards();
+                    renderCards();
+                } else {
+                    alert('Failed to create card: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error creating card:', error);
+                alert('Error creating card. Please try again.');
+            }
+        }
+        
+        // Delete a card
+        async function deleteCard(cardId) {
+            if (!confirm('Are you sure you want to delete this card?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/morning-cards/${cardId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    await loadCards();
+                    renderCards();
+                } else {
+                    alert('Failed to delete card: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error deleting card:', error);
+                alert('Error deleting card. Please try again.');
+            }
+        }
+        
+        // Edit a card
+        async function editCard(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) {
+                alert('Card not found');
+                return;
+            }
+            
+            // Pre-fill form
+            document.getElementById('card-text').value = card.card_text;
+            document.getElementById('clothes-points').value = card.clothes_points || 0;
+            document.getElementById('timer-minutes').value = card.timer_minutes || 0;
+            
+            // Clear and populate rules
+            document.getElementById('ian-rules-container').innerHTML = '';
+            ianRuleCount = 0;
+            card.ian_rules.forEach(rule => {
+                addRule('ian', rule);
+            });
+            
+            document.getElementById('karleigh-rules-container').innerHTML = '';
+            karleighRuleCount = 0;
+            card.karleigh_rules.forEach(rule => {
+                addRule('karleigh', rule);
+            });
+            
+            // Change button to update
+            const btn = document.querySelector('.add-card-form .btn');
+            btn.textContent = 'Update Card';
+            btn.onclick = () => updateCard(cardId);
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // Update a card
+        async function updateCard(cardId) {
+            const cardText = document.getElementById('card-text').value.trim();
+            const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
+            const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
+            
+            const ianRules = [];
+            document.querySelectorAll('#ian-rules-container .rule-input').forEach(input => {
+                const value = input.value.trim();
+                if (value) ianRules.push(value);
+            });
+            
+            const karleighRules = [];
+            document.querySelectorAll('#karleigh-rules-container .rule-input').forEach(input => {
+                const value = input.value.trim();
+                if (value) karleighRules.push(value);
+            });
+            
+            if (!cardText) {
+                alert('Please enter a card description');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/morning-cards/${cardId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        card_text: cardText,
+                        clothes_points: clothesPoints,
+                        timer_minutes: timerMinutes,
+                        ian_rules: ianRules,
+                        karleigh_rules: karleighRules
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Reset form
+                    document.getElementById('card-text').value = '';
+                    document.getElementById('clothes-points').value = '0';
+                    document.getElementById('timer-minutes').value = '0';
+                    document.getElementById('ian-rules-container').innerHTML = '';
+                    document.getElementById('karleigh-rules-container').innerHTML = '';
+                    ianRuleCount = 0;
+                    karleighRuleCount = 0;
+                    
+                    // Reset button
+                    const btn = document.querySelector('.add-card-form .btn');
+                    btn.textContent = 'Create Card';
+                    btn.onclick = addCard;
+                    
+                    await loadCards();
+                    renderCards();
+                } else {
+                    alert('Failed to update card: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error updating card:', error);
+                alert('Error updating card. Please try again.');
+            }
+        }
+        
+        // Add a rule input
+        function addRule(user, existingValue = '') {
+            const container = document.getElementById(`${user}-rules-container`);
+            const ruleCount = user === 'ian' ? ++ianRuleCount : ++karleighRuleCount;
+            const ruleId = `${user}-rule-${ruleCount}`;
+            
+            const ruleGroup = document.createElement('div');
+            ruleGroup.className = 'rule-input-group';
+            ruleGroup.innerHTML = `
+                <input type="text" class="rule-input" id="${ruleId}" value="${existingValue}" placeholder="Enter rule...">
+                <button onclick="removeRule('${ruleId}')">Remove</button>
+            `;
+            
+            container.appendChild(ruleGroup);
+        }
+        
+        // Remove a rule input
+        function removeRule(ruleId) {
+            const ruleInput = document.getElementById(ruleId);
+            if (ruleInput) {
+                ruleInput.closest('.rule-input-group').remove();
+            }
+        }
+</script>
+{% endblock %}
+

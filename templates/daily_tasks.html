@@ -23,27 +23,6 @@
             margin-bottom: 20px;
         }
         
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #495057;
-        }
-        
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 14px;
-            transition: border-color 0.2s ease;
-        }
-        
         /* Remove up/down arrows from number input */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
@@ -52,28 +31,6 @@
         }
         input[type="number"] {
             -moz-appearance: textfield;
-        }
-        
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-        }
-        
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        
-        .form-row {
-            display: flex;
-            gap: 15px;
-            align-items: end;
-        }
-        
-        .form-row .form-group {
-            flex: 1;
         }
         
         .form-row .form-group:has(input[type="number"]) {
@@ -89,6 +46,7 @@
             display: flex;
             gap: 8px;
             margin-top: 5px;
+            flex-wrap: wrap;
         }
         
         .day-checkbox {
@@ -114,53 +72,19 @@
             border-color: #007bff;
         }
         
-        .btn {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: background-color 0.2s ease;
-        }
-        
-        .btn:hover {
-            background-color: #0056b3;
-        }
-        
-        .btn-secondary {
-            background-color: #6c757d;
-        }
-        
-        .btn-secondary:hover {
-            background-color: #545b62;
-        }
-        
-        .btn-danger {
-            background-color: #dc3545;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c82333;
-        }
-        
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-        
-        .btn-success {
-            background-color: #28a745;
-        }
-        
         .btn-success:hover {
             background-color: #218838;
         }
         
         .templates-section {
             margin-bottom: 30px;
+        }
+        
+        .templates-section h3 {
+            color: #1c1e21;
+            margin-bottom: 15px;
+            font-size: 16px;
+            font-weight: 600;
         }
         
         .templates-list {
@@ -243,9 +167,18 @@
         .goals-section {
             margin-bottom: 30px;
             padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .goals-section h3 {
+            color: #1c1e21;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            font-weight: 600;
         }
         
         .goals-form {
@@ -260,38 +193,56 @@
             align-items: end;
         }
         
-        .goal-item {
-            display: flex;
-            flex-direction: column;
+        .goals-row .form-group {
             flex: 1;
         }
         
-        .goal-item label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 5px;
-        }
-        
-        .goal-item input {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        
-        .goal-item input[readonly] {
+        .goals-row .form-group input[readonly] {
             background-color: #f8f9fa;
             color: #6c757d;
         }
         
-        .goals-row button {
+        .goals-row .form-group select {
+            width: auto;
+            min-width: 200px;
+            max-width: 250px;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        .goals-row .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        
+        .goal-button-container {
+            display: flex;
+            align-items: center;
             flex: 0 0 auto;
+            position: relative;
+            top: -20px; /* Fine-tune alignment with select element */
+        }
+        
+        .goal-button-container button {
             padding: 8px 16px;
             background: #007bff;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .goal-button-container button:hover {
+            background-color: #0056b3;
         }
         
         .todays-section {
@@ -392,15 +343,6 @@
             margin: 0;
         }
         
-        .empty-state {
-            text-align: center;
-            color: #6c757d;
-            font-style: italic;
-            padding: 40px 20px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            border: 1px dashed #dee2e6;
-        }
         
         .loading-state {
             text-align: center;
@@ -430,6 +372,24 @@
             .form-row {
                 flex-direction: column;
                 gap: 10px;
+            }
+            
+            .form-row:has(.btn) {
+                flex-direction: row;
+                gap: 10px;
+            }
+            
+            .goals-row {
+                flex-wrap: wrap;
+            }
+            
+            .goal-item input[type="number"] {
+                max-width: 80px;
+            }
+            
+            .goal-item select {
+                width: 100%;
+                max-width: 250px;
             }
             
             .template-content {
@@ -481,7 +441,10 @@
                     <label for="task-points">Points</label>
                     <input type="number" id="task-points" min="-100" max="100" value="1" placeholder="Points">
                 </div>
-                <button class="btn" onclick="addDailyTask()">Add Task</button>
+                <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+                    <button class="btn" id="add-task-btn" onclick="addDailyTask()">Add Task</button>
+                    <button class="btn btn-secondary" id="cancel-task-btn" onclick="cancelTaskEdit()" style="display: none;">Cancel</button>
+                </div>
             </div>
         </div>
         
@@ -490,29 +453,28 @@
             <h3>📊 My Daily Goals</h3>
             <div class="goals-form">
                 <div class="goals-row">
-                    <div class="goal-item">
+                    <div class="form-group">
                         <label>Par</label>
                         <input type="number" id="par-display" readonly>
                     </div>
-                    <div class="goal-item">
+                    <div class="form-group">
                         <label>Stretch Setting</label>
                         <input type="number" id="stretch-setting" min="0" max="100" value="10">
                     </div>
-                    <div class="goal-item">
+                    <div class="form-group">
                         <label>Stretch Goal</label>
                         <input type="number" id="stretch-goal-display" readonly>
                     </div>
                 </div>
                 <div class="goals-row">
-                    <div class="goal-item" style="flex: 1;">
+                    <div class="form-group" style="flex: 1;">
                         <label>Adjustment Multiplier</label>
                         <select id="adjustment-multiplier">
-                            <option value="1">Normal (+1 on bad day, -1 on good day)</option>
-                            <option value="-1">Inverted (-1 on bad day, +1 on good day)</option>
+                            <option value="1">Normal</option>
+                            <option value="-1">Inverted (-1 on good day)</option>
                         </select>
-                        <small style="display: block; color: #666; margin-top: 5px;">Controls tracker direction: Normal moves tracker up on bad days, Inverted moves it down</small>
                     </div>
-                    <div class="goal-item">
+                    <div class="goal-button-container">
                         <button onclick="saveGoals()">Save</button>
                     </div>
                 </div>
@@ -530,388 +492,437 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-        // Daily Tasks Management JavaScript
-        let templates = [];
-        let todaysInstancesByTemplate = {};
+<script type="module">
+    import { waitForAuth, apiCall, alert, confirm } from '/static/js/utils.js';
+    
+    // Daily Tasks Management JavaScript
+    let templates = [];
+    let todaysInstancesByTemplate = {};
+    
+    // Wait for authentication to be ready, then load data
+    document.addEventListener('DOMContentLoaded', async function() {
+        await waitForAuth();
         
-        // Wait for authentication to be ready, then load data
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Wait for global authentication to be initialized
-            await new Promise(resolve => {
-                const checkAuth = () => {
-                    if (window.authState && window.authState.currentUsername) {
-                        resolve();
-                    } else {
-                        setTimeout(checkAuth, 100);
-                    }
-                };
-                checkAuth();
-            });
+        // Load templates and today's instances
+        await loadTemplates();
+        await loadTodaysInstances();
+        await loadGoals();
+        renderInterface();
+        
+        // Initialize day checkboxes and stretch goal calculation after everything is loaded
+        initializeDayCheckboxes();
+        initializeStretchGoalCalculation();
+    });
+    
+    // Load daily task templates
+    async function loadTemplates() {
+        try {
+            const data = await apiCall('/api/daily-tasks');
             
-            // Load templates and today's instances
-            await loadTemplates();
-            await loadTodaysInstances();
-            await loadGoals();
-            renderInterface();
+            if (data.status === 'success') {
+                templates = data.templates;
+            } else {
+                console.error('Failed to load templates:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading templates:', error);
+        }
+    }
+    
+    // Load today's instances
+    async function loadTodaysInstances() {
+        try {
+            const data = await apiCall('/api/daily-tasks/today');
             
-            // Initialize day checkboxes and stretch goal calculation after everything is loaded
-            initializeDayCheckboxes();
-            initializeStretchGoalCalculation();
+            if (data.status === 'success') {
+                todaysInstances = data.instances;
+                
+                // Create lookup object for template status
+                todaysInstancesByTemplate = {};
+                todaysInstances.forEach(instance => {
+                    todaysInstancesByTemplate[instance.template_id] = instance;
+                });
+            } else {
+                console.error('Failed to load today\'s instances:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading today\'s instances:', error);
+        }
+    }
+        
+    // Render the entire interface
+    function renderInterface() {
+        renderTemplates();
+    }
+    
+    // Render templates
+    function renderTemplates() {
+        const templatesList = document.getElementById('templates-list');
+        
+        if (templates.length === 0) {
+            templatesList.innerHTML = '<li class="empty-state">No templates yet. Add your first daily task above!</li>';
+            return;
+        }
+        
+        templatesList.innerHTML = '';
+        
+        templates.forEach(template => {
+            const li = document.createElement('li');
+            li.className = 'template-item';
+            li.dataset.templateId = template.id;
+            
+            // Format days of week
+            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const selectedDays = template.days_of_week.map(day => dayNames[day]).join(', ');
+            
+            // Determine status
+            const instance = todaysInstancesByTemplate[template.id];
+            let statusIcon = '';
+            let statusClass = '';
+            
+            if (instance) {
+                statusIcon = instance.completed ? '✓' : '○';
+                statusClass = instance.completed ? 'completed' : 'incomplete';
+            } else {
+                // Check if today is in template's days
+                const today = new Date().getDay(); // 0=Sun, need to convert
+                const todayIndex = today === 0 ? 6 : today - 1; // Convert to 0=Mon
+                statusIcon = template.days_of_week.includes(todayIndex) ? '○' : '-';
+                statusClass = template.days_of_week.includes(todayIndex) ? 'incomplete' : 'not-today';
+            }
+            
+            li.innerHTML = `
+                <div class="template-content">
+                    <div class="template-text">
+                        <span class="template-status ${statusClass}">${statusIcon}</span>
+                        ${template.description}
+                    </div>
+                    <div class="template-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="editTemplate('${template.id}')">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${template.id}')">Delete</button>
+                    </div>
+                </div>
+                <div class="template-meta">
+                    <span class="template-points">${template.points} points</span>
+                    <span class="template-days">${selectedDays}</span>
+                </div>
+            `;
+            
+            templatesList.appendChild(li);
+        });
+    }
+    
+    // Add a new daily task template
+    async function addDailyTask() {
+        const description = document.getElementById('task-description').value.trim();
+        const points = parseInt(document.getElementById('task-points').value);
+        
+        // Get selected days
+        const selectedDays = [];
+        document.querySelectorAll('#days-of-week .day-checkbox.checked').forEach(checkbox => {
+            selectedDays.push(parseInt(checkbox.dataset.day));
         });
         
-        // Load daily task templates
-        async function loadTemplates() {
-            try {
-                const response = await fetch('/api/daily-tasks');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    templates = data.templates;
-                } else {
-                    console.error('Failed to load templates:', data.message);
-                }
-            } catch (error) {
-                console.error('Error loading templates:', error);
-            }
+        if (!description) {
+            alert('Please enter a task description');
+            return;
         }
         
-        // Load today's instances
-        async function loadTodaysInstances() {
-            try {
-                const response = await fetch('/api/daily-tasks/today');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    todaysInstances = data.instances;
-                    
-                    // Create lookup object for template status
-                    todaysInstancesByTemplate = {};
-                    todaysInstances.forEach(instance => {
-                        todaysInstancesByTemplate[instance.template_id] = instance;
-                    });
-                } else {
-                    console.error('Failed to load today\'s instances:', data.message);
-                }
-            } catch (error) {
-                console.error('Error loading today\'s instances:', error);
-            }
+        if (!points || points === 0) {
+            alert('Points cannot be zero');
+            return;
         }
         
-        // Render the entire interface
-        function renderInterface() {
-            renderTemplates();
+        if (points < -100 || points > 100) {
+            alert('Points must be between -100 and 100');
+            return;
         }
         
-        
-        // Render templates
-        function renderTemplates() {
-            const templatesList = document.getElementById('templates-list');
-            
-            if (templates.length === 0) {
-                templatesList.innerHTML = '<li class="empty-state">No templates yet. Add your first daily task above!</li>';
-                return;
-            }
-            
-            templatesList.innerHTML = '';
-            
-            templates.forEach(template => {
-                const li = document.createElement('li');
-                li.className = 'template-item';
-                li.dataset.templateId = template.id;
-                
-                // Format days of week
-                const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                const selectedDays = template.days_of_week.map(day => dayNames[day]).join(', ');
-                
-                // Determine status
-                const instance = todaysInstancesByTemplate[template.id];
-                let statusIcon = '';
-                let statusClass = '';
-                
-                if (instance) {
-                    statusIcon = instance.completed ? '✓' : '○';
-                    statusClass = instance.completed ? 'completed' : 'incomplete';
-                } else {
-                    // Check if today is in template's days
-                    const today = new Date().getDay(); // 0=Sun, need to convert
-                    const todayIndex = today === 0 ? 6 : today - 1; // Convert to 0=Mon
-                    statusIcon = template.days_of_week.includes(todayIndex) ? '○' : '-';
-                    statusClass = template.days_of_week.includes(todayIndex) ? 'incomplete' : 'not-today';
-                }
-                
-                li.innerHTML = `
-                    <div class="template-content">
-                        <div class="template-text">
-                            <span class="template-status ${statusClass}">${statusIcon}</span>
-                            ${template.description}
-                        </div>
-                        <div class="template-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="editTemplate('${template.id}')">Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${template.id}')">Delete</button>
-                        </div>
-                    </div>
-                    <div class="template-meta">
-                        <span class="template-points">${template.points} points</span>
-                        <span class="template-days">${selectedDays}</span>
-                    </div>
-                `;
-                
-                templatesList.appendChild(li);
-            });
+        if (selectedDays.length === 0) {
+            alert('Please select at least one day of the week');
+            return;
         }
         
-        // Add a new daily task template
-        async function addDailyTask() {
-            const description = document.getElementById('task-description').value.trim();
-            const points = parseInt(document.getElementById('task-points').value);
-            
-            // Get selected days
-            const selectedDays = [];
-            document.querySelectorAll('#days-of-week .day-checkbox.checked').forEach(checkbox => {
-                selectedDays.push(parseInt(checkbox.dataset.day));
+        try {
+            const data = await apiCall('/api/daily-tasks', {
+                method: 'POST',
+                body: JSON.stringify({
+                    description: description,
+                    points: points,
+                    days_of_week: selectedDays
+                })
             });
             
-            if (!description) {
-                alert('Please enter a task description');
-                return;
-            }
-            
-            if (!points || points === 0) {
-                alert('Points cannot be zero');
-                return;
-            }
-            
-            if (points < -100 || points > 100) {
-                alert('Points must be between -100 and 100');
-                return;
-            }
-            
-            if (selectedDays.length === 0) {
-                alert('Please select at least one day of the week');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/daily-tasks', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        description: description,
-                        points: points,
-                        days_of_week: selectedDays
-                    })
-                });
+            if (data.status === 'success') {
+                // Reset form
+                resetTaskForm();
                 
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Clear form
-                    document.getElementById('task-description').value = '';
-                    document.getElementById('task-points').value = '1';
-                    document.querySelectorAll('#days-of-week .day-checkbox').forEach(checkbox => {
-                        checkbox.classList.remove('checked');
-                    });
-                    
-                    // Reload templates and today's instances
-                    await loadTemplates();
-                    await loadTodaysInstances();
-                    renderInterface();
-                } else {
-                    alert('Failed to create daily task: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error creating daily task:', error);
-                alert('Error creating daily task. Please try again.');
+                // Reload templates and today's instances
+                await loadTemplates();
+                await loadTodaysInstances();
+                renderInterface();
+            } else {
+                alert('Failed to create daily task: ' + data.message);
             }
+        } catch (error) {
+            console.error('Error creating daily task:', error);
+            alert('Error creating daily task. Please try again.');
+        }
+    }
+    
+    // Store current editing template ID
+    let editingTemplateId = null;
+    
+    // Edit a template
+    async function editTemplate(templateId) {
+        const template = templates.find(t => t.id === templateId);
+        if (!template) {
+            alert('Template not found');
+            return;
         }
         
-        // Edit a template
-        async function editTemplate(templateId) {
-            const template = templates.find(t => t.id === templateId);
-            if (!template) {
-                alert('Template not found');
-                return;
+        editingTemplateId = templateId;
+        
+        // Pre-fill form
+        document.getElementById('task-description').value = template.description;
+        document.getElementById('task-points').value = template.points;
+        
+        // Set days
+        template.days.forEach(day => {
+            const dayCheckbox = document.querySelector(`[data-day="${day}"]`);
+            if (dayCheckbox) {
+                dayCheckbox.classList.add('checked');
             }
-            
-            // Get new values from user
-            const newDescription = prompt('Edit task description:', template.description);
-            if (newDescription === null) return; // User cancelled
-            
-            const newPoints = prompt('Edit points:', template.points);
-            if (newPoints === null) return; // User cancelled
-            
-            if (!newPoints || isNaN(newPoints) || parseInt(newPoints) <= 0) {
-                alert('Please enter a valid point value');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/daily-tasks/${templateId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        description: newDescription,
-                        points: parseInt(newPoints)
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Reload templates and today's instances
-                    await loadTemplates();
-                    await loadTodaysInstances();
-                    renderInterface();
-                } else {
-                    alert('Failed to update template: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error updating template:', error);
-                alert('Error updating template. Please try again.');
-            }
+        });
+        
+        // Change button to update
+        const addBtn = document.getElementById('add-task-btn');
+        addBtn.textContent = 'Update Task';
+        addBtn.onclick = updateDailyTask;
+        
+        // Show cancel button
+        const cancelBtn = document.getElementById('cancel-task-btn');
+        cancelBtn.style.display = 'inline-block';
+        
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // Update daily task
+    async function updateDailyTask() {
+        const description = document.getElementById('task-description').value.trim();
+        const points = parseInt(document.getElementById('task-points').value);
+        
+        if (!description) {
+            alert('Please enter a task description');
+            return;
         }
         
-        // Delete a template
-        async function deleteTemplate(templateId) {
-            if (!confirm('Are you sure you want to delete this daily task template?')) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/daily-tasks/${templateId}`, {
-                    method: 'DELETE'
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Reload templates and today's instances
-                    await loadTemplates();
-                    await loadTodaysInstances();
-                    renderInterface();
-                } else {
-                    alert('Failed to delete template: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error deleting template:', error);
-                alert('Error deleting template. Please try again.');
-            }
+        if (!points || points === 0) {
+            alert('Points cannot be zero');
+            return;
         }
         
-        
-        // Load goals and update display
-        async function loadGoals() {
-            try {
-                const response = await fetch('/api/collaboration/tracker');
-                const data = await response.json();
-                
-                console.log('DEBUG: loadGoals response:', data);
-                
-                if (data.status === 'success') {
-                    document.getElementById('par-display').value = data.par;
-                    document.getElementById('stretch-setting').value = data.stretch_setting;
-                    document.getElementById('stretch-goal-display').value = data.stretch_goal;
-                    
-                    const multiplier = data.adjustment_multiplier || 1;
-                    console.log('DEBUG: Setting adjustment multiplier to:', multiplier);
-                    document.getElementById('adjustment-multiplier').value = multiplier;
-                } else {
-                    console.error('Failed to load goals:', data.message);
-                }
-            } catch (error) {
-                console.error('Error loading goals:', error);
-            }
+        if (points < -100 || points > 100) {
+            alert('Points must be between -100 and 100');
+            return;
         }
         
-        // Save stretch setting
-        async function saveGoals() {
-            const stretchSetting = parseInt(document.getElementById('stretch-setting').value);
-            const adjustmentMultiplier = parseInt(document.getElementById('adjustment-multiplier').value);
-            
-            console.log('DEBUG: Saving goals - stretchSetting:', stretchSetting, 'adjustmentMultiplier:', adjustmentMultiplier);
-            
-            if (isNaN(stretchSetting) || stretchSetting < 0 || stretchSetting > 100) {
-                alert('Stretch setting must be between 0 and 100');
-                return;
-            }
-            
-            if (adjustmentMultiplier !== 1 && adjustmentMultiplier !== -1) {
-                alert('Adjustment multiplier must be 1 or -1');
-                return;
-            }
-            
-            try {
-                const requestData = {
-                    stretch_setting: stretchSetting,
-                    adjustment_multiplier: adjustmentMultiplier
-                };
-                
-                console.log('DEBUG: Sending request data:', requestData);
-                
-                const response = await fetch('/api/collaboration/goals', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                
-                console.log('DEBUG: Save response:', data);
-                
-                if (data.status === 'success') {
-                    alert('Goals saved successfully!');
-                    // Reload goals to update calculated values
-                    await loadGoals();
-                } else {
-                    alert('Failed to save goals: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error saving goals:', error);
-                alert('Error saving goals. Please try again.');
-            }
+        // Get selected days
+        const selectedDays = Array.from(document.querySelectorAll('.day-checkbox.checked'))
+            .map(cb => parseInt(cb.dataset.day));
+        
+        if (selectedDays.length === 0) {
+            alert('Please select at least one day');
+            return;
         }
         
-        // Initialize stretch goal calculation
-        function initializeStretchGoalCalculation() {
-            const stretchSettingInput = document.getElementById('stretch-setting');
-            const parDisplay = document.getElementById('par-display');
-            const stretchGoalDisplay = document.getElementById('stretch-goal-display');
-            
-            function updateStretchGoal() {
-                const par = parseInt(parDisplay.value) || 0;
-                const stretchSetting = parseInt(stretchSettingInput.value) || 0;
-                stretchGoalDisplay.value = par + stretchSetting;
-            }
-            
-            // Remove existing listener and add new one
-            stretchSettingInput.removeEventListener('input', updateStretchGoal);
-            stretchSettingInput.addEventListener('input', updateStretchGoal);
-            
-            // Initial calculation
-            updateStretchGoal();
-        }
-        
-        // Initialize day checkboxes
-        function initializeDayCheckboxes() {
-            document.querySelectorAll('.day-checkbox').forEach(checkbox => {
-                // Remove any existing event listeners
-                checkbox.removeEventListener('click', handleDayCheckboxClick);
-                // Add new event listener
-                checkbox.addEventListener('click', handleDayCheckboxClick);
+        try {
+            const data = await apiCall(`/api/daily-tasks/${editingTemplateId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    description: description,
+                    points: points,
+                    days: selectedDays
+                })
             });
+            
+            if (data.status === 'success') {
+                // Reset form
+                resetTaskForm();
+                
+                // Reload templates and today's instances
+                await loadTemplates();
+                await loadTodaysInstances();
+                renderInterface();
+            } else {
+                alert('Failed to update template: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error updating template:', error);
+            alert('Error updating template. Please try again.');
+        }
+    }
+    
+    // Cancel editing
+    function cancelTaskEdit() {
+        resetTaskForm();
+    }
+    
+    // Reset task form
+    function resetTaskForm() {
+        document.getElementById('task-description').value = '';
+        document.getElementById('task-points').value = '1';
+        
+        // Reset days to weekdays
+        document.querySelectorAll('.day-checkbox').forEach(cb => {
+            const day = parseInt(cb.dataset.day);
+            if (day >= 0 && day <= 4) {
+                cb.classList.add('checked');
+            } else {
+                cb.classList.remove('checked');
+            }
+        });
+        
+        // Reset button
+        const addBtn = document.getElementById('add-task-btn');
+        addBtn.textContent = 'Add Task';
+        addBtn.onclick = addDailyTask;
+        
+        // Hide cancel button
+        const cancelBtn = document.getElementById('cancel-task-btn');
+        cancelBtn.style.display = 'none';
+        
+        editingTemplateId = null;
+    }
+    
+    // Delete a template
+    async function deleteTemplate(templateId) {
+        if (!confirm('Are you sure you want to delete this daily task template?')) {
+            return;
         }
         
-        // Handle day checkbox clicks
-        function handleDayCheckboxClick(e) {
-            e.preventDefault();
-            this.classList.toggle('checked');
+        try {
+            const data = await apiCall(`/api/daily-tasks/${templateId}`, {
+                method: 'DELETE'
+            });
+            
+            if (data.status === 'success') {
+                // Reload templates and today's instances
+                await loadTemplates();
+                await loadTodaysInstances();
+                renderInterface();
+            } else {
+                alert('Failed to delete template: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error deleting template:', error);
+            alert('Error deleting template. Please try again.');
         }
+    }
+    
+    // Load goals and update display
+    async function loadGoals() {
+        try {
+            const data = await apiCall('/api/collaboration/tracker');
+            
+            console.log('DEBUG: loadGoals response:', data);
+            
+            if (data.status === 'success') {
+                document.getElementById('par-display').value = data.par;
+                document.getElementById('stretch-setting').value = data.stretch_setting;
+                document.getElementById('stretch-goal-display').value = data.stretch_goal;
+                
+                const multiplier = data.adjustment_multiplier || 1;
+                console.log('DEBUG: Setting adjustment multiplier to:', multiplier);
+                document.getElementById('adjustment-multiplier').value = multiplier;
+            } else {
+                console.error('Failed to load goals:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading goals:', error);
+        }
+    }
+    
+    // Save stretch setting
+    async function saveGoals() {
+        const stretchSetting = parseInt(document.getElementById('stretch-setting').value);
+        const adjustmentMultiplier = parseInt(document.getElementById('adjustment-multiplier').value);
+        
+        console.log('DEBUG: Saving goals - stretchSetting:', stretchSetting, 'adjustmentMultiplier:', adjustmentMultiplier);
+        
+        if (isNaN(stretchSetting) || stretchSetting < 0 || stretchSetting > 100) {
+            alert('Stretch setting must be between 0 and 100');
+            return;
+        }
+        
+        if (adjustmentMultiplier !== 1 && adjustmentMultiplier !== -1) {
+            alert('Adjustment multiplier must be 1 or -1');
+            return;
+        }
+        
+        try {
+            const requestData = {
+                stretch_setting: stretchSetting,
+                adjustment_multiplier: adjustmentMultiplier
+            };
+            
+            console.log('DEBUG: Sending request data:', requestData);
+            
+            const data = await apiCall('/api/collaboration/goals', {
+                method: 'POST',
+                body: JSON.stringify(requestData)
+            });
+            
+            console.log('DEBUG: Save response:', data);
+            
+            if (data.status === 'success') {
+                alert('Goals saved successfully!');
+                // Reload goals to update calculated values
+                await loadGoals();
+            } else {
+                alert('Failed to save goals: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error saving goals:', error);
+            alert('Error saving goals. Please try again.');
+        }
+    }
+    
+    // Initialize stretch goal calculation
+    function initializeStretchGoalCalculation() {
+        const stretchSettingInput = document.getElementById('stretch-setting');
+        const parDisplay = document.getElementById('par-display');
+        const stretchGoalDisplay = document.getElementById('stretch-goal-display');
+        
+        function updateStretchGoal() {
+            const par = parseInt(parDisplay.value) || 0;
+            const stretchSetting = parseInt(stretchSettingInput.value) || 0;
+            stretchGoalDisplay.value = par + stretchSetting;
+        }
+        
+        // Remove existing listener and add new one
+        stretchSettingInput.removeEventListener('input', updateStretchGoal);
+        stretchSettingInput.addEventListener('input', updateStretchGoal);
+        
+        // Initial calculation
+        updateStretchGoal();
+    }
+    
+    // Initialize day checkboxes
+    function initializeDayCheckboxes() {
+        document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+            // Remove any existing event listeners
+            checkbox.removeEventListener('click', handleDayCheckboxClick);
+            // Add new event listener
+            checkbox.addEventListener('click', handleDayCheckboxClick);
+        });
+    }
+    
+    // Handle day checkbox clicks
+    function handleDayCheckboxClick(e) {
+        e.preventDefault();
+        this.classList.toggle('checked');
+    }
 </script>
 {% endblock %}

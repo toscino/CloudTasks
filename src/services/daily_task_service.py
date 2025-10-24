@@ -429,6 +429,12 @@ class DailyTaskService:
             days_processed = collab_service.update_tracker_catch_up(today_central)
             logger.info(f"Updated collaboration tracker for {days_processed} days")
             
+            # Reset morning cards
+            from src.services.morning_card_service import MorningCardService
+            morning_card_service = MorningCardService(self.db)
+            morning_card_reset = morning_card_service.check_and_reset_cards()
+            logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
+            
             return {
                 'status': 'success',
                 'message': f'Reset completed, created {instances_created} instances, updated tracker for {days_processed} days',

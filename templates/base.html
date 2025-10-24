@@ -122,6 +122,25 @@
         .auth-indicator-nav.testing {
             color: #ffc107;
         }
+        
+        /* Morning Cards Notification */
+        .morning-cards-indicator {
+            font-size: 1.5rem;
+            cursor: pointer;
+            animation: wiggle 1s ease-in-out infinite;
+            transition: transform 0.2s;
+            margin-right: 10px;
+        }
+        
+        .morning-cards-indicator:hover {
+            transform: scale(1.1);
+        }
+        
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
         .nav-overlay {
             position: fixed;
             top: 0;
@@ -144,6 +163,251 @@
             padding: 20px;
         }
         
+        /* Common Button Styles */
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        .btn-success {
+            background-color: #28a745;
+        }
+        
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        /* Common Form Styles */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        /* Remove number input spinner arrows */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        
+        /* Common Card and List Styles */
+        .card-item,
+        .goal-item,
+        .template-item,
+        .todays-item {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 15px;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .card-item:hover,
+        .goal-item:hover,
+        .template-item:hover,
+        .todays-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-content,
+        .goal-content,
+        .template-content,
+        .todays-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        .card-text,
+        .goal-text,
+        .template-text,
+        .todays-text {
+            flex: 1;
+            font-size: 16px;
+            color: #1c1e21;
+            line-height: 1.4;
+        }
+        
+        .card-actions,
+        .goal-actions,
+        .template-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        
+        /* Empty and Loading States */
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px dashed #dee2e6;
+        }
+        
+        .loading-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px;
+        }
+        
+        /* Message Styles */
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .info-banner {
+            background-color: #ffffff;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-left: 4px solid #0c5460;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        /* Common Meta/Tag Styles */
+        .card-meta,
+        .goal-meta,
+        .template-meta {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6c757d;
+            flex-wrap: wrap;
+        }
+        
+        .card-tag,
+        .tag {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        
+        /* Responsive Utilities */
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .card-content,
+            .goal-content,
+            .template-content,
+            .todays-content {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .card-actions,
+            .goal-actions,
+            .template-actions {
+                align-self: flex-end;
+            }
+        }
+        
         /* Block styles that can be overridden */
         {% block styles %}{% endblock %}
     </style>
@@ -153,17 +417,23 @@
         <!-- Navigation Bar -->
         <div class="nav-bar" style="position: relative;">
             <div class="nav-title" id="nav-title">Loading...</div>
-            <button class="hamburger" onclick="toggleNavMenu()">
-                <span class="hamburger-line"></span>
-                <span class="hamburger-line"></span>
-                <span class="hamburger-line"></span>
-            </button>
+            <div style="display: flex; align-items: center;">
+                <div id="morning-cards-indicator" class="morning-cards-indicator" style="display: none;" onclick="window.location.href='/morning-cards'">
+                    🃏
+                </div>
+                <button class="hamburger" onclick="toggleNavMenu()">
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                </button>
+            </div>
         <div class="nav-menu" id="navMenu">
             <a href="/" class="nav-menu-item {% if request.endpoint == 'index' %}active{% endif %}">📋 Tasks</a>
+            <a href="/morning-cards" class="nav-menu-item {% if request.endpoint == 'morning_cards_page' %}active{% endif %}">🌅 Morning Cards</a>
             <a href="/daily-tasks" class="nav-menu-item {% if request.endpoint == 'daily_tasks_page' %}active{% endif %}">📅 Daily Tasks</a>
+            <a href="/morning-cards/manage" class="nav-menu-item {% if request.endpoint == 'morning_cards_manage_page' %}active{% endif %}">🃏 Manage Cards</a>
             <a href="/goals" class="nav-menu-item {% if request.endpoint == 'goals_page' %}active{% endif %}">🎯 Goals</a>
             <a href="/test" class="nav-menu-item {% if request.endpoint == 'test_interface' %}active{% endif %}">🧪 Test</a>
-            <a href="/about" class="nav-menu-item {% if request.endpoint == 'about' %}active{% endif %}">ℹ️ About</a>
         </div>
         </div>
         <div class="nav-overlay" id="navOverlay" onclick="closeNavMenu()"></div>
@@ -243,7 +513,13 @@
                     })
                 });
                 
+                // Check HTTP status
+                if (!response.ok) {
+                    console.warn(`Login request returned HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                
                 if (data.status === 'success') {
                     window.authState.currentUsername = data.username;
                     window.authState.isAuthenticated = data.authenticated;
@@ -270,18 +546,27 @@
                     }
                 });
                 
+                // Check HTTP status
+                if (!response.ok) {
+                    console.warn(`Logout request returned HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                
                 if (data.status === 'success') {
                     window.authState.currentUsername = 'test_user';
                     window.authState.isAuthenticated = false;
                     window.authState.sessionBased = false;
                     updateUserStatusNav();
                     return true;
+                } else {
+                    console.error('Logout failed:', data.message);
+                    return false;
                 }
             } catch (error) {
                 console.error('Logout error:', error);
+                return false;
             }
-            return false;
         }
         
         // Helper function to get headers for API calls (no auth needed for session-based)
@@ -299,13 +584,22 @@
         async function getAuthStatus() {
             try {
                 const response = await fetch('/api/user');
+                
+                // Check HTTP status
+                if (!response.ok) {
+                    console.warn(`Auth status request returned HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                
                 if (data.status === 'success') {
                     window.authState.currentUsername = data.username;
                     window.authState.isAuthenticated = data.authenticated;
                     window.authState.sessionBased = data.session_based || false;
                     window.authState.initialized = true;
                     return { username: data.username, authenticated: data.authenticated };
+                } else {
+                    console.error('Auth status check failed:', data.message);
                 }
             } catch (error) {
                 console.log('Using fallback authentication:', error);
@@ -335,11 +629,42 @@
             await getAuthStatus();
             updateUserStatusNav();
             
+            // Check for pending morning cards notification
+            checkPendingMorningCards();
+            
             // Then check for URL login parameters
             checkForInitialLogin();
         });
+        
+        // Check for pending morning cards that need to be locked in
+        async function checkPendingMorningCards() {
+            try {
+                const response = await fetch('/api/morning-cards/today');
+                const data = await response.json();
+                
+                const indicator = document.getElementById('morning-cards-indicator');
+                
+                // Show indicator if Karleigh needs to lock in morning cards
+                if (data.status === 'success' && data.selection && window.authState.currentUsername === 'Karleigh') {
+                    // Check if the card selection is NOT locked yet
+                    if (!data.selection.locked) {
+                        indicator.style.display = 'block';
+                        indicator.title = 'Lock in your morning card!';
+                    } else {
+                        indicator.style.display = 'none';
+                    }
+                } else {
+                    indicator.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking morning cards:', error);
+            }
+        }
 
     </script>
+    
+    <!-- Shared utilities -->
+    <script src="/static/js/utils.js" type="module"></script>
     
     {% block scripts %}{% endblock %}
 </body>

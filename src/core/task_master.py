@@ -399,6 +399,43 @@ class TaskMaster:
                 'updated_at': firestore.SERVER_TIMESTAMP
             })
             
+            # Check if this task is from a one-and-done goal that needs cleanup
+            goal_id = completed_task.get('goal_id') if completed_task else None
+            if goal_id:
+                # Fetch the goal to check if it's a one-and-done goal
+                goal_ref = self.db.collection('goals').document(goal_id)
+                goal_doc = goal_ref.get()
+                
+                if goal_doc.exists:
+                    goal_data = goal_doc.to_dict()
+                    delete_on_complete = goal_data.get('delete_on_complete', False)
+                    
+                    if delete_on_complete:
+                        logger.debug(f"Task {completed_task_id} is from one-and-done goal {goal_id}, cleaning up all tasks and goal")
+                        
+                        # Delete all tasks with this goal_id (including saved tasks)
+                        remaining_tasks_query = self.db.collection('tasks').where(
+                            filter=FieldFilter('goal_id', '==', goal_id)
+                        )
+                        remaining_tasks_docs = list(remaining_tasks_query.stream())
+                        
+                        deleted_count = 0
+                        for task_doc in remaining_tasks_docs:
+                            try:
+                                task_doc.reference.delete()
+                                deleted_count += 1
+                            except Exception as e:
+                                logger.debug(f"Failed to delete task {task_doc.id}: {e}")
+                        
+                        logger.debug(f"Deleted {deleted_count} tasks for one-and-done goal {goal_id}")
+                        
+                        # Delete the goal itself
+                        try:
+                            goal_ref.delete()
+                            logger.debug(f"Deleted one-and-done goal {goal_id}")
+                        except Exception as e:
+                            logger.debug(f"Failed to delete goal {goal_id}: {e}")
+            
             # Check if user earns a reward
             reward_earned = False
             if completed_task:

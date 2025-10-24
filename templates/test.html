@@ -124,6 +124,7 @@
             <button onclick="checkGenerationLocks()">Check Generation Locks</button>
             <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
             <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
+            <button onclick="unlockMorningCards()">Unlock Morning Cards (Testing)</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
             <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h4>Progress Day Simulation</h4>
@@ -521,6 +522,30 @@
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = 'Failed to reset: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function unlockMorningCards() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Unlocking morning cards...';
+            
+            try {
+                const response = await fetch('/api/morning-cards/today/unlock', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = 'Morning cards unlocked! You can now select cards again.';
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to unlock: ' + data.message;
                 }
             } catch (error) {
                 resultDiv.className = 'result error';

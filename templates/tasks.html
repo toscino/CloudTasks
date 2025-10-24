@@ -17,9 +17,16 @@
         }
         .task-item {
             position: relative;
-            border-bottom: 1px solid #e0e0e0;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
             cursor: grab;
             user-select: none;
+            transition: box-shadow 0.2s ease;
+        }
+        .task-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         .task-item:active {
             cursor: grabbing;
@@ -29,9 +36,6 @@
             align-items: center;
             padding: 15px;
             transition: opacity 0.4s ease, transform 0.4s ease;
-        }
-        .task-item:last-child {
-            border-bottom: none;
         }
         .task-info {
             flex-grow: 1;
@@ -124,12 +128,6 @@
         .complete-confirm-btn:hover {
             background-color: #f0f0f0;
         }
-        .empty-state {
-            text-align: center;
-            color: #8a8a8a;
-            font-style: italic;
-            padding: 20px;
-        }
         .section-divider {
             border-top: 2px solid #e0e0e0;
             margin: 30px 0;
@@ -145,9 +143,9 @@
         .collaboration-tracker {
             margin: 20px 0;
             padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
         }
         
         .tracker-slider {
@@ -224,10 +222,11 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 15px 20px;
-            border-radius: 12px;
+            border-radius: 8px;
             flex: 1;
             min-width: 200px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .stat-card h3 {
@@ -305,6 +304,7 @@
         
         .goal-comparison {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .comparison-detail {
@@ -316,6 +316,11 @@
         
         .comparison-detail span {
             opacity: 0.9;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
         }
 {% endblock %}
 
@@ -370,153 +375,135 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-        // JavaScript Logic
-        const taskListElement = document.getElementById('task-list');
-        const rewardsListElement = document.getElementById('rewards-list');
+<script type="module">
+    import { waitForAuth, apiCall, getCurrentUsername } from '/static/js/utils.js';
+    
+    // JavaScript Logic
+    const taskListElement = document.getElementById('task-list');
+    const rewardsListElement = document.getElementById('rewards-list');
 
-        // Wait for authentication to be ready, then load tasks
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Wait for global authentication to be fully initialized
-            await new Promise(resolve => {
-                const checkAuth = () => {
-                    // Check if auth state exists and has been properly initialized
-                    if (window.authState && 
-                        window.authState.initialized &&
-                        window.authState.currentUsername && 
-                        window.authState.currentUsername !== 'Loading...' &&
-                        window.authState.currentUsername !== null) {
-                        console.log('DEBUG: Authentication ready, username:', window.authState.currentUsername);
-                        resolve();
-                    } else {
-                        console.log('DEBUG: Waiting for authentication...', window.authState);
-                        setTimeout(checkAuth, 100);
-                    }
-                };
-                checkAuth();
-            });
+    // Wait for authentication to be ready, then load tasks
+    document.addEventListener('DOMContentLoaded', async function() {
+        await waitForAuth();
+        
+        console.log('DEBUG: Starting to load tasks for user:', window.authState.currentUsername);
+        
+        // Load tasks using global authentication
+        fetchAndDisplayTasks();
+        
+        // Load collaboration tracker
+        loadCollaborationTracker();
+        
+        // DISABLED: Challenges and stats temporarily disabled
+        // fetchAndDisplayRewards();
+        // loadWeeklyPoints();
+        // loadPendingRewards();
+        // checkPendingRewards();
+    });
+
+    // Function to fetch tasks from the Python backend
+    async function fetchAndDisplayTasks() {
+        try {
+            console.log('DEBUG: Starting to fetch tasks...');
             
-            console.log('DEBUG: Starting to load tasks for user:', window.authState.currentUsername);
+            // Fetch both regular tasks and daily tasks
+            const [tasksData, dailyTasksData] = await Promise.all([
+                apiCall('/api/tasks'),
+                apiCall('/api/daily-tasks/today')
+            ]);
             
-            // Load tasks using global authentication
-            fetchAndDisplayTasks();
+            console.log('DEBUG: Got regular tasks:', tasksData);
+            console.log('DEBUG: Got daily tasks:', dailyTasksData);
             
-            // Load collaboration tracker
-            loadCollaborationTracker();
+            // Clear any old tasks
+            taskListElement.innerHTML = '';
+
+            // Combine tasks
+            let allTasks = [];
             
-            // DISABLED: Challenges and stats temporarily disabled
-            // fetchAndDisplayRewards();
-            // loadWeeklyPoints();
-            // loadPendingRewards();
-            // checkPendingRewards();
-        });
-
-        // Function to fetch tasks from the Python backend
-        async function fetchAndDisplayTasks() {
-            try {
-                console.log('DEBUG: Starting to fetch tasks...');
-                
-                // Fetch both regular tasks and daily tasks
-                const [tasksResponse, dailyTasksResponse] = await Promise.all([
-                    fetch('/api/tasks'),
-                    fetch('/api/daily-tasks/today')
-                ]);
-                
-                const tasksData = await tasksResponse.json();
-                const dailyTasksData = await dailyTasksResponse.json();
-                
-                console.log('DEBUG: Got regular tasks:', tasksData);
-                console.log('DEBUG: Got daily tasks:', dailyTasksData);
-
-                // Clear any old tasks
-                taskListElement.innerHTML = '';
-
-                // Combine tasks
-                let allTasks = [];
-                
-                // Add regular tasks
-                if (tasksData.status === 'success' && tasksData.tasks && tasksData.tasks.length > 0) {
-                    const regularTasks = tasksData.tasks.map(task => ({
-                        ...task,
-                        type: 'regular',
-                        points: task.difficulty // Use difficulty as points for regular tasks
-                    }));
-                    allTasks = allTasks.concat(regularTasks);
-                }
-                
-                // Add daily tasks (only incomplete ones)
-                if (dailyTasksData.status === 'success' && dailyTasksData.instances && dailyTasksData.instances.length > 0) {
-                    const incompleteDailyTasks = dailyTasksData.instances
-                        .filter(instance => !instance.completed)
-                        .map(instance => ({
-                            id: instance.id,
-                            description: instance.description,
-                            category: 'Daily',
-                            difficulty: instance.points, // Use points as difficulty for display
-                            duration: null, // No duration for daily tasks
-                            saved: false,
-                            type: 'daily',
-                            points: instance.points
-                        }));
-                    allTasks = allTasks.concat(incompleteDailyTasks);
-                }
-
-                if (allTasks.length > 0) {
-                    console.log('DEBUG: Found', allTasks.length, 'total tasks to display');
-                    
-                    // Sort regular tasks alphabetically, then daily tasks alphabetically
-                    const regularTasks = allTasks.filter(task => task.type === 'regular')
-                        .sort((a, b) => a.description.localeCompare(b.description));
-                    const dailyTasks = allTasks.filter(task => task.type === 'daily')
-                        .sort((a, b) => a.description.localeCompare(b.description));
-                    
-                    const sortedTasks = [...regularTasks, ...dailyTasks];
-                    
-                    // Create and display a list item for each task
-                    sortedTasks.forEach(task => {
-                        const li = document.createElement('li');
-                        li.className = 'task-item';
-                        li.dataset.taskId = task.id;
-                        li.dataset.taskType = task.type; // Add task type for completion detection
-                        
-                        // Add completion timestamp if task is completed
-                        if (task.completed && task.completed_at) {
-                            li.dataset.completedAt = task.completed_at;
-                        }
-                        
-                        const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
-                        
-                        li.innerHTML = `
-                            <div class="task-content">
-                                <div class="task-info">
-                                    <span class="task-text">${task.description}</span>
-                                    <div class="task-meta">
-                                        <span class="category">${task.category}</span>
-                                        <span class="difficulty">Points: ${task.difficulty}</span>
-                                        ${task.duration ? `<span class="duration">Duration: ${task.duration} min</span>` : ''}
-                                    </div>
-                                </div>
-                                ${task.type === 'regular' ? `<button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>` : ''}
-                            </div>
-                            <div class="swipe-confirmation">
-                                <button class="complete-confirm-btn">Complete?</button>
-                            </div>
-                        `;
-                        
-                        taskListElement.appendChild(li);
-                    });
-                } else {
-                    taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
-                }
-                
-                // Update stats
-                updateDailyTasksStats(dailyTasksData);
-
-            } catch (error) {
-                console.error("Failed to fetch tasks:", error);
-                taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
+            // Add regular tasks
+            if (tasksData.status === 'success' && tasksData.tasks && tasksData.tasks.length > 0) {
+                const regularTasks = tasksData.tasks.map(task => ({
+                    ...task,
+                    type: 'regular',
+                    points: task.difficulty // Use difficulty as points for regular tasks
+                }));
+                allTasks = allTasks.concat(regularTasks);
             }
+            
+            // Add daily tasks (only incomplete ones)
+            if (dailyTasksData.status === 'success' && dailyTasksData.instances && dailyTasksData.instances.length > 0) {
+                const incompleteDailyTasks = dailyTasksData.instances
+                    .filter(instance => !instance.completed)
+                    .map(instance => ({
+                        id: instance.id,
+                        description: instance.description,
+                        category: 'Daily',
+                        difficulty: instance.points, // Use points as difficulty for display
+                        duration: null, // No duration for daily tasks
+                        saved: false,
+                        type: 'daily',
+                        points: instance.points
+                    }));
+                allTasks = allTasks.concat(incompleteDailyTasks);
+            }
+
+            if (allTasks.length > 0) {
+                console.log('DEBUG: Found', allTasks.length, 'total tasks to display');
+                
+                // Sort regular tasks alphabetically, then daily tasks alphabetically
+                const regularTasks = allTasks.filter(task => task.type === 'regular')
+                    .sort((a, b) => a.description.localeCompare(b.description));
+                const dailyTasks = allTasks.filter(task => task.type === 'daily')
+                    .sort((a, b) => a.description.localeCompare(b.description));
+                
+                const sortedTasks = [...regularTasks, ...dailyTasks];
+                
+                // Create and display a list item for each task
+                sortedTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = 'task-item';
+                    li.dataset.taskId = task.id;
+                    li.dataset.taskType = task.type; // Add task type for completion detection
+                    
+                    // Add completion timestamp if task is completed
+                    if (task.completed && task.completed_at) {
+                        li.dataset.completedAt = task.completed_at;
+                    }
+                    
+                    const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
+                    
+                    li.innerHTML = `
+                        <div class="task-content">
+                            <div class="task-info">
+                                <span class="task-text">${task.description}</span>
+                                <div class="task-meta">
+                                    <span class="category">${task.category}</span>
+                                    <span class="difficulty">Points: ${task.difficulty}</span>
+                                    ${task.duration ? `<span class="duration">Duration: ${task.duration} min</span>` : ''}
+                                </div>
+                            </div>
+                            ${task.type === 'regular' ? `<button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>` : ''}
+                        </div>
+                        <div class="swipe-confirmation">
+                            <button class="complete-confirm-btn">Complete?</button>
+                        </div>
+                    `;
+                    
+                    taskListElement.appendChild(li);
+                });
+            } else {
+                taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
+            }
+            
+            // Update stats
+            updateDailyTasksStats(dailyTasksData);
+
+        } catch (error) {
+            console.error("Failed to fetch tasks:", error);
+            taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
         }
+    }
 
         // Function to load and display daily tasks
         async function loadDailyTasks() {

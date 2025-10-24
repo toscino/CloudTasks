@@ -10,13 +10,15 @@ class GoalModel:
     """Goal data model with validation and serialization"""
     
     def __init__(self, username: str, description: str, category: str = 'General', 
-                 priority: str = 'Medium', status: str = 'Active', goal_id: Optional[str] = None):
+                 priority: str = 'Medium', status: str = 'Active', goal_id: Optional[str] = None,
+                 delete_on_complete: bool = False):
         self.username = username
         self.description = description
         self.category = category
         self.priority = priority
         self.status = status
         self.goal_id = goal_id
+        self.delete_on_complete = delete_on_complete
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
     
@@ -28,6 +30,7 @@ class GoalModel:
             'category': self.category,
             'priority': self.priority,
             'status': self.status,
+            'delete_on_complete': self.delete_on_complete,
             'created_at': firestore.SERVER_TIMESTAMP,
             'updated_at': firestore.SERVER_TIMESTAMP
         }
@@ -41,7 +44,8 @@ class GoalModel:
             category=data.get('category', 'General'),
             priority=data.get('priority', 'Medium'),
             status=data.get('status', 'Active'),
-            goal_id=goal_id
+            goal_id=goal_id,
+            delete_on_complete=data.get('delete_on_complete', False)
         )
         
         # Handle timestamps
@@ -68,6 +72,7 @@ class GoalModel:
             'category': self.category,
             'priority': self.priority,
             'status': self.status,
+            'delete_on_complete': self.delete_on_complete,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
@@ -173,7 +178,8 @@ def create_goal_from_request_data(data: Dict[str, Any], username: str) -> GoalMo
         description=data['description'],
         category=data.get('category', 'General'),
         priority=data.get('priority', 'Medium'),
-        status=data.get('status', 'Active')
+        status=data.get('status', 'Active'),
+        delete_on_complete=data.get('delete_on_complete', False)
     )
 
 

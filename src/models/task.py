@@ -11,7 +11,7 @@ class TaskModel:
     
     def __init__(self, username: str, description: str, category: str = 'General', 
                  difficulty: int = 3, duration: int = 10, completed: bool = False, 
-                 saved: bool = False, task_id: Optional[str] = None):
+                 saved: bool = False, task_id: Optional[str] = None, goal_id: Optional[str] = None):
         self.username = username
         self.description = description
         self.category = category
@@ -20,6 +20,7 @@ class TaskModel:
         self.completed = completed
         self.saved = saved
         self.task_id = task_id
+        self.goal_id = goal_id
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
         self.presented_at = None
@@ -27,7 +28,7 @@ class TaskModel:
     
     def to_firestore_dict(self) -> Dict[str, Any]:
         """Convert to Firestore-compatible dictionary"""
-        return {
+        result = {
             'username': self.username,
             'description': self.description,
             'category': self.category,
@@ -39,6 +40,9 @@ class TaskModel:
             'created_at': firestore.SERVER_TIMESTAMP,
             'updated_at': firestore.SERVER_TIMESTAMP
         }
+        if self.goal_id:
+            result['goal_id'] = self.goal_id
+        return result
     
     @classmethod
     def from_firestore_dict(cls, data: Dict[str, Any], task_id: str) -> 'TaskModel':
@@ -51,7 +55,8 @@ class TaskModel:
             duration=data.get('duration', 10),
             completed=data.get('completed', False),
             saved=data.get('saved', False),
-            task_id=task_id
+            task_id=task_id,
+            goal_id=data.get('goal_id')
         )
         
         # Handle timestamps
@@ -83,7 +88,7 @@ class TaskModel:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        return {
+        result = {
             'id': self.task_id,
             'username': self.username,
             'description': self.description,
@@ -97,6 +102,9 @@ class TaskModel:
             'presented_at': self.presented_at,
             'completed_at': self.completed_at
         }
+        if self.goal_id:
+            result['goal_id'] = self.goal_id
+        return result
     
     def validate(self) -> bool:
         """Validate task data"""

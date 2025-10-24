@@ -295,9 +295,23 @@ class TaskGenerator(AITaskPrompt):
             logger.debug(f"No base idea selected for {username} {category} (returning None)")
             return None
         else:
+            # Return goal info as a dict with prefix and goal_id
             base_idea = selected_item.get('description', '')
-            logger.debug(f"Selected base idea for {username} {category}: '{base_idea}' (priority: {selected_item.get('priority')}, status: {selected_item.get('status')})")
-            return base_idea
+            delete_on_complete = selected_item.get('delete_on_complete', False)
+            
+            # Add prefix based on goal type
+            if delete_on_complete:
+                prefixed_idea = f"Complete {base_idea}"
+            else:
+                prefixed_idea = f"Make progress on {base_idea}"
+            
+            logger.debug(f"Selected base idea for {username} {category}: '{prefixed_idea}' (priority: {selected_item.get('priority')}, status: {selected_item.get('status')}, delete_on_complete: {delete_on_complete})")
+            
+            return {
+                'base_idea': prefixed_idea,
+                'goal_id': selected_item.get('id'),
+                'delete_on_complete': delete_on_complete
+            }
     
     def generate_tasks_for_category(self, username, category, count=None, upload_to_firestore=True):
         """Generate tasks for a specific category using AI - main entry point"""
@@ -316,21 +330,35 @@ class TaskGenerator(AITaskPrompt):
             difficulty = random.choices(difficulties, weights=weights, k=1)[0]
             
             # Get base idea from goals using priority weighting
-            base_idea = self.select_base_idea_from_goals(username, category)
+            goal_info = self.select_base_idea_from_goals(username, category)
+            base_idea = None
+            goal_id = None
+            if goal_info:
+                base_idea = goal_info['base_idea']
+                goal_id = goal_info['goal_id']
             
-            tasks_input.append({
+            task_input = {
                 "target": category,  # Use the specified category
                 "difficulty": difficulty,
                 "base_idea": base_idea
-            })
+            }
+            
+            # Add ID if we have a goal_id (to match AI expectations)
+            if goal_id:
+                task_input["ID"] = goal_id
+            
+            tasks_input.append(task_input)
         
         # Generate tasks using AI
         ai_tasks = self.generate_tasks(f"Focus on {category} tasks", tasks_input, username)
         
         # Convert AI tasks to Firestore format and store them (if requested)
         generated_tasks = []
-        for ai_task in ai_tasks:
+        for i, ai_task in enumerate(ai_tasks):
             try:
+                # Get goal_id from AI response (AI returns 'ID' field)
+                current_goal_id = ai_task.get('ID')
+                
                 task_data = {
                     'username': username,
                     'description': ai_task['description'],
@@ -343,6 +371,10 @@ class TaskGenerator(AITaskPrompt):
                     'created_at': firestore.SERVER_TIMESTAMP,
                     'updated_at': firestore.SERVER_TIMESTAMP
                 }
+                
+                # Add goal_id if it exists
+                if current_goal_id:
+                    task_data['goal_id'] = current_goal_id
                 
                 if upload_to_firestore and self.db is not None:
                     doc_ref = self.db.collection('tasks').add(task_data)

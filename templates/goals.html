@@ -85,87 +85,18 @@
             margin-bottom: 20px;
         }
         
-        .form-group {
-            margin-bottom: 15px;
+        .add-goal-button-row {
+            margin-top: 15px;
+            text-align: right;
         }
         
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #495057;
+        .add-goal-button-row .btn {
+            display: inline-block;
         }
         
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 14px;
-            transition: border-color 0.2s ease;
-        }
-        
-        .form-group input:focus,
-        .form-group textarea:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-        }
-        
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        
-        .form-row {
-            display: flex;
-            gap: 15px;
-            align-items: end;
-        }
-        
-        .form-row .form-group {
-            flex: 1;
-            margin-bottom: 0;
-        }
-        
-        .btn {
+        .btn-secondary.active {
             background-color: #007bff;
             color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: background-color 0.2s ease;
-        }
-        
-        .btn:hover {
-            background-color: #0056b3;
-        }
-        
-        .btn-secondary {
-            background-color: #6c757d;
-        }
-        
-        .btn-secondary:hover {
-            background-color: #545b62;
-        }
-        
-        .btn-danger {
-            background-color: #dc3545;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c82333;
-        }
-        
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 12px;
         }
         
         .goals-list {
@@ -174,32 +105,6 @@
             margin: 0;
         }
         
-        .goal-item {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            padding: 15px;
-            transition: box-shadow 0.2s ease;
-        }
-        
-        .goal-item:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-        
-        .goal-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 15px;
-        }
-        
-        .goal-text {
-            flex: 1;
-            font-size: 16px;
-            color: #1c1e21;
-            line-height: 1.4;
-        }
         
         .goal-meta {
             display: flex;
@@ -250,21 +155,6 @@
             color: #721c24;
         }
         
-        .goal-actions {
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-        
-        .empty-state {
-            text-align: center;
-            color: #6c757d;
-            font-style: italic;
-            padding: 40px 20px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            border: 1px dashed #dee2e6;
-        }
         
         .loading-state {
             text-align: center;
@@ -329,118 +219,140 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-        // Goals Management JavaScript
-        let categories = [];
-        let goals = {};
-        let currentCategory = null;
+<script type="module">
+    import { waitForAuth, apiCall, showError, scrollToTop } from '/static/js/utils.js';
+    
+    // Goals Management JavaScript
+    let categories = [];
+    let goals = {};
+    let currentCategory = null;
+    
+    // Wait for authentication to be ready, then load data
+    document.addEventListener('DOMContentLoaded', async function() {
+        await waitForAuth();
         
-        // Wait for authentication to be ready, then load data
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Wait for global authentication to be initialized
-            await new Promise(resolve => {
-                const checkAuth = () => {
-                    if (window.authState && window.authState.currentUsername) {
-                        resolve();
-                    } else {
-                        setTimeout(checkAuth, 100);
-                    }
-                };
-                checkAuth();
-            });
+        // Load categories and goals
+        await loadCategories();
+        await loadGoals();
+        renderInterface();
+    });
+    
+    // Load available categories
+    async function loadCategories() {
+        try {
+            const data = await apiCall('/api/goals/categories');
             
-            // Load categories and goals
-            await loadCategories();
-            await loadGoals();
-            renderInterface();
+            if (data.status === 'success') {
+                categories = data.categories;
+            } else {
+                console.error('Failed to load categories:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading categories:', error);
+        }
+    }
+    
+    // Load goals for current user
+    async function loadGoals() {
+        try {
+            const data = await apiCall('/api/goals');
+            
+            if (data.status === 'success') {
+                goals = data.goals;
+            } else {
+                console.error('Failed to load goals:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading goals:', error);
+        }
+    }
+    
+    // Render the entire interface
+    function renderInterface() {
+        renderCategoryTabs();
+        renderCategorySections();
+        
+        // Set "All Goals" as active on first load (no tab needed)
+        if (!currentCategory) {
+            currentCategory = 'all';
+            updateActiveSection();
+        }
+    }
+    
+    // Render category tabs
+    function renderCategoryTabs() {
+        const tabsContainer = document.getElementById('categoryTabs');
+        tabsContainer.innerHTML = '';
+        
+        // Add category tabs (no "All Goals" tab)
+        categories.forEach(category => {
+            const tab = document.createElement('div');
+            tab.className = 'category-tab';
+            tab.textContent = `${category.icon} ${category.label}`;
+            tab.dataset.category = category.value;
+            tab.onclick = () => switchCategory(category.value);
+            
+            tabsContainer.appendChild(tab);
         });
+    }
+    
+    // Render category sections
+    function renderCategorySections() {
+        const sectionsContainer = document.getElementById('categorySections');
+        sectionsContainer.innerHTML = '';
         
-        // Load available categories
-        async function loadCategories() {
-            try {
-                const response = await fetch('/api/goals/categories');
-                const data = await response.json();
+        // Add "All Goals" section first
+        const allSection = document.createElement('div');
+        allSection.className = 'category-section';
+        allSection.id = 'section-all';
+        
+        allSection.innerHTML = `
+                <!-- Edit form for "all" section (hidden by default) -->
+                <div class="add-goal-form" id="all-edit-form" style="display: none;">
+                    <div class="form-group">
+                        <label for="goal-description-all">What do you want to accomplish?</label>
+                        <textarea id="goal-description-all" placeholder="Describe your goal..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="goal-priority-all">Priority</label>
+                            <select id="goal-priority-all">
+                                <option value="High">High</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="goal-status-all">Status</label>
+                            <select id="goal-status-all">
+                                <option value="Active" selected>Active</option>
+                                <option value="Paused">Paused</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-all" onclick="toggleOneAndDone('all')">
+                            One-and-Done Goal
+                        </button>
+                    </div>
+                    <div class="add-goal-button-row">
+                        <button class="btn" id="add-goal-btn-all" onclick="addGoal('all')">Add Goal</button>
+                        <button class="btn btn-secondary" id="cancel-btn-all" onclick="cancelEdit('all')" style="display: none; margin-left: 10px;">Cancel</button>
+                    </div>
+                </div>
                 
-                if (data.status === 'success') {
-                    categories = data.categories;
-                } else {
-                    console.error('Failed to load categories:', data.message);
-                }
-            } catch (error) {
-                console.error('Error loading categories:', error);
-            }
-        }
-        
-        // Load goals for current user
-        async function loadGoals() {
-            try {
-                const response = await fetch('/api/goals');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    goals = data.goals;
-                } else {
-                    console.error('Failed to load goals:', data.message);
-                }
-            } catch (error) {
-                console.error('Error loading goals:', error);
-            }
-        }
-        
-        // Render the entire interface
-        function renderInterface() {
-            renderCategoryTabs();
-            renderCategorySections();
-            
-            // Set "All Goals" as active on first load (no tab needed)
-            if (!currentCategory) {
-                currentCategory = 'all';
-                updateActiveSection();
-            }
-        }
-        
-        // Render category tabs
-        function renderCategoryTabs() {
-            const tabsContainer = document.getElementById('categoryTabs');
-            tabsContainer.innerHTML = '';
-            
-            // Add category tabs (no "All Goals" tab)
-            categories.forEach(category => {
-                const tab = document.createElement('div');
-                tab.className = 'category-tab';
-                tab.textContent = `${category.icon} ${category.label}`;
-                tab.dataset.category = category.value;
-                tab.onclick = () => switchCategory(category.value);
-                
-                tabsContainer.appendChild(tab);
-            });
-        }
-        
-        // Render category sections
-        function renderCategorySections() {
-            const sectionsContainer = document.getElementById('categorySections');
-            sectionsContainer.innerHTML = '';
-            
-            // Add "All Goals" section first
-            const allSection = document.createElement('div');
-            allSection.className = 'category-section';
-            allSection.id = 'section-all';
-            
-            allSection.innerHTML = `
                 <div id="all-goals-container">
                     <div class="loading-state">Loading all goals...</div>
                 </div>
             `;
+        
+        sectionsContainer.appendChild(allSection);
+        
+        // Add individual category sections
+        categories.forEach(category => {
+            const section = document.createElement('div');
+            section.className = 'category-section';
+            section.id = `section-${category.value}`;
             
-            sectionsContainer.appendChild(allSection);
-            
-            // Add individual category sections
-            categories.forEach(category => {
-                const section = document.createElement('div');
-                section.className = 'category-section';
-                section.id = `section-${category.value}`;
-                
-                section.innerHTML = `
+            section.innerHTML = `
                     <div class="category-header">
                         <span class="category-icon">${category.icon}</span>
                         <span class="category-title">${category.label} Goals</span>
@@ -467,7 +379,13 @@
                                     <option value="Paused">Paused</option>
                                 </select>
                             </div>
-                            <button class="btn" onclick="addGoal('${category.value}')">Add Goal</button>
+                            <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-${category.value}" onclick="toggleOneAndDone('${category.value}')">
+                                One-and-Done Goal
+                            </button>
+                        </div>
+                        <div class="add-goal-button-row">
+                            <button class="btn" id="add-goal-btn-${category.value}" onclick="addGoal('${category.value}')">Add Goal</button>
+                            <button class="btn btn-secondary" id="cancel-btn-${category.value}" onclick="cancelEdit('${category.value}')" style="display: none; margin-left: 10px;">Cancel</button>
                         </div>
                     </div>
                     
@@ -475,62 +393,62 @@
                         <li class="loading-state">Loading goals...</li>
                     </ul>
                 `;
-                
-                sectionsContainer.appendChild(section);
-            });
             
-            // Render goals for each category
-            categories.forEach(category => {
-                renderGoalsForCategory(category.value);
-            });
-            
-            // Render all goals
-            renderAllGoals();
+            sectionsContainer.appendChild(section);
+        });
+        
+        // Render goals for each category
+        categories.forEach(category => {
+            renderGoalsForCategory(category.value);
+        });
+        
+        // Render all goals
+        renderAllGoals();
+    }
+    
+    // Render all goals grouped by category
+    function renderAllGoals() {
+        const container = document.getElementById('all-goals-container');
+        
+        // Count total goals
+        let totalGoals = 0;
+        Object.values(goals).forEach(categoryGoals => {
+            totalGoals += categoryGoals.length;
+        });
+        
+        if (totalGoals === 0) {
+            container.innerHTML = '<div class="empty-state">No goals yet. Switch to a category tab to add your first goal!</div>';
+            return;
         }
         
-        // Render all goals grouped by category
-        function renderAllGoals() {
-            const container = document.getElementById('all-goals-container');
+        container.innerHTML = '';
+        
+        // Render each category's goals
+        categories.forEach(category => {
+            const categoryGoals = goals[category.value] || [];
+            if (categoryGoals.length === 0) return;
             
-            // Count total goals
-            let totalGoals = 0;
-            Object.values(goals).forEach(categoryGoals => {
-                totalGoals += categoryGoals.length;
-            });
-            
-            if (totalGoals === 0) {
-                container.innerHTML = '<div class="empty-state">No goals yet. Switch to a category tab to add your first goal!</div>';
-                return;
-            }
-            
-            container.innerHTML = '';
-            
-            // Render each category's goals
-            categories.forEach(category => {
-                const categoryGoals = goals[category.value] || [];
-                if (categoryGoals.length === 0) return;
-                
-                // Create category header
-                const categoryHeader = document.createElement('div');
-                categoryHeader.className = 'category-header';
-                categoryHeader.style.marginBottom = '10px';
-                categoryHeader.innerHTML = `
+            // Create category header
+            const categoryHeader = document.createElement('div');
+            categoryHeader.className = 'category-header';
+            categoryHeader.style.marginBottom = '10px';
+            categoryHeader.innerHTML = `
                     <span class="category-icon">${category.icon}</span>
                     <span class="category-title">${category.label} (${categoryGoals.length})</span>
                 `;
-                container.appendChild(categoryHeader);
+            container.appendChild(categoryHeader);
+            
+            // Create goals list for this category
+            const goalsList = document.createElement('ul');
+            goalsList.className = 'goals-list';
+            goalsList.style.marginBottom = '20px';
+            
+            categoryGoals.forEach(goal => {
+                const li = document.createElement('li');
+                li.className = 'goal-item';
+                li.dataset.goalId = goal.id;
                 
-                // Create goals list for this category
-                const goalsList = document.createElement('ul');
-                goalsList.className = 'goals-list';
-                goalsList.style.marginBottom = '20px';
-                
-                categoryGoals.forEach(goal => {
-                    const li = document.createElement('li');
-                    li.className = 'goal-item';
-                    li.dataset.goalId = goal.id;
-                    
-                    li.innerHTML = `
+                li.innerHTML = `
                         <div class="goal-content">
                             <div class="goal-text">${goal.description}</div>
                             <div class="goal-actions">
@@ -541,34 +459,35 @@
                         <div class="goal-meta">
                             <span class="goal-priority ${goal.priority.toLowerCase()}">${goal.priority}</span>
                             <span class="goal-status ${goal.status.toLowerCase()}">${goal.status}</span>
+                            ${goal.delete_on_complete ? '<span class="goal-priority" style="background-color: #d4edda; color: #155724;">🎯 One-and-Done</span>' : ''}
                         </div>
                     `;
-                    
-                    goalsList.appendChild(li);
-                });
                 
-                container.appendChild(goalsList);
+                goalsList.appendChild(li);
             });
+            
+            container.appendChild(goalsList);
+        });
+    }
+    
+    // Render goals for a specific category
+    function renderGoalsForCategory(categoryValue) {
+        const goalsList = document.getElementById(`goals-list-${categoryValue}`);
+        const categoryGoals = goals[categoryValue] || [];
+        
+        if (categoryGoals.length === 0) {
+            goalsList.innerHTML = '<li class="empty-state">No goals yet. Add your first goal above!</li>';
+            return;
         }
         
-        // Render goals for a specific category
-        function renderGoalsForCategory(categoryValue) {
-            const goalsList = document.getElementById(`goals-list-${categoryValue}`);
-            const categoryGoals = goals[categoryValue] || [];
+        goalsList.innerHTML = '';
+        
+        categoryGoals.forEach(goal => {
+            const li = document.createElement('li');
+            li.className = 'goal-item';
+            li.dataset.goalId = goal.id;
             
-            if (categoryGoals.length === 0) {
-                goalsList.innerHTML = '<li class="empty-state">No goals yet. Add your first goal above!</li>';
-                return;
-            }
-            
-            goalsList.innerHTML = '';
-            
-            categoryGoals.forEach(goal => {
-                const li = document.createElement('li');
-                li.className = 'goal-item';
-                li.dataset.goalId = goal.id;
-                
-                li.innerHTML = `
+            li.innerHTML = `
                     <div class="goal-content">
                         <div class="goal-text">${goal.description}</div>
                         <div class="goal-actions">
@@ -579,177 +498,283 @@
                     <div class="goal-meta">
                         <span class="goal-priority ${goal.priority.toLowerCase()}">${goal.priority}</span>
                         <span class="goal-status ${goal.status.toLowerCase()}">${goal.status}</span>
+                        ${goal.delete_on_complete ? '<span class="goal-priority" style="background-color: #d4edda; color: #155724;">🎯 One-and-Done</span>' : ''}
                     </div>
                 `;
-                
-                goalsList.appendChild(li);
-            });
+            
+            goalsList.appendChild(li);
+        });
+    }
+    
+    // Switch to a different category (toggle behavior)
+    function switchCategory(categoryValue) {
+        // If clicking the same category, deselect it and show all goals
+        if (currentCategory === categoryValue) {
+            currentCategory = 'all';
+        } else {
+            currentCategory = categoryValue;
+        }
+        updateActiveTab();
+        updateActiveSection();
+    }
+    
+    // Update active tab styling
+    function updateActiveTab() {
+        document.querySelectorAll('.category-tab').forEach(tab => {
+            tab.classList.remove('active');
+            if (tab.dataset.category === currentCategory) {
+                tab.classList.add('active');
+            }
+        });
+    }
+    
+    // Update active section display
+    function updateActiveSection() {
+        document.querySelectorAll('.category-section').forEach(section => {
+            section.classList.remove('active');
+            if (section.id === `section-${currentCategory}`) {
+                section.classList.add('active');
+            }
+        });
+    }
+    
+    // Add a new goal
+    async function addGoal(categoryValue) {
+        const description = document.getElementById(`goal-description-${categoryValue}`).value.trim();
+        const priority = document.getElementById(`goal-priority-${categoryValue}`).value;
+        const status = document.getElementById(`goal-status-${categoryValue}`).value;
+        const deleteOnComplete = document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`).classList.contains('active');
+        
+        if (!description) {
+            alert('Please enter a goal description');
+            return;
         }
         
-        // Switch to a different category (toggle behavior)
-        function switchCategory(categoryValue) {
-            // If clicking the same category, deselect it and show all goals
-            if (currentCategory === categoryValue) {
-                currentCategory = 'all';
+        try {
+            const response = await fetch('/api/goals', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    description: description,
+                    category: categoryValue,
+                    priority: priority,
+                    status: status,
+                    delete_on_complete: deleteOnComplete
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                // Clear form
+                document.getElementById(`goal-description-${categoryValue}`).value = '';
+                document.getElementById(`goal-priority-${categoryValue}`).value = 'Medium';
+                document.getElementById(`goal-status-${categoryValue}`).value = 'Active';
+                document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`).classList.remove('active');
+                
+                // Hide cancel button if it's visible
+                const cancelBtn = document.getElementById(`cancel-btn-${categoryValue}`);
+                cancelBtn.style.display = 'none';
+                
+                // Reload goals and re-render
+                await loadGoals();
+                renderGoalsForCategory(categoryValue);
+                renderAllGoals();
             } else {
-                currentCategory = categoryValue;
+                alert('Failed to create goal: ' + data.message);
             }
-            updateActiveTab();
-            updateActiveSection();
+        } catch (error) {
+            console.error('Error creating goal:', error);
+            alert('Error creating goal. Please try again.');
+        }
+    }
+    
+    // Toggle one-and-done goal button
+    function toggleOneAndDone(categoryValue) {
+        const btn = document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`);
+        btn.classList.toggle('active');
+    }
+    
+    // Edit a goal
+    async function editGoal(goalId) {
+        // Find the goal
+        let goalToEdit = null;
+        let categoryValue = null;
+        
+        for (const [category, categoryGoals] of Object.entries(goals)) {
+            const goal = categoryGoals.find(g => g.id === goalId);
+            if (goal) {
+                goalToEdit = goal;
+                categoryValue = category;
+                break;
+            }
         }
         
-        // Update active tab styling
-        function updateActiveTab() {
-            document.querySelectorAll('.category-tab').forEach(tab => {
-                tab.classList.remove('active');
-                if (tab.dataset.category === currentCategory) {
-                    tab.classList.add('active');
-                }
+        if (!goalToEdit) {
+            alert('Goal not found');
+            return;
+        }
+        
+        // Pre-fill form in the category form
+        document.getElementById(`goal-description-${categoryValue}`).value = goalToEdit.description;
+        document.getElementById(`goal-priority-${categoryValue}`).value = goalToEdit.priority;
+        document.getElementById(`goal-status-${categoryValue}`).value = goalToEdit.status;
+        
+        const deleteOnCompleteBtn = document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`);
+        if (goalToEdit.delete_on_complete) {
+            deleteOnCompleteBtn.classList.add('active');
+        } else {
+            deleteOnCompleteBtn.classList.remove('active');
+        }
+        
+        // Pre-fill form in the "all" section
+        document.getElementById('goal-description-all').value = goalToEdit.description;
+        document.getElementById('goal-priority-all').value = goalToEdit.priority;
+        document.getElementById('goal-status-all').value = goalToEdit.status;
+        
+        const deleteOnCompleteBtnAll = document.getElementById('goal-delete-on-complete-btn-all');
+        if (goalToEdit.delete_on_complete) {
+            deleteOnCompleteBtnAll.classList.add('active');
+        } else {
+            deleteOnCompleteBtnAll.classList.remove('active');
+        }
+        
+        // Change button to update in category form
+        const addBtn = document.getElementById(`add-goal-btn-${categoryValue}`);
+        addBtn.textContent = 'Update Goal';
+        addBtn.onclick = () => updateGoal(goalId, categoryValue);
+        
+        // Change button to update in "all" form
+        const addBtnAll = document.getElementById('add-goal-btn-all');
+        addBtnAll.textContent = 'Update Goal';
+        addBtnAll.onclick = () => updateGoal(goalId, categoryValue);
+        
+        // Show cancel button in category form
+        const cancelBtn = document.getElementById(`cancel-btn-${categoryValue}`);
+        cancelBtn.style.display = 'inline-block';
+        
+        // Show cancel button in "all" form
+        const cancelBtnAll = document.getElementById('cancel-btn-all');
+        cancelBtnAll.style.display = 'inline-block';
+        
+        // Show edit form in "all" section ONLY if we're on "all" view
+        if (currentCategory === 'all') {
+            document.getElementById('all-edit-form').style.display = 'block';
+        }
+        
+        // Scroll to top
+        scrollToTop();
+    }
+    
+    // Update a goal
+    async function updateGoal(goalId, categoryValue) {
+        const description = document.getElementById(`goal-description-${categoryValue}`).value.trim();
+        const priority = document.getElementById(`goal-priority-${categoryValue}`).value;
+        const status = document.getElementById(`goal-status-${categoryValue}`).value;
+        const deleteOnComplete = document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`).classList.contains('active');
+        
+        if (!description) {
+            alert('Please enter a goal description');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/goals/${goalId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    description: description,
+                    priority: priority,
+                    status: status,
+                    delete_on_complete: deleteOnComplete
+                })
             });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                // Reset form in category
+                resetGoalForm(categoryValue);
+                
+                // Reset form in "all" section
+                resetGoalForm('all');
+                
+                // Hide edit form in "all" section
+                document.getElementById('all-edit-form').style.display = 'none';
+                
+                // Reload goals and re-render
+                await loadGoals();
+                renderGoalsForCategory(categoryValue);
+                renderAllGoals();
+            } else {
+                alert('Failed to update goal: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error updating goal:', error);
+            alert('Error updating goal. Please try again.');
+        }
+    }
+    
+    // Cancel editing
+    function cancelEdit(categoryValue) {
+        // Reset form
+        resetGoalForm(categoryValue);
+        
+        // Reset form in "all" section
+        resetGoalForm('all');
+        
+        // Hide edit form in "all" section
+        document.getElementById('all-edit-form').style.display = 'none';
+    }
+    
+    // Reset goal form helper
+    function resetGoalForm(categoryValue) {
+        document.getElementById(`goal-description-${categoryValue}`).value = '';
+        document.getElementById(`goal-priority-${categoryValue}`).value = 'Medium';
+        document.getElementById(`goal-status-${categoryValue}`).value = 'Active';
+        document.getElementById(`goal-delete-on-complete-btn-${categoryValue}`).classList.remove('active');
+        
+        // Reset button
+        const addBtn = document.getElementById(`add-goal-btn-${categoryValue}`);
+        addBtn.textContent = 'Add Goal';
+        addBtn.onclick = () => addGoal(categoryValue);
+        
+        // Hide cancel button
+        const cancelBtn = document.getElementById(`cancel-btn-${categoryValue}`);
+        cancelBtn.style.display = 'none';
+    }
+    
+    // Delete a goal
+    async function deleteGoal(goalId) {
+        if (!confirm('Are you sure you want to delete this goal?')) {
+            return;
         }
         
-        // Update active section display
-        function updateActiveSection() {
-            document.querySelectorAll('.category-section').forEach(section => {
-                section.classList.remove('active');
-                if (section.id === `section-${currentCategory}`) {
-                    section.classList.add('active');
-                }
+        try {
+            const response = await fetch(`/api/goals/${goalId}`, {
+                method: 'DELETE'
             });
-        }
-        
-        // Add a new goal
-        async function addGoal(categoryValue) {
-            const description = document.getElementById(`goal-description-${categoryValue}`).value.trim();
-            const priority = document.getElementById(`goal-priority-${categoryValue}`).value;
-            const status = document.getElementById(`goal-status-${categoryValue}`).value;
             
-            if (!description) {
-                alert('Please enter a goal description');
-                return;
-            }
+            const data = await response.json();
             
-            try {
-                const response = await fetch('/api/goals', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        description: description,
-                        category: categoryValue,
-                        priority: priority,
-                        status: status
-                    })
+            if (data.status === 'success') {
+                // Reload goals and re-render all categories
+                await loadGoals();
+                categories.forEach(category => {
+                    renderGoalsForCategory(category.value);
                 });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Clear form
-                    document.getElementById(`goal-description-${categoryValue}`).value = '';
-                    document.getElementById(`goal-priority-${categoryValue}`).value = 'Medium';
-                    document.getElementById(`goal-status-${categoryValue}`).value = 'Active';
-                    
-                    // Reload goals and re-render
-                    await loadGoals();
-                    renderGoalsForCategory(categoryValue);
-                    renderAllGoals();
-                } else {
-                    alert('Failed to create goal: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error creating goal:', error);
-                alert('Error creating goal. Please try again.');
+                renderAllGoals();
+            } else {
+                alert('Failed to delete goal: ' + data.message);
             }
+        } catch (error) {
+            console.error('Error deleting goal:', error);
+            alert('Error deleting goal. Please try again.');
         }
-        
-        // Edit a goal
-        async function editGoal(goalId) {
-            // Find the goal
-            let goalToEdit = null;
-            let categoryValue = null;
-            
-            for (const [category, categoryGoals] of Object.entries(goals)) {
-                const goal = categoryGoals.find(g => g.id === goalId);
-                if (goal) {
-                    goalToEdit = goal;
-                    categoryValue = category;
-                    break;
-                }
-            }
-            
-            if (!goalToEdit) {
-                alert('Goal not found');
-                return;
-            }
-            
-            // Get new values from user
-            const newDescription = prompt('Edit goal description:', goalToEdit.description);
-            if (newDescription === null) return; // User cancelled
-            
-            const newPriority = prompt('Edit priority (High/Medium/Low):', goalToEdit.priority);
-            if (newPriority === null) return; // User cancelled
-            
-            const newStatus = prompt('Edit status (Active/Paused):', goalToEdit.status);
-            if (newStatus === null) return; // User cancelled
-            
-            try {
-                const response = await fetch(`/api/goals/${goalId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        description: newDescription,
-                        priority: newPriority,
-                        status: newStatus
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Reload goals and re-render
-                    await loadGoals();
-                    renderGoalsForCategory(categoryValue);
-                    renderAllGoals();
-                } else {
-                    alert('Failed to update goal: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error updating goal:', error);
-                alert('Error updating goal. Please try again.');
-            }
-        }
-        
-        // Delete a goal
-        async function deleteGoal(goalId) {
-            if (!confirm('Are you sure you want to delete this goal?')) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/goals/${goalId}`, {
-                    method: 'DELETE'
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Reload goals and re-render all categories
-                    await loadGoals();
-                    categories.forEach(category => {
-                        renderGoalsForCategory(category.value);
-                    });
-                    renderAllGoals();
-                } else {
-                    alert('Failed to delete goal: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error deleting goal:', error);
-                alert('Error deleting goal. Please try again.');
-            }
-        }
+    }
 </script>
 {% endblock %}
