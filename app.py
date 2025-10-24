@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import pytz
 from src.core.task_master import TaskMaster
-from src.auth.auth_service import get_username_from_secret_key, get_spouse_username, get_user_info, get_auth_status
+from src.auth.auth_service import get_username_from_secret_key, get_spouse_username, get_user_info, get_auth_status, require_auth
 from src.utils.background_tasks import ensure_minimums
-from src.utils.error_handlers import create_error_response, create_success_response, ratelimit_handler
+from src.utils.error_handlers import create_error_response, create_success_response, ratelimit_handler, with_error_handling, handle_service_response
 from src.services.task_service import TaskService
 from src.services.reward_service import RewardService
 from src.services.goal_service import GoalService
@@ -25,7 +25,6 @@ from src.utils.logger import logger
 load_dotenv()
 
 # Set OpenAI API key from environment
-import os
 if not os.getenv('OPENAI_API_KEY'):
     logger.warning("OPENAI_API_KEY not found in environment variables")
 
@@ -54,6 +53,8 @@ def create_app():
     )
     
     # Initialize Firestore client with explicit project ID
+    # Note: Default project ID is fallback for local development
+    # In production, GOOGLE_CLOUD_PROJECT env var should always be set
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'crucial-haiku-473123-r7')
     db = firestore.Client(project=project_id)
     
@@ -98,11 +99,6 @@ def create_app():
         """Simple test endpoint without authentication"""
         logger.info("Simple test endpoint called")
         return "Simple test works!"
-    
-    @app.route('/about')
-    def about():
-        """About page with app information"""
-        return render_template('about.html')
     
     @app.route('/api/login', methods=['POST'])
     def login():
@@ -389,10 +385,10 @@ def create_app():
     # Task Management Routes
     @app.route('/api/tasks', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads to prevent excessive queries
-    def get_tasks():
+    @require_auth
+    @with_error_handling
+    def get_tasks(username):
         """Get active task session (4 tasks) for current user"""
-        username = get_user_info()
-        
         # Ensure minimum content is available (non-blocking background task)
         ensure_minimums(task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
         
@@ -402,33 +398,31 @@ def create_app():
         logger.api_interaction('/api/tasks', 'GET', username, 200 if result['status'] == 'success' else 500, 
                               f"Returned {len(result.get('tasks', []))} tasks")
         
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     
     @app.route('/api/tasks/statistics', methods=['GET'])
     @limiter.limit("20 per minute")  # Limit reads to prevent excessive queries
-    def get_task_statistics():
+    @require_auth
+    @with_error_handling
+    def get_task_statistics(username):
         """Get task statistics including counts by category"""
-        username = get_user_info()
         result = task_service.get_task_statistics(username)
         
         # Log API interaction
         logger.api_interaction('/api/tasks/statistics', 'GET', username, 200 if result['status'] == 'success' else 500, 
                               f"Returned task statistics")
         
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     
     @app.route('/api/tasks', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit writes to prevent spam
-    def create_task():
+    @require_auth
+    @with_error_handling
+    def create_task(username):
         """Create a new task"""
         data = request.get_json()
-        username = get_user_info()
         result = task_service.create_task(data, username)
         
         # Log API interaction
@@ -441,17 +435,14 @@ def create_app():
         logger.api_interaction('/api/tasks', 'POST', username, status_code, 
                               f"Created task: {data.get('description', 'Unknown')[:50]}...")
         
-        if 'error' in result:
-            return jsonify(result), 400
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/tasks/<task_id>/complete', methods=['PUT'])
     @limiter.limit("30 per minute")  # Limit updates
-    def complete_task(task_id):
+    @require_auth
+    @with_error_handling
+    def complete_task(username, task_id):
         """Mark a task as completed and refresh the task session"""
-        username = get_user_info()
         result = task_service.complete_task(task_id, username)
         
         # Log API interaction
@@ -467,91 +458,61 @@ def create_app():
         logger.api_interaction('/api/tasks/complete', 'PUT', username, status_code, 
                               f"Completed task {task_id}, reward earned: {reward_earned}")
         
-        if result['status'] == 'error':
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/tasks/<task_id>/save', methods=['PUT'])
     @limiter.limit("30 per minute")  # Limit updates
-    def save_task(task_id):
+    @require_auth
+    @with_error_handling
+    def save_task(username, task_id):
         """Toggle save status for a task"""
-        username = get_user_info()
         result = task_service.save_task(task_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     # Reward Management Routes
     @app.route('/api/rewards', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads to prevent excessive queries
-    def get_rewards():
+    @require_auth
+    @with_error_handling
+    def get_rewards(username):
         """Get all rewards for current user (max 4)"""
-        username = get_user_info()
         result = reward_service.get_rewards(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/rewards', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit writes to prevent spam
-    def create_reward():
+    @require_auth
+    @with_error_handling
+    def create_reward(username):
         """Create a new reward"""
         data = request.get_json()
-        username = get_user_info()
         result = reward_service.create_reward(data, username)
-        
-        if 'error' in result:
-            return jsonify(result), 400
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/rewards/<reward_id>/complete', methods=['PUT'])
     @limiter.limit("30 per minute")  # Limit updates
-    def complete_reward(reward_id):
+    @require_auth
+    @with_error_handling
+    def complete_reward(username, reward_id):
         """Mark a reward as completed"""
-        username = get_user_info()
         result = reward_service.complete_reward(reward_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/rewards/<reward_id>/save', methods=['PUT'])
     @limiter.limit("30 per minute")  # Limit updates
-    def save_reward(reward_id):
+    @require_auth
+    @with_error_handling
+    def save_reward(username, reward_id):
         """Toggle save status for a reward"""
-        username = get_user_info()
         result = reward_service.save_reward(reward_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/reward-options/<option_id>/select', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit reward selections
-    def select_reward_option(option_id):
+    @require_auth
+    def select_reward_option(username, option_id):
         """Select a reward option and mark it as selected"""
         try:
-            username = get_user_info()
-            
             # Use RewardMaster to select the reward option
             selected_option = task_master.reward_master.select_reward_option(username, option_id)
             
@@ -575,57 +536,35 @@ def create_app():
     
     @app.route('/api/earned-rewards', methods=['GET'])
     @limiter.limit("20 per minute")  # Limit reads
-    def get_pending_rewards():
+    @require_auth
+    @with_error_handling
+    def get_pending_rewards(username):
         """Get pending earned rewards for current user"""
-        username = get_user_info()
         result = reward_service.get_pending_rewards(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/earned-rewards/<reward_id>/generate-options', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit reward option generation
-    def generate_reward_options(reward_id):
+    @require_auth
+    @with_error_handling
+    def generate_reward_options(username, reward_id):
         """Generate reward options for a specific earned reward"""
-        username = get_user_info()
         result = reward_service.generate_reward_options(reward_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            elif 'already been processed' in result['message'].lower():
-                status_code = 400
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/earned-rewards/<reward_id>/select-option', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit reward selections
-    def select_reward_option_from_earned(reward_id):
+    @require_auth
+    @with_error_handling
+    def select_reward_option_from_earned(username, reward_id):
         """Select a reward option for a specific earned reward"""
         data = request.get_json()
         if not data or not data.get('option_id'):
             return jsonify({'error': 'Option ID is required'}), 400
         
-        username = get_user_info()
         option_id = data['option_id']
         result = reward_service.select_reward_option(reward_id, option_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            elif 'already been processed' in result['message'].lower():
-                status_code = 400
-            elif 'failed to select' in result['message'].lower():
-                status_code = 400
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     
     # Goals Management Routes
@@ -664,67 +603,49 @@ def create_app():
     
     @app.route('/api/goals', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_goals():
+    @require_auth
+    @with_error_handling
+    def get_goals(username):
         """Get all goals for current user organized by category"""
-        username = get_user_info()
         result = goal_service.get_goals(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/goals', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit writes
-    def create_goal():
+    @require_auth
+    @with_error_handling
+    def create_goal(username):
         """Create a new goal"""
         data = request.get_json()
-        username = get_user_info()
         result = goal_service.create_goal(data, username)
-        
-        if 'error' in result:
-            return jsonify(result), 400
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/goals/<goal_id>', methods=['PUT'])
     @limiter.limit("30 per minute")  # Limit updates
-    def update_goal(goal_id):
+    @require_auth
+    @with_error_handling
+    def update_goal(username, goal_id):
         """Update an existing goal"""
         data = request.get_json()
-        username = get_user_info()
         result = goal_service.update_goal(goal_id, data, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/goals/<goal_id>', methods=['DELETE'])
     @limiter.limit("30 per minute")  # Limit deletes
-    def delete_goal(goal_id):
+    @require_auth
+    @with_error_handling
+    def delete_goal(username, goal_id):
         """Delete a goal"""
-        username = get_user_info()
         result = goal_service.delete_goal(goal_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/goals/categories', methods=['GET'])
-    def get_categories():
+    @require_auth
+    @with_error_handling
+    def get_categories(username):
         """Get available goal categories"""
         result = goal_service.get_categories()
-        return jsonify(result)
+        return result
     
     @app.route('/api/reward-goals/test', methods=['GET'])
     def test_reward_goals():
@@ -738,102 +659,65 @@ def create_app():
     # Daily Tasks API Routes
     @app.route('/api/daily-tasks', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_daily_tasks():
+    @require_auth
+    @with_error_handling
+    def get_daily_tasks(username):
         """Get all daily task templates for current user"""
-        username = get_user_info()
         result = daily_task_service.get_daily_tasks(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit creates
-    def create_daily_task():
+    @require_auth
+    @with_error_handling
+    def create_daily_task(username):
         """Create a new daily task template"""
-        username = get_user_info()
         data = request.get_json()
-        
         result = daily_task_service.create_daily_task(data, username)
-        
-        if result['status'] == 'error':
-            status_code = 400
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks/<task_id>', methods=['PUT'])
     @limiter.limit("20 per minute")  # Limit updates
-    def update_daily_task(task_id):
+    @require_auth
+    @with_error_handling
+    def update_daily_task(username, task_id):
         """Update an existing daily task template"""
-        username = get_user_info()
         data = request.get_json()
-        
         result = daily_task_service.update_daily_task(task_id, data, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks/<task_id>', methods=['DELETE'])
     @limiter.limit("20 per minute")  # Limit deletes
-    def delete_daily_task(task_id):
+    @require_auth
+    @with_error_handling
+    def delete_daily_task(username, task_id):
         """Delete a daily task template"""
-        username = get_user_info()
         result = daily_task_service.delete_daily_task(task_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks/today', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_todays_daily_tasks():
+    @require_auth
+    @with_error_handling
+    def get_todays_daily_tasks(username):
         """Get today's daily task instances"""
-        username = get_user_info()
         result = daily_task_service.get_todays_instances(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks/today/<instance_id>/complete', methods=['PUT'])
     @limiter.limit("20 per minute")  # Limit completions
-    def complete_daily_task(instance_id):
+    @require_auth
+    @with_error_handling
+    def complete_daily_task(username, instance_id):
         """Complete a daily task instance"""
-        username = get_user_info()
         result = daily_task_service.complete_daily_task(instance_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            elif 'already completed' in result['message'].lower():
-                status_code = 400
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/daily-tasks/reset', methods=['POST'])
     @limiter.limit("5 per minute")  # Limit resets
-    def reset_daily_tasks():
+    @require_auth
+    def reset_daily_tasks(username):
         """Reset daily tasks (for testing) - deletes today's instances and recreates them"""
-        username = get_user_info()
-        
         # Delete today's instances
         today_central = datetime.now(pytz.timezone('America/Chicago')).date()
         instances_query = db.collection('daily_task_instances').where(
@@ -868,31 +752,28 @@ def create_app():
     
     @app.route('/api/collaboration/tracker', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_collaboration_tracker():
+    @require_auth
+    @with_error_handling
+    def get_collaboration_tracker(username):
         """Get current tracker value and user's goals"""
-        username = get_user_info()
         result = collaboration_service.get_tracker_display(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/collaboration/todays-points', methods=['GET'])
     @limiter.limit("50 per minute")
-    def get_todays_points():
+    @require_auth
+    @with_error_handling
+    def get_todays_points(username):
         """Get today's total points for current user"""
-        username = get_user_info()
         result = collaboration_service.get_todays_total_points(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/collaboration/goals', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit updates
-    def set_collaboration_goals():
+    @require_auth
+    @with_error_handling
+    def set_collaboration_goals(username):
         """Set user's stretch setting and adjustment multiplier"""
-        username = get_user_info()
         data = request.get_json()
         
         if not data or 'stretch_setting' not in data:
@@ -905,17 +786,13 @@ def create_app():
         adjustment_multiplier = data.get('adjustment_multiplier', None)
         
         result = collaboration_service.set_user_stretch_setting(username, data['stretch_setting'], adjustment_multiplier)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 400
-        return jsonify(result)
+        return result
     
     @app.route('/api/collaboration/history', methods=['GET'])
     @limiter.limit("20 per minute")
-    def get_collaboration_history():
+    @require_auth
+    def get_collaboration_history(username):
         """Get last 7 days of tracker history"""
-        username = get_user_info()
-        
         # Query tracker_history collection, ordered by date desc, limit 7
         history_query = db.collection('tracker_history').order_by(
             'date', direction=firestore.Query.DESCENDING
@@ -940,9 +817,10 @@ def create_app():
     
     @app.route('/api/collaboration/progress-day', methods=['POST'])
     @limiter.limit("5 per minute")
-    def progress_day_testing():
+    @require_auth
+    @with_error_handling
+    def progress_day_testing(username):
         """Manually trigger day progression for testing with optional point overrides"""
-        username = get_user_info()
         data = request.get_json() or {}
         
         ian_points = data.get('ian_points')
@@ -962,118 +840,91 @@ def create_app():
                 return jsonify({'status': 'error', 'message': 'Invalid karleigh_points value'}), 400
         
         result = collaboration_service.progress_day_for_testing(ian_points, karleigh_points)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/collaboration/reset-history', methods=['POST'])
     @limiter.limit("5 per minute")
-    def reset_tracker_history():
+    @require_auth
+    @with_error_handling
+    def reset_tracker_history(username):
         """Reset tracker history for testing"""
-        username = get_user_info()
-        
         # Simple check - in production you'd want more security
         # For now, just allow in test environment
         result = collaboration_service.reset_tracker_history()
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/rewards-owed', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_rewards_owed():
+    @require_auth
+    @with_error_handling
+    def get_rewards_owed(username):
         """Get pending rewards owed for current user"""
-        username = get_user_info()
         result = goal_service.get_rewards_owed(username)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/rewards-owed/<goal_id>/complete', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit completions
-    def complete_reward_owed(goal_id):
+    @require_auth
+    @with_error_handling
+    def complete_reward_owed(username, goal_id):
         """Complete a reward owed"""
-        username = get_user_info()
         result = goal_service.complete_reward_owed(goal_id, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            elif 'unauthorized' in result['message'].lower():
-                status_code = 403
-            elif 'already completed' in result['message'].lower():
-                status_code = 400
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     # Morning Card API Routes
     @app.route('/api/morning-cards', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_morning_cards():
+    @require_auth
+    @with_error_handling
+    def get_morning_cards(username):
         """Get all morning card templates"""
         result = morning_card_service.get_card_templates()
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards', methods=['POST'])
     @limiter.limit("20 per minute")  # Limit creates
-    def create_morning_card():
+    @require_auth
+    @with_error_handling
+    def create_morning_card(username):
         """Create a new morning card template"""
         data = request.get_json()
         result = morning_card_service.create_card_template(data)
-        
-        if result['status'] == 'error':
-            return jsonify(result), 400
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards/<card_id>', methods=['PUT'])
     @limiter.limit("20 per minute")  # Limit updates
-    def update_morning_card(card_id):
+    @require_auth
+    @with_error_handling
+    def update_morning_card(username, card_id):
         """Update an existing morning card template"""
         data = request.get_json()
         result = morning_card_service.update_card_template(card_id, data)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards/<card_id>', methods=['DELETE'])
     @limiter.limit("20 per minute")  # Limit deletes
-    def delete_morning_card(card_id):
+    @require_auth
+    @with_error_handling
+    def delete_morning_card(username, card_id):
         """Delete a morning card template"""
         result = morning_card_service.delete_card_template(card_id)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards/today', methods=['GET'])
     @limiter.limit("50 per minute")  # Limit reads
-    def get_todays_morning_cards():
+    @require_auth
+    @with_error_handling
+    def get_todays_morning_cards(username):
         """Get today's morning card selection"""
         result = morning_card_service.get_todays_selection()
-        
-        if result['status'] == 'error':
-            return jsonify(result), 500
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards/today/select', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit selections
-    def select_morning_cards():
+    @require_auth
+    @with_error_handling
+    def select_morning_cards(username):
         """Lock in card selection (Karleigh only)"""
-        username = get_user_info()
         data = request.get_json()
         
         if not data or 'card_ids' not in data:
@@ -1084,28 +935,16 @@ def create_app():
         
         card_ids = data['card_ids']
         result = morning_card_service.select_cards(card_ids, username)
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'already locked' in result['message'].lower():
-                status_code = 400
-            elif 'only karleigh' in result['message'].lower():
-                status_code = 403
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     @app.route('/api/morning-cards/today/unlock', methods=['POST'])
     @limiter.limit("10 per minute")  # Limit unlocks (testing only)
-    def unlock_morning_cards():
+    @require_auth
+    @with_error_handling
+    def unlock_morning_cards(username):
         """Unlock today's card selection for testing"""
         result = morning_card_service.unlock_todays_selection()
-        
-        if result['status'] == 'error':
-            status_code = 500
-            if 'not found' in result['message'].lower():
-                status_code = 404
-            return jsonify(result), status_code
-        return jsonify(result)
+        return result
     
     # DISABLED: Challenges system temporarily disabled
     # @app.route('/api/challenges', methods=['GET'])
