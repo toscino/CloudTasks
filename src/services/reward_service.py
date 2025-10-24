@@ -6,6 +6,7 @@ from google.cloud.firestore import FieldFilter
 from datetime import datetime
 from src.models.reward import RewardModel, EarnedRewardModel, create_reward_from_request_data, create_earned_reward_from_task
 from src.utils.background_tasks import ensure_minimums
+from src.utils.firestore_helpers import prepare_firestore_document
 from typing import List, Dict, Any
 
 
@@ -25,8 +26,7 @@ class RewardService:
             
             rewards = []
             for doc in rewards_docs:
-                reward_data = doc.to_dict()
-                reward_data['id'] = doc.id
+                reward_data = prepare_firestore_document(doc)
                 
                 # Only include incomplete rewards (client-side filtering)
                 if not reward_data.get('completed', False):

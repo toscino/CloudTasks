@@ -4,9 +4,9 @@ Statistics service - handles statistics and comparison logic
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, timedelta
-import pytz
 from src.utils.background_tasks import ensure_minimums
 from src.utils.logger import logger
+from src.utils.config import get_timezone
 from typing import Dict, Any
 
 
@@ -22,7 +22,7 @@ class StatisticsService:
         try:
             # Calculate Friday 5pm to Friday 5pm week boundaries
             # Get current time in local timezone (Central - Iowa/Chicago)
-            local_tz = pytz.timezone('US/Central')
+            local_tz = get_timezone()
             now = datetime.now(local_tz)
             
             # Determine if we should show last week's score (Friday 5pm through Sunday)

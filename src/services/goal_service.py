@@ -6,6 +6,7 @@ from google.cloud.firestore import FieldFilter
 from datetime import datetime
 from src.models.goal import GoalModel, RewardGoalModel, create_goal_from_request_data, create_reward_goal_from_option
 from src.utils.logger import logger
+from src.utils.firestore_helpers import prepare_firestore_document
 from typing import List, Dict, Any
 
 
@@ -24,8 +25,7 @@ class GoalService:
             
             goals_by_category = {}
             for doc in goals_docs:
-                goal_data = doc.to_dict()
-                goal_data['id'] = doc.id
+                goal_data = prepare_firestore_document(doc)
                 
                 category = goal_data.get('category', 'General')
                 if category not in goals_by_category:
