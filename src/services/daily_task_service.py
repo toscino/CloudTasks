@@ -4,8 +4,9 @@ Daily Task Service - handles daily task templates and instances
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
-import pytz
 from src.utils.logger import logger
+from src.utils.config import get_timezone, get_collection
+from src.utils.firestore_helpers import prepare_firestore_document
 from typing import List, Dict, Any
 
 
@@ -14,7 +15,7 @@ class DailyTaskService:
     
     def __init__(self, db):
         self.db = db
-        self.central_tz = pytz.timezone('America/Chicago')  # Central time
+        self.central_tz = get_timezone()
     
     def get_daily_tasks(self, username: str) -> Dict[str, Any]:
         """Get all daily task templates for user"""
@@ -25,15 +26,7 @@ class DailyTaskService:
             
             templates = []
             for doc in templates_docs:
-                template_data = doc.to_dict()
-                template_data['id'] = doc.id
-                
-                # Convert timestamps
-                if 'created_at' in template_data and hasattr(template_data['created_at'], 'timestamp'):
-                    template_data['created_at'] = datetime.fromtimestamp(template_data['created_at'].timestamp())
-                if 'updated_at' in template_data and hasattr(template_data['updated_at'], 'timestamp'):
-                    template_data['updated_at'] = datetime.fromtimestamp(template_data['updated_at'].timestamp())
-                
+                template_data = prepare_firestore_document(doc)
                 templates.append(template_data)
             
             return {
@@ -253,15 +246,7 @@ class DailyTaskService:
             completed_points = 0
             
             for doc in instances_docs:
-                instance_data = doc.to_dict()
-                instance_data['id'] = doc.id
-                
-                # Convert timestamps
-                if 'completed_at' in instance_data and hasattr(instance_data['completed_at'], 'timestamp'):
-                    instance_data['completed_at'] = datetime.fromtimestamp(instance_data['completed_at'].timestamp())
-                if 'created_at' in instance_data and hasattr(instance_data['created_at'], 'timestamp'):
-                    instance_data['created_at'] = datetime.fromtimestamp(instance_data['created_at'].timestamp())
-                
+                instance_data = prepare_firestore_document(doc)
                 instances.append(instance_data)
                 total_points += instance_data.get('points', 0)
                 if instance_data.get('completed', False):

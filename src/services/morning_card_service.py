@@ -4,9 +4,10 @@ Morning Card Service - handles morning card templates and daily selections
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
-import pytz
 import random
 from src.utils.logger import logger
+from src.utils.config import get_timezone
+from src.utils.firestore_helpers import prepare_firestore_document
 from typing import List, Dict, Any
 
 
@@ -15,7 +16,7 @@ class MorningCardService:
     
     def __init__(self, db):
         self.db = db
-        self.central_tz = pytz.timezone('America/Chicago')  # Central time
+        self.central_tz = get_timezone()
     
     def get_card_templates(self) -> Dict[str, Any]:
         """Get all card templates"""
@@ -25,15 +26,7 @@ class MorningCardService:
             
             templates = []
             for doc in templates_docs:
-                template_data = doc.to_dict()
-                template_data['id'] = doc.id
-                
-                # Convert timestamps
-                if 'created_at' in template_data and hasattr(template_data['created_at'], 'timestamp'):
-                    template_data['created_at'] = datetime.fromtimestamp(template_data['created_at'].timestamp())
-                if 'updated_at' in template_data and hasattr(template_data['updated_at'], 'timestamp'):
-                    template_data['updated_at'] = datetime.fromtimestamp(template_data['updated_at'].timestamp())
-                
+                template_data = prepare_firestore_document(doc)
                 templates.append(template_data)
             
             return {
@@ -195,12 +188,7 @@ class MorningCardService:
             selection_docs = list(selection_query.stream())
             
             if selection_docs:
-                selection_data = selection_docs[0].to_dict()
-                selection_data['id'] = selection_docs[0].id
-                
-                # Convert timestamps
-                if 'created_at' in selection_data and hasattr(selection_data['created_at'], 'timestamp'):
-                    selection_data['created_at'] = datetime.fromtimestamp(selection_data['created_at'].timestamp())
+                selection_data = prepare_firestore_document(selection_docs[0])
                 
                 return {
                     'status': 'success',

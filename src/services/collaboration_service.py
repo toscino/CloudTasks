@@ -1,11 +1,11 @@
 """
 Collaboration service - manages the shared collaboration tracker and user goals
 """
-import pytz
 from datetime import datetime, timedelta
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from src.utils.logger import logger
+from src.utils.config import get_timezone, get_spouse
 from src.auth.auth_service import get_spouse_username
 
 
@@ -14,7 +14,7 @@ class CollaborationService:
     
     def __init__(self, db):
         self.db = db
-        self.central_tz = pytz.timezone('America/Chicago')
+        self.central_tz = get_timezone()
     
     def get_or_create_tracker(self):
         """Get tracker or create with initial value of 5"""
