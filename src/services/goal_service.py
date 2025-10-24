@@ -13,13 +13,35 @@ from typing import List, Dict, Any
 
 
 class GoalService:
-    """Service for goal-related operations"""
+    """
+    Service for goal-related operations.
+    
+    Handles CRUD operations for goals including creation, updates, deletion,
+    and organization by category. Also manages rewards owed functionality.
+    """
     
     def __init__(self, db):
+        """
+        Initialize the GoalService.
+        
+        Args:
+            db: Firestore database client instance
+        """
         self.db = db
     
     def get_goals(self, username: str) -> Dict[str, Any]:
-        """Get all goals for current user organized by category"""
+        """
+        Get all goals for current user organized by category.
+        
+        Args:
+            username: Username of the user whose goals to retrieve
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - goals: Dict of goals grouped by category (if success)
+                - message: Error message (if error)
+        """
         try:
             # Query goals for this user
             goals_query = self.db.collection('goals').where('username', '==', username)
@@ -45,7 +67,22 @@ class GoalService:
             }
     
     def create_goal(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Create a new goal"""
+        """
+        Create a new goal for the user.
+        
+        Args:
+            data: Dict containing goal data with required 'description' field
+            username: Username of the user creating the goal
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - goal_id: ID of created goal (if success)
+                - message: Success or error message
+                
+        Raises:
+            ValidationError: If description is missing or invalid
+        """
         try:
             if not data or not data.get('description'):
                 raise ValidationError(
@@ -76,7 +113,23 @@ class GoalService:
             return handle_exception(e, "Unexpected error creating goal")
     
     def update_goal(self, goal_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Update an existing goal"""
+        """
+        Update an existing goal.
+        
+        Args:
+            goal_id: ID of the goal to update
+            data: Dict containing fields to update (description, category, priority, status, delete_on_complete)
+            username: Username of the user requesting the update
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - message: Success or error message
+                
+        Raises:
+            NotFoundError: If goal doesn't exist
+            UnauthorizedError: If goal belongs to another user
+        """
         try:
             doc_ref = self.db.collection('goals').document(goal_id)
             doc = doc_ref.get()
@@ -119,7 +172,22 @@ class GoalService:
             return handle_exception(e, "Unexpected error updating goal")
     
     def delete_goal(self, goal_id: str, username: str) -> Dict[str, Any]:
-        """Delete a goal"""
+        """
+        Delete a goal.
+        
+        Args:
+            goal_id: ID of the goal to delete
+            username: Username of the user requesting deletion
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - message: Success or error message
+                
+        Raises:
+            NotFoundError: If goal doesn't exist
+            UnauthorizedError: If goal belongs to another user
+        """
         try:
             doc_ref = self.db.collection('goals').document(goal_id)
             doc = doc_ref.get()
@@ -149,7 +217,14 @@ class GoalService:
             return handle_exception(e, "Unexpected error deleting goal")
     
     def get_categories(self) -> Dict[str, Any]:
-        """Get available goal categories"""
+        """
+        Get available goal categories with metadata.
+        
+        Returns:
+            Dict containing:
+                - status: 'success'
+                - categories: List of category dicts with value, label, and icon
+        """
         categories = [
             {'value': 'Work', 'label': 'Work', 'icon': '💼'},
             {'value': 'Kids', 'label': 'Kids', 'icon': '👶'},
@@ -164,7 +239,20 @@ class GoalService:
         }
     
     def get_rewards_owed(self, username: str) -> Dict[str, Any]:
-        """Get pending rewards owed for current user"""
+        """
+        Get pending rewards owed for the user.
+        
+        Retrieves reward goals that the user needs to fulfill (rewards their spouse selected).
+        
+        Args:
+            username: Username of the user
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - rewards: List of pending reward goals (if success)
+                - message: Error message (if error)
+        """
         try:
             logger.debug(f"Fetching rewards for user: {username}")
             
@@ -203,7 +291,22 @@ class GoalService:
             }
     
     def complete_reward_owed(self, goal_id: str, username: str) -> Dict[str, Any]:
-        """Complete a reward owed"""
+        """
+        Complete a reward owed by marking it as completed.
+        
+        Args:
+            goal_id: ID of the reward goal to complete
+            username: Username of the user completing the reward
+            
+        Returns:
+            Dict containing:
+                - status: 'success' or 'error'
+                - message: Success or error message
+                
+        Raises:
+            NotFoundError: If reward goal doesn't exist
+            UnauthorizedError: If reward belongs to another user
+        """
         try:
             doc_ref = self.db.collection('reward_goals').document(goal_id)
             doc = doc_ref.get()
