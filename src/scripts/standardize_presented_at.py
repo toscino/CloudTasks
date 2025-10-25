@@ -32,7 +32,7 @@ def migrate_presented_at_field(dry_run=True, limit=None):
     """
     try:
         # Initialize Firestore client
-        project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'cloudtasks-app-473120')
+        project_id = os.environ['GOOGLE_CLOUD_PROJECT']
         db = firestore.Client(project=project_id)
         
         logger.info(f"Starting presented_at standardization {'(DRY RUN)' if dry_run else '(LIVE RUN)'}")

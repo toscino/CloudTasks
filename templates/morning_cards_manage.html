@@ -208,26 +208,16 @@
                 </div>
             </div>
             
-            <!-- Ian's Rules Section -->
+            <!-- User Rules Section -->
             <div class="rules-section">
-                <h3>Ian's Rules</h3>
-                <div id="ian-rules-container">
-                    <!-- Dynamic rule inputs will be added here -->
+                <h3>User Rules</h3>
+                <div id="user-rules-container">
+                    <!-- Dynamic rule sections will be added here for current user and spouse -->
                 </div>
-                <button class="add-rule-btn" onclick="addRule('ian')">+ Add Ian Rule</button>
-            </div>
-            
-            <!-- Karleigh's Rules Section -->
-            <div class="rules-section">
-                <h3>Karleigh's Rules</h3>
-                <div id="karleigh-rules-container">
-                    <!-- Dynamic rule inputs will be added here -->
-                </div>
-                <button class="add-rule-btn" onclick="addRule('karleigh')">+ Add Karleigh Rule</button>
             </div>
             
             <div class="form-row" style="margin-top: 20px;">
-                <button class="btn" onclick="addCard()">Create Card</button>
+                <button class="btn" id="add-card-btn">Create Card</button>
             </div>
         </div>
         
@@ -245,8 +235,77 @@
 <script>
         // Card Management JavaScript
         let cards = [];
-        let ianRuleCount = 0;
-        let karleighRuleCount = 0;
+        let userRuleSections = {}; // Track user rule sections: {username: {count: number}}
+        
+        // Add a new user rule section
+        function addUserRuleSection(username = '') {
+            const container = document.getElementById('user-rules-container');
+            
+            // Get unique username
+            if (!username) {
+                username = prompt('Enter username for this rule section:');
+                if (!username) return;
+            }
+            
+            const sectionId = `user-rules-${username}`;
+            
+            // Check if section already exists
+            if (document.getElementById(sectionId)) {
+                alert(`Rules section for ${username} already exists`);
+                return;
+            }
+            
+            // Initialize tracking
+            if (!userRuleSections[username]) {
+                userRuleSections[username] = { count: 0 };
+            }
+            
+            // Create section HTML
+            const sectionDiv = document.createElement('div');
+            sectionDiv.className = 'user-rule-section';
+            sectionDiv.id = sectionId;
+            sectionDiv.innerHTML = `
+                <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px;">
+                    <h4 class="username-label" style="margin: 0 0 10px 0;">${username}'s Rules</h4>
+                    <div class="rules-list-container" id="rules-list-${username}">
+                        <!-- Rules will be added here -->
+                    </div>
+                    <button class="add-rule-btn" data-username="${username}" data-action="add-rule" style="margin-top: 10px;">+ Add Rule</button>
+                </div>
+            `;
+            
+            container.appendChild(sectionDiv);
+        }
+        
+        // Remove a user rule section
+        function removeUserRuleSection(username) {
+            const sectionId = `user-rules-${username}`;
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.remove();
+                delete userRuleSections[username];
+            }
+        }
+        
+        // Initialize user rule sections for current user and spouse
+        function initializeUserRuleSections() {
+            const currentUser = window.authState?.currentUsername;
+            const spouseUsername = window.authState?.spouseUsername;
+            
+            // Clear existing sections
+            document.getElementById('user-rules-container').innerHTML = '';
+            userRuleSections = {};
+            
+            // Add section for current user
+            if (currentUser) {
+                addUserRuleSection(currentUser);
+            }
+            
+            // Add section for spouse if linked
+            if (spouseUsername) {
+                addUserRuleSection(spouseUsername);
+            }
+        }
         
         // Wait for authentication to be ready, then load data
         document.addEventListener('DOMContentLoaded', async function() {
@@ -261,8 +320,14 @@
                 checkAuth();
             });
             
+            // Initialize user rule sections
+            initializeUserRuleSections();
+            
             await loadCards();
             renderCards();
+            
+            // Set up event listeners
+            setupEventListeners();
         });
         
         // Load all card templates
@@ -290,9 +355,14 @@
                 return;
             }
             
+            // Sort cards alphabetically by card text
+            const sortedCards = [...cards].sort((a, b) => {
+                return a.card_text.localeCompare(b.card_text);
+            });
+            
             cardsList.innerHTML = '';
             
-            cards.forEach(card => {
+            sortedCards.forEach(card => {
                 const li = document.createElement('li');
                 li.className = 'card-item';
                 li.dataset.cardId = card.id;
@@ -306,8 +376,15 @@
                     const sign = card.timer_minutes > 0 ? '+' : '';
                     cardTags.push(`⏰ ${sign}${card.timer_minutes}`);
                 }
-                if (card.ian_rules && card.ian_rules.length > 0) cardTags.push(`Ian: ${card.ian_rules.length} rule${card.ian_rules.length > 1 ? 's' : ''}`);
-                if (card.karleigh_rules && card.karleigh_rules.length > 0) cardTags.push(`Karleigh: ${card.karleigh_rules.length} rule${card.karleigh_rules.length > 1 ? 's' : ''}`);
+                // Add user rules to tags
+                if (card.user_rules && typeof card.user_rules === 'object') {
+                    Object.keys(card.user_rules).forEach(username => {
+                        const rules = card.user_rules[username];
+                        if (rules && rules.length > 0) {
+                            cardTags.push(`${username}: ${rules.length} rule${rules.length > 1 ? 's' : ''}`);
+                        }
+                    });
+                }
                 
                 const tagsHtml = cardTags.map(tag => `<span class="card-tag">${tag}</span>`).join('');
                 
@@ -315,8 +392,8 @@
                     <div class="card-content">
                         <div class="card-text">${card.card_text}</div>
                         <div class="card-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="editCard('${card.id}')">Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteCard('${card.id}')">Delete</button>
+                            <button class="btn btn-sm btn-secondary" data-card-id="${card.id}" data-action="edit-card">Edit</button>
+                            <button class="btn btn-sm btn-danger" data-card-id="${card.id}" data-action="delete-card">Delete</button>
                         </div>
                     </div>
                     <div class="card-meta">${tagsHtml}</div>
@@ -332,18 +409,29 @@
             const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
             const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
             
-            // Get Ian's rules
-            const ianRules = [];
-            document.querySelectorAll('#ian-rules-container .rule-input').forEach(input => {
-                const value = input.value.trim();
-                if (value) ianRules.push(value);
-            });
-            
-            // Get Karleigh's rules
-            const karleighRules = [];
-            document.querySelectorAll('#karleigh-rules-container .rule-input').forEach(input => {
-                const value = input.value.trim();
-                if (value) karleighRules.push(value);
+            // Collect user rules dynamically
+            const userRules = {};
+            document.querySelectorAll('.user-rule-section').forEach(section => {
+                const usernameLabel = section.querySelector('.username-label').textContent.replace("'s Rules", '').trim();
+                const currentUser = window.authState?.currentUsername || '';
+                const spouseUsername = window.authState?.spouseUsername || '';
+                
+                // Map to generic keys
+                let ruleKey = 'mine';
+                if (usernameLabel === spouseUsername) {
+                    ruleKey = 'spouse';
+                } else if (usernameLabel !== currentUser) {
+                    ruleKey = usernameLabel; // Fallback for other usernames
+                }
+                
+                const rules = [];
+                section.querySelectorAll('.rule-input').forEach(input => {
+                    const value = input.value.trim();
+                    if (value) rules.push(value);
+                });
+                if (rules.length > 0) {
+                    userRules[ruleKey] = rules;
+                }
             });
             
             if (!cardText) {
@@ -361,8 +449,7 @@
                         card_text: cardText,
                         clothes_points: clothesPoints,
                         timer_minutes: timerMinutes,
-                        ian_rules: ianRules,
-                        karleigh_rules: karleighRules,
+                        user_rules: userRules,
                         active: true
                     })
                 });
@@ -374,10 +461,7 @@
                     document.getElementById('card-text').value = '';
                     document.getElementById('clothes-points').value = '0';
                     document.getElementById('timer-minutes').value = '0';
-                    document.getElementById('ian-rules-container').innerHTML = '';
-                    document.getElementById('karleigh-rules-container').innerHTML = '';
-                    ianRuleCount = 0;
-                    karleighRuleCount = 0;
+                    initializeUserRuleSections();
                     
                     // Reload cards
                     await loadCards();
@@ -397,6 +481,22 @@
                 return;
             }
             
+            // Optimistic UI update - remove immediately
+            const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
+            if (cardElement) {
+                cardElement.remove();
+            }
+            
+            // Store original state for potential rollback
+            const originalCards = [...cards];
+            cards = cards.filter(card => card.id !== cardId);
+            
+            // Show empty state if no cards left
+            if (cards.length === 0) {
+                const cardsList = document.getElementById('cards-list');
+                cardsList.innerHTML = '<li class="empty-state">No cards yet. Add your first card above!</li>';
+            }
+            
             try {
                 const response = await fetch(`/api/morning-cards/${cardId}`, {
                     method: 'DELETE'
@@ -404,13 +504,16 @@
                 
                 const data = await response.json();
                 
-                if (data.status === 'success') {
-                    await loadCards();
+                if (data.status !== 'success') {
+                    // Rollback on failure
+                    cards = originalCards;
                     renderCards();
-                } else {
                     alert('Failed to delete card: ' + data.message);
                 }
             } catch (error) {
+                // Rollback on error
+                cards = originalCards;
+                renderCards();
                 console.error('Error deleting card:', error);
                 alert('Error deleting card. Please try again.');
             }
@@ -429,18 +532,20 @@
             document.getElementById('clothes-points').value = card.clothes_points || 0;
             document.getElementById('timer-minutes').value = card.timer_minutes || 0;
             
-            // Clear and populate rules
-            document.getElementById('ian-rules-container').innerHTML = '';
-            ianRuleCount = 0;
-            card.ian_rules.forEach(rule => {
-                addRule('ian', rule);
-            });
+            // Initialize sections and populate rules dynamically
+            initializeUserRuleSections();
             
-            document.getElementById('karleigh-rules-container').innerHTML = '';
-            karleighRuleCount = 0;
-            card.karleigh_rules.forEach(rule => {
-                addRule('karleigh', rule);
-            });
+            // Populate user_rules if they exist
+            if (card.user_rules && typeof card.user_rules === 'object') {
+                Object.keys(card.user_rules).forEach(username => {
+                    const rules = card.user_rules[username];
+                    if (Array.isArray(rules)) {
+                        rules.forEach(rule => {
+                            addRule(username, rule);
+                        });
+                    }
+                });
+            }
             
             // Change button to update
             const btn = document.querySelector('.add-card-form .btn');
@@ -457,16 +562,29 @@
             const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
             const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
             
-            const ianRules = [];
-            document.querySelectorAll('#ian-rules-container .rule-input').forEach(input => {
-                const value = input.value.trim();
-                if (value) ianRules.push(value);
-            });
-            
-            const karleighRules = [];
-            document.querySelectorAll('#karleigh-rules-container .rule-input').forEach(input => {
-                const value = input.value.trim();
-                if (value) karleighRules.push(value);
+            // Collect user rules dynamically
+            const userRules = {};
+            document.querySelectorAll('.user-rule-section').forEach(section => {
+                const usernameLabel = section.querySelector('.username-label').textContent.replace("'s Rules", '').trim();
+                const currentUser = window.authState?.currentUsername || '';
+                const spouseUsername = window.authState?.spouseUsername || '';
+                
+                // Map to generic keys
+                let ruleKey = 'mine';
+                if (usernameLabel === spouseUsername) {
+                    ruleKey = 'spouse';
+                } else if (usernameLabel !== currentUser) {
+                    ruleKey = usernameLabel; // Fallback for other usernames
+                }
+                
+                const rules = [];
+                section.querySelectorAll('.rule-input').forEach(input => {
+                    const value = input.value.trim();
+                    if (value) rules.push(value);
+                });
+                if (rules.length > 0) {
+                    userRules[ruleKey] = rules;
+                }
             });
             
             if (!cardText) {
@@ -484,8 +602,7 @@
                         card_text: cardText,
                         clothes_points: clothesPoints,
                         timer_minutes: timerMinutes,
-                        ian_rules: ianRules,
-                        karleigh_rules: karleighRules
+                        user_rules: userRules
                     })
                 });
                 
@@ -496,10 +613,7 @@
                     document.getElementById('card-text').value = '';
                     document.getElementById('clothes-points').value = '0';
                     document.getElementById('timer-minutes').value = '0';
-                    document.getElementById('ian-rules-container').innerHTML = '';
-                    document.getElementById('karleigh-rules-container').innerHTML = '';
-                    ianRuleCount = 0;
-                    karleighRuleCount = 0;
+                    initializeUserRuleSections();
                     
                     // Reset button
                     const btn = document.querySelector('.add-card-form .btn');
@@ -518,16 +632,21 @@
         }
         
         // Add a rule input
-        function addRule(user, existingValue = '') {
-            const container = document.getElementById(`${user}-rules-container`);
-            const ruleCount = user === 'ian' ? ++ianRuleCount : ++karleighRuleCount;
-            const ruleId = `${user}-rule-${ruleCount}`;
+        function addRule(username, existingValue = '') {
+            const container = document.getElementById(`rules-list-${username}`);
+            if (!container) {
+                addUserRuleSection(username);
+                return addRule(username, existingValue);
+            }
+            
+            const ruleCount = ++userRuleSections[username].count;
+            const ruleId = `${username}-rule-${ruleCount}`;
             
             const ruleGroup = document.createElement('div');
             ruleGroup.className = 'rule-input-group';
             ruleGroup.innerHTML = `
                 <input type="text" class="rule-input" id="${ruleId}" value="${existingValue}" placeholder="Enter rule...">
-                <button onclick="removeRule('${ruleId}')">Remove</button>
+                <button data-rule-id="${ruleId}" data-action="remove-rule">Remove</button>
             `;
             
             container.appendChild(ruleGroup);
@@ -539,6 +658,31 @@
             if (ruleInput) {
                 ruleInput.closest('.rule-input-group').remove();
             }
+        }
+        
+        // Set up event listeners for buttons
+        function setupEventListeners() {
+            const addCardBtn = document.getElementById('add-card-btn');
+            if (addCardBtn) {
+                addCardBtn.addEventListener('click', addCard);
+            }
+            
+            // Use event delegation for dynamically created buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.matches('[data-action="edit-card"]')) {
+                    const cardId = e.target.getAttribute('data-card-id');
+                    editCard(cardId);
+                } else if (e.target.matches('[data-action="delete-card"]')) {
+                    const cardId = e.target.getAttribute('data-card-id');
+                    deleteCard(cardId);
+                } else if (e.target.matches('[data-action="add-rule"]')) {
+                    const username = e.target.getAttribute('data-username');
+                    addRule(username);
+                } else if (e.target.matches('[data-action="remove-rule"]')) {
+                    const ruleId = e.target.getAttribute('data-rule-id');
+                    removeRule(ruleId);
+                }
+            });
         }
 </script>
 {% endblock %}

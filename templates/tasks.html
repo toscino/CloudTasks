@@ -386,7 +386,7 @@
     document.addEventListener('DOMContentLoaded', async function() {
         await waitForAuth();
         
-        console.log('DEBUG: Starting to load tasks for user:', window.authState.currentUsername);
+        console.log('Starting to load tasks for user:', window.authState.currentUsername);
         
         // Load tasks using global authentication
         fetchAndDisplayTasks();
@@ -404,7 +404,7 @@
     // Function to fetch tasks from the Python backend
     async function fetchAndDisplayTasks() {
         try {
-            console.log('DEBUG: Starting to fetch tasks...');
+            console.log('Starting to fetch tasks...');
             
             // Fetch both regular tasks and daily tasks
             const [tasksData, dailyTasksData] = await Promise.all([
@@ -412,8 +412,8 @@
                 apiCall('/api/daily-tasks/today')
             ]);
             
-            console.log('DEBUG: Got regular tasks:', tasksData);
-            console.log('DEBUG: Got daily tasks:', dailyTasksData);
+            console.log('Got regular tasks:', tasksData);
+            console.log('Got daily tasks:', dailyTasksData);
             
             // Clear any old tasks
             taskListElement.innerHTML = '';
@@ -449,7 +449,7 @@
             }
 
             if (allTasks.length > 0) {
-                console.log('DEBUG: Found', allTasks.length, 'total tasks to display');
+                console.log('Found', allTasks.length, 'total tasks to display');
                 
                 // Sort regular tasks alphabetically, then daily tasks alphabetically
                 const regularTasks = allTasks.filter(task => task.type === 'regular')
@@ -508,10 +508,10 @@
         // Function to load and display daily tasks
         async function loadDailyTasks() {
             try {
-                console.log('DEBUG: Loading daily tasks...');
+                console.log('Loading daily tasks...');
                 const response = await fetch('/api/daily-tasks/today');
                 const data = await response.json();
-                console.log('DEBUG: Daily tasks data:', data);
+                console.log('Daily tasks data:', data);
 
                 if (data.status === 'success') {
                     const instances = data.instances || [];
@@ -641,15 +641,15 @@
             
             // Update color based on progress
             progressFill.classList.remove('par-reached', 'stretch-reached');
-            console.log(`DEBUG: Progress update - currentPoints: ${currentPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
+            console.log(`Progress update - currentPoints: ${currentPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
             if (currentPoints >= stretchGoal) {
                 progressFill.classList.add('stretch-reached'); // Green
-                console.log('DEBUG: Added stretch-reached class (green)');
+                console.log('Added stretch-reached class (green)');
             } else if (currentPoints >= par) {
                 progressFill.classList.add('par-reached'); // Yellow
-                console.log('DEBUG: Added par-reached class (yellow)');
+                console.log('Added par-reached class (yellow)');
             } else {
-                console.log('DEBUG: No color class added (red default)');
+                console.log('Using default red color (below par)');
             }
             
             // Update goal markers
@@ -691,15 +691,15 @@
                         
                         // Update color based on progress
                         progressFill.classList.remove('par-reached', 'stretch-reached');
-                        console.log(`DEBUG: Stats update - totalPoints: ${totalPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
+                        console.log(`Stats update - totalPoints: ${totalPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
                         if (totalPoints >= stretchGoal) {
                             progressFill.classList.add('stretch-reached'); // Green
-                            console.log('DEBUG: Added stretch-reached class (green)');
+                            console.log('Added stretch-reached class (green)');
                         } else if (totalPoints >= par) {
                             progressFill.classList.add('par-reached'); // Yellow
-                            console.log('DEBUG: Added par-reached class (yellow)');
+                            console.log('Added par-reached class (yellow)');
                         } else {
-                            console.log('DEBUG: No color class added (red default)');
+                            console.log('Using default red color (below par)');
                         }
                         
                         // Update goal markers
@@ -720,7 +720,7 @@
                 const response = await fetch('/api/collaboration/todays-points');
                 const data = await response.json();
                 
-                console.log('DEBUG: getTodaysTotalPoints response:', data);
+                console.log('getTodaysTotalPoints response:', data);
                 
                 if (data.status === 'success') {
                     return data.total_points;
@@ -927,11 +927,11 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('DEBUG: Task completion response:', data);
+                    console.log('Task completion response:', data);
                     
                     if (isDailyTask) {
                         // Handle daily task completion
-                        console.log('DEBUG: Daily task completed!');
+                        console.log('Daily task completed!');
                         
                         // Remove the task from the view after the animation completes
                         setTimeout(() => {
@@ -945,12 +945,12 @@
                         // Handle regular task completion
                         // Check if user earned a reward
                         if (data.reward_earned) {
-                            console.log('DEBUG: Reward earned! (notifications disabled)');
+                            console.log('Reward earned! (notifications disabled)');
                             // DISABLED: Reward notifications temporarily disabled
                             // showRewardEarnedNotification();
                             // checkPendingRewards();
                         } else {
-                            console.log('DEBUG: No reward earned this time');
+                            console.log('No reward earned this time');
                         }
                         
                         // Remove the task from the view after the animation completes

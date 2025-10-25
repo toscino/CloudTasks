@@ -27,7 +27,7 @@ def delete_old_tasks(dry_run=True, username=None):
     """
     try:
         # Initialize Firestore client
-        project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'cloudtasks-app-473120')
+        project_id = os.environ['GOOGLE_CLOUD_PROJECT']
         db = firestore.Client(project=project_id)
         
         logger.info(f"Starting old task deletion {'(DRY RUN)' if dry_run else '(LIVE RUN)'}")

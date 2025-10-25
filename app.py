@@ -19,7 +19,9 @@ from src.services.statistics_service import StatisticsService
 from src.services.daily_task_service import DailyTaskService
 from src.services.collaboration_service import CollaborationService
 from src.services.morning_card_service import MorningCardService
+from src.services.user_service import UserService
 from src.utils.logger import logger
+from src.utils.config import get_timezone
 
 # Load environment variables
 load_dotenv()
@@ -52,10 +54,9 @@ def create_app():
         storage_uri="memory://"  # Use in-memory storage for simplicity
     )
     
-    # Initialize Firestore client with explicit project ID
-    # Note: Default project ID is fallback for local development
-    # In production, GOOGLE_CLOUD_PROJECT env var should always be set
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'crucial-haiku-473123-r7')
+    # Initialize Firestore client
+    # GOOGLE_CLOUD_PROJECT is automatically set by App Engine, must be in .env for local dev
+    project_id = os.environ['GOOGLE_CLOUD_PROJECT']
     db = firestore.Client(project=project_id)
     
     # Initialize TaskMaster
@@ -69,6 +70,7 @@ def create_app():
     daily_task_service = DailyTaskService(db)
     collaboration_service = CollaborationService(db)
     morning_card_service = MorningCardService(db)
+    user_service = UserService(db)
     
     
     # Error handler for rate limit exceeded
@@ -99,6 +101,12 @@ def create_app():
         """Simple test endpoint without authentication"""
         logger.info("Simple test endpoint called")
         return "Simple test works!"
+    
+    @app.route('/settings')
+    @require_auth
+    def settings_page(username):
+        """Settings page for user preferences and spouse linking"""
+        return render_template('settings.html')
     
     @app.route('/api/login', methods=['POST'])
     def login():
@@ -793,10 +801,16 @@ def create_app():
     @require_auth
     def get_collaboration_history(username):
         """Get last 7 days of tracker history"""
-        # Query tracker_history collection, ordered by date desc, limit 7
-        history_query = db.collection('tracker_history').order_by(
-            'date', direction=firestore.Query.DESCENDING
-        ).limit(7)
+        from datetime import datetime, timedelta
+        
+        # Calculate date 7 days ago
+        today = datetime.now(tz=get_timezone()).date()
+        seven_days_ago = today - timedelta(days=7)
+        
+        # Query tracker_history collection for last 7 days, ordered by date desc
+        history_query = db.collection('tracker_history').where(
+            'date', '>=', seven_days_ago.isoformat()
+        ).order_by('date', direction=firestore.Query.DESCENDING)
         
         history_docs = history_query.stream()
         history = []
@@ -820,26 +834,17 @@ def create_app():
     @require_auth
     @with_error_handling
     def progress_day_testing(username):
-        """Manually trigger day progression for testing with optional point overrides"""
-        data = request.get_json() or {}
-        
+        """Manually trigger day progression for testing"""
+        data = request.get_json()
         ian_points = data.get('ian_points')
         karleigh_points = data.get('karleigh_points')
         
-        # Validate if provided
-        if ian_points is not None:
-            try:
-                ian_points = int(ian_points)
-            except (ValueError, TypeError):
-                return jsonify({'status': 'error', 'message': 'Invalid ian_points value'}), 400
-        
-        if karleigh_points is not None:
-            try:
-                karleigh_points = int(karleigh_points)
-            except (ValueError, TypeError):
-                return jsonify({'status': 'error', 'message': 'Invalid karleigh_points value'}), 400
-        
-        result = collaboration_service.progress_day_for_testing(ian_points, karleigh_points)
+        # Use dynamic username and spouse from database
+        result = collaboration_service.progress_day_for_testing(
+            username=username,
+            user_points=ian_points,
+            spouse_points=karleigh_points
+        )
         return result
     
     @app.route('/api/collaboration/reset-history', methods=['POST'])
@@ -877,8 +882,8 @@ def create_app():
     @require_auth
     @with_error_handling
     def get_morning_cards(username):
-        """Get all morning card templates"""
-        result = morning_card_service.get_card_templates()
+        """Get all morning card templates for current user"""
+        result = morning_card_service.get_card_templates(username)
         return result
     
     @app.route('/api/morning-cards', methods=['POST'])
@@ -888,6 +893,7 @@ def create_app():
     def create_morning_card(username):
         """Create a new morning card template"""
         data = request.get_json()
+        data['username'] = username  # Add username to data
         result = morning_card_service.create_card_template(data)
         return result
     
@@ -898,7 +904,7 @@ def create_app():
     def update_morning_card(username, card_id):
         """Update an existing morning card template"""
         data = request.get_json()
-        result = morning_card_service.update_card_template(card_id, data)
+        result = morning_card_service.update_card_template(card_id, data, username)
         return result
     
     @app.route('/api/morning-cards/<card_id>', methods=['DELETE'])
@@ -907,7 +913,7 @@ def create_app():
     @with_error_handling
     def delete_morning_card(username, card_id):
         """Delete a morning card template"""
-        result = morning_card_service.delete_card_template(card_id)
+        result = morning_card_service.delete_card_template(card_id, username)
         return result
     
     @app.route('/api/morning-cards/today', methods=['GET'])
@@ -1002,5 +1008,58 @@ def create_app():
     #     if result['status'] == 'error':
     #         return jsonify(result), 500
     #     return jsonify(result)
+    
+    # User Settings API Endpoints
+    @app.route('/api/user/settings', methods=['GET'])
+    @limiter.limit("50 per minute")
+    @require_auth
+    @with_error_handling
+    def get_user_settings(username):
+        """Get current user settings"""
+        result = user_service.get_user_settings(username)
+        return jsonify({'status': 'success', 'settings': result if isinstance(result, dict) else {}})
+    
+    @app.route('/api/user/generate-pairing-code', methods=['POST'])
+    @limiter.limit("10 per minute")
+    @require_auth
+    @with_error_handling
+    def generate_pairing_code_endpoint(username):
+        """Generate pairing code for spouse linking"""
+        result = user_service.generate_pairing_code(username)
+        return jsonify(result), 200 if result['status'] == 'success' else 400
+    
+    @app.route('/api/user/link-with-code', methods=['POST'])
+    @limiter.limit("10 per minute")
+    @require_auth
+    @with_error_handling
+    def link_with_code_endpoint(username):
+        """Link spouses using pairing code"""
+        data = request.get_json()
+        code = data.get('code', '').strip().upper()
+        
+        if not code:
+            return jsonify({'status': 'error', 'message': 'Code is required'}), 400
+        
+        result = user_service.link_with_pairing_code(username, code)
+        return jsonify(result), 200 if result['status'] == 'success' else 400
+    
+    @app.route('/api/user/spouse', methods=['DELETE'])
+    @limiter.limit("10 per minute")
+    @require_auth
+    @with_error_handling
+    def unlink_spouse_endpoint(username):
+        """Unlink spouse"""
+        result = user_service.remove_spouse(username)
+        return jsonify(result), 200 if result['status'] == 'success' else 400
+    
+    @app.route('/api/user/preferences', methods=['POST'])
+    @limiter.limit("20 per minute")
+    @require_auth
+    @with_error_handling
+    def update_preferences_endpoint(username):
+        """Update user preferences"""
+        data = request.get_json()
+        result = user_service.update_preferences(username, data)
+        return jsonify(result), 200 if result['status'] == 'success' else 400
     
     return app

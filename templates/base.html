@@ -418,10 +418,10 @@
         <div class="nav-bar" style="position: relative;">
             <div class="nav-title" id="nav-title">Loading...</div>
             <div style="display: flex; align-items: center;">
-                <div id="morning-cards-indicator" class="morning-cards-indicator" style="display: none;" onclick="window.location.href='/morning-cards'">
+                <div id="morning-cards-indicator" class="morning-cards-indicator" style="display: none;" data-action="navigate" data-url="/morning-cards">
                     🃏
                 </div>
-                <button class="hamburger" onclick="toggleNavMenu()">
+                <button class="hamburger" id="hamburger-btn">
                     <span class="hamburger-line"></span>
                     <span class="hamburger-line"></span>
                     <span class="hamburger-line"></span>
@@ -434,9 +434,10 @@
             <a href="/morning-cards/manage" class="nav-menu-item {% if request.endpoint == 'morning_cards_manage_page' %}active{% endif %}">🃏 Manage Cards</a>
             <a href="/goals" class="nav-menu-item {% if request.endpoint == 'goals_page' %}active{% endif %}">🎯 Goals</a>
             <a href="/test" class="nav-menu-item {% if request.endpoint == 'test_interface' %}active{% endif %}">🧪 Test</a>
+            <a href="/settings" class="nav-menu-item {% if request.endpoint == 'settings_page' %}active{% endif %}">⚙️ Settings</a>
         </div>
         </div>
-        <div class="nav-overlay" id="navOverlay" onclick="closeNavMenu()"></div>
+        <div class="nav-overlay" id="navOverlay" data-action="close-nav"></div>
         
         <!-- Page Content -->
         <div class="content-area">
@@ -477,13 +478,41 @@
                 closeNavMenu();
             }
         });
+        
+        // Set up navigation event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const hamburgerBtn = document.getElementById('hamburger-btn');
+            const navOverlay = document.getElementById('navOverlay');
+            
+            if (hamburgerBtn) {
+                hamburgerBtn.addEventListener('click', toggleNavMenu);
+            }
+            
+            if (navOverlay) {
+                navOverlay.addEventListener('click', closeNavMenu);
+            }
+            
+            // Handle navigation clicks
+            document.addEventListener('click', function(e) {
+                if (e.target.matches('[data-action="navigate"]')) {
+                    const url = e.target.getAttribute('data-url');
+                    if (url) {
+                        window.location.href = url;
+                    }
+                } else if (e.target.matches('[data-action="close-nav"]')) {
+                    closeNavMenu();
+                }
+            });
+        });
 
         // Global Authentication System (Session-based)
         window.authState = {
             currentUsername: null,
             isAuthenticated: false,
             sessionBased: false,
-            initialized: false
+            initialized: false,
+            canSelectMorningCards: false,
+            spouseUsername: null
         };
         
         // Check URL parameters for initial login
@@ -597,6 +626,21 @@
                     window.authState.isAuthenticated = data.authenticated;
                     window.authState.sessionBased = data.session_based || false;
                     window.authState.initialized = true;
+                    
+                    // Fetch user settings if authenticated
+                    if (data.authenticated && data.username) {
+                        try {
+                            const settingsResponse = await fetch('/api/user/settings');
+                            const settingsData = await settingsResponse.json();
+                            if (settingsData.status === 'success' && settingsData.settings) {
+                                window.authState.canSelectMorningCards = settingsData.settings.can_select_morning_cards || false;
+                                window.authState.spouseUsername = settingsData.settings.spouse_username || null;
+                            }
+                        } catch (e) {
+                            console.log('Could not fetch user settings:', e);
+                        }
+                    }
+                    
                     return { username: data.username, authenticated: data.authenticated };
                 } else {
                     console.error('Auth status check failed:', data.message);
@@ -644,8 +688,8 @@
                 
                 const indicator = document.getElementById('morning-cards-indicator');
                 
-                // Show indicator if Karleigh needs to lock in morning cards
-                if (data.status === 'success' && data.selection && window.authState.currentUsername === 'Karleigh') {
+                // Show indicator if user has permission to select morning cards and selection is not locked
+                if (data.status === 'success' && data.selection && window.authState.canSelectMorningCards) {
                     // Check if the card selection is NOT locked yet
                     if (!data.selection.locked) {
                         indicator.style.display = 'block';

@@ -19,7 +19,7 @@ def check_task_selection(username):
     print("=" * 80)
     
     # Initialize Firestore client
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'cloudtasks-app-473120')
+    project_id = os.environ['GOOGLE_CLOUD_PROJECT']
     db = firestore.Client(project=project_id)
     
     # Get all incomplete tasks for user
@@ -118,7 +118,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Check task selection logic for a user')
-    parser.add_argument('username', nargs='?', default='Karleigh', help='Username to check (default: Karleigh)')
+    parser.add_argument('username', help='Username to check')
     
     args = parser.parse_args()
     

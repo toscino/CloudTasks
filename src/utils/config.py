@@ -2,6 +2,7 @@
 Configuration constants - shared configuration values across the application
 """
 import pytz
+from datetime import datetime, timezone
 
 
 # Timezone Configuration
@@ -30,15 +31,6 @@ TASK_CATEGORIES = ['Work', 'Kids', 'Spouse', 'House', 'Self']
 
 # Goal Categories
 GOAL_CATEGORIES = ['Work', 'Kids', 'Spouse', 'House', 'Self']
-
-# User Configuration
-# Map usernames to their spouse usernames
-SPOUSE_MAPPING = {
-    'Ian': 'Karleigh',
-    'Karleigh': 'Ian',
-    'user3': 'test_user',
-    'test_user': 'user3'
-}
 
 # Default Values
 DEFAULT_TASK_DIFFICULTY = 3
@@ -72,17 +64,64 @@ def get_timezone():
     return CENTRAL_TIMEZONE
 
 
-def get_spouse(username: str) -> str:
+def get_utc_now():
     """
-    Get the spouse username for a given user.
+    Get current datetime in UTC.
+    
+    Returns:
+        datetime object with UTC timezone
+    """
+    return datetime.now(timezone.utc)
+
+
+def get_spouse(username: str):
+    """
+    Get the spouse username for a given user from database.
     
     Args:
         username: User's username
         
     Returns:
-        Spouse's username or 'test_user' if not found
+        Spouse's username or None if no spouse linked
+        
+    Note: Returns None for single-user mode (valid state)
     """
-    return SPOUSE_MAPPING.get(username, 'test_user')
+    try:
+        # Import here to avoid circular dependency
+        import os
+        from google.cloud import firestore
+        from src.utils.logger import logger
+        
+        # Try to get database instance from flask app context first
+        from flask import current_app
+        if current_app:
+            db = current_app.config.get('DB')
+            if db:
+                user_ref = db.collection('users').document(username)
+                user_doc = user_ref.get()
+                
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    spouse_username = user_data.get('spouse_username')
+                    return spouse_username if spouse_username else None
+        
+        # Fallback: create Firestore client directly (for scripts and background tasks)
+        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
+        if project_id:
+            db = firestore.Client(project=project_id)
+            user_ref = db.collection('users').document(username)
+            user_doc = user_ref.get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                spouse_username = user_data.get('spouse_username')
+                return spouse_username if spouse_username else None
+                
+    except Exception as e:
+        logger.debug(f"Could not fetch spouse from database for {username}: {e}")
+    
+    # Fallback: return None (single user mode)
+    return None
 
 
 def get_collection(name: str) -> str:

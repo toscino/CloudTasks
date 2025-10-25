@@ -1,5 +1,34 @@
+# NOTE: User-specific preferences (Ian, Karleigh) are intentionally hardcoded here
+# TODO: Future enhancement - migrate user preferences to database/web interface
+# This includes:
+# - TIME_WEIGHTS: User-specific task category preferences by time of day
+# - EXAMPLES: User-specific task examples and preferences
+# - Personal preferences (schedule, likes, etc.)
 class AITaskPrompt:
     def __init__(self):
+        
+        # Time-based category weights for different users and time periods
+        # TODO: Move to database/web interface - store per user in users collection
+        self.TIME_WEIGHTS = {
+            "Ian": {
+                "morning": {"Work": 0, "Kids": 2, "Spouse": 3, "House": 1, "Self": 4},
+                "workday": {"Work": 1, "Kids": 0, "Spouse": 2, "House": 10,"Self": 4},
+                "evening": {"Work": 0, "Kids": 5, "Spouse": 4, "House": 2, "Self": 2},
+                "weekend": {"Work": 0, "Kids": 3, "Spouse": 2, "House": 3, "Self": 1}
+            },
+            "Karleigh": {
+                "morning": {"Work": 0, "Kids": 1, "Spouse": 4, "House": 1, "Self": 4},
+                "workday": {"Work": 10,"Kids": 0, "Spouse": 2, "House": 0, "Self": 4},
+                "evening": {"Work": 0, "Kids": 5, "Spouse": 4, "House": 2, "Self": 2},
+                "weekend": {"Work": 1, "Kids": 3, "Spouse": 2, "House": 2, "Self": 1}
+            },
+            "default": {
+                "morning": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
+                "workday": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
+                "evening": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
+                "weekend": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1}
+            }
+        }
 
         self.SYSTEM_PROMPT = """
 You are a creative assistant for a gamified task system between spouses, Ian and Karleigh.

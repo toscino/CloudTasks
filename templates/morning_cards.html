@@ -285,23 +285,12 @@
                         </div>
                     </div>
                     
-                    <div class="summary-grid">
-                        <div class="summary-card">
-                            <h4>Ian's Rules</h4>
-                            <ul class="rules-list" id="live-ian-rules">
-                                <li style="color: #6c757d; font-style: italic;">No rules</li>
-                            </ul>
-                        </div>
-                        <div class="summary-card">
-                            <h4>Karleigh's Rules</h4>
-                            <ul class="rules-list" id="live-karleigh-rules">
-                                <li style="color: #6c757d; font-style: italic;">No rules</li>
-                            </ul>
-                        </div>
+                    <div class="summary-grid" id="live-rules-container">
+                        <!-- Dynamic rule sections will be added here -->
                     </div>
                 </div>
                 
-                <button class="lock-btn" id="lock-btn" onclick="lockSelection()" disabled>
+                <button class="lock-btn" id="lock-btn" disabled>
                     Lock Today's Selection
                 </button>
                 
@@ -330,19 +319,8 @@
                         </div>
                     </div>
                     
-                    <div class="summary-grid">
-                        <div class="summary-card">
-                            <h4>Ian's Rules</h4>
-                            <ul class="rules-list" id="summary-ian-rules">
-                                <!-- Rules will be listed here -->
-                            </ul>
-                        </div>
-                        <div class="summary-card">
-                            <h4>Karleigh's Rules</h4>
-                            <ul class="rules-list" id="summary-karleigh-rules">
-                                <!-- Rules will be listed here -->
-                            </ul>
-                        </div>
+                    <div class="summary-grid" id="summary-rules-container">
+                        <!-- Dynamic rule sections will be added here -->
                     </div>
                     
                     <div class="selected-cards-list">
@@ -378,7 +356,13 @@
         await waitForAuth();
         
         await loadData();
-        renderInterface();
+        renderMorningCardsInterface();
+        
+        // Attach event listener for lock button
+        const lockBtn = document.getElementById('lock-btn');
+        if (lockBtn) {
+            lockBtn.addEventListener('click', lockSelection);
+        }
     });
     
     // Load all necessary data
@@ -412,7 +396,7 @@
     }
     
     // Render the interface
-    function renderInterface() {
+    function renderMorningCardsInterface() {
         document.getElementById('loading-state').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
         
@@ -425,32 +409,35 @@
         
         // Render selection interface
         function renderSelection() {
-            document.getElementById('selection-interface').style.display = 'block';
-            document.getElementById('summary-display').style.display = 'none';
-            
-            // Check if user is Ian (not Karleigh)
-            const isIan = window.authState.currentUsername !== 'Karleigh';
-            
-            if (isIan) {
-                // Ian can only view - show read-only message
-                document.getElementById('selection-interface').innerHTML = `
-                    <div class="info-banner">
-                        Only Karleigh can select and lock morning cards. Please wait for Karleigh to complete today's selection.
+            // Check if user has permission to select morning cards
+            if (!window.authState?.canSelectMorningCards) {
+                document.getElementById('selection-interface').style.display = 'none';
+                document.getElementById('summary-display').style.display = 'block';
+                
+                const spouseName = window.authState?.spouseUsername || 'your partner';
+                document.getElementById('summary-display').innerHTML = `
+                    <div class="summary-section">
+                        <h3>Morning Cards</h3>
+                        <p style="color: #6c757d; font-size: 16px; line-height: 1.6;">
+                            Waiting for ${spouseName} to select today's morning cards...
+                        </p>
+                        <p style="color: #999; font-size: 14px; margin-top: 10px;">
+                            Check back soon to see today's selection!
+                        </p>
                     </div>
-                    <div class="score-display">
-                        <h3>Collaboration Score</h3>
-                        <p class="score-value">${collaborationScore}</p>
-                    </div>
-                    <p style="text-align: center; color: #6c757d; padding: 20px;">
-                        Cards will be displayed here once Karleigh locks the selection.
-                    </p>
                 `;
                 return;
             }
             
+            document.getElementById('selection-interface').style.display = 'block';
+            document.getElementById('summary-display').style.display = 'none';
+            
             // Update collaboration score
             document.getElementById('collaboration-score').textContent = collaborationScore;
             document.getElementById('target-count').textContent = collaborationScore;
+            
+            // Show default values (1 clothes, 20 timer)
+            updateLiveSummaryOnLoad();
             
             // Determine how many cards to show (up to 15)
             const cardsToShow = allCards.slice(0, Math.min(15, allCards.length));
@@ -473,8 +460,15 @@
                     const sign = card.timer_minutes > 0 ? '+' : '';
                     preview.push(`⏰ ${sign}${card.timer_minutes}min`);
                 }
-                if (card.ian_rules && card.ian_rules.length > 0) preview.push(`Ian: ${card.ian_rules.length} rule${card.ian_rules.length > 1 ? 's' : ''}`);
-                if (card.karleigh_rules && card.karleigh_rules.length > 0) preview.push(`Karleigh: ${card.karleigh_rules.length} rule${card.karleigh_rules.length > 1 ? 's' : ''}`);
+                // Add user rules to preview
+                if (card.user_rules && typeof card.user_rules === 'object') {
+                    Object.keys(card.user_rules).forEach(username => {
+                        const rules = card.user_rules[username];
+                        if (rules && rules.length > 0) {
+                            preview.push(`${username}: ${rules.length} rule${rules.length > 1 ? 's' : ''}`);
+                        }
+                    });
+                }
                 
                 const previewHtml = preview.length > 0 ? `<div class="card-preview">${preview.join(' • ')}</div>` : '';
                 
@@ -512,6 +506,54 @@
             updateLiveSummary();
         }
         
+        // Helper function to render rules dynamically
+        function renderRules(containerId, allUserRules) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            // Get current user and spouse to filter rules
+            const currentUser = window.authState?.currentUsername || '';
+            const spouseUsername = window.authState?.spouseUsername || '';
+            const relevantUsernames = [currentUser, spouseUsername].filter(u => u);
+            
+            if (relevantUsernames.length === 0) {
+                container.innerHTML = '<div class="summary-card"><h4>Rules</h4><ul class="rules-list"><li style="color: #6c757d; font-style: italic;">No rules</li></ul></div>';
+                return;
+            }
+            
+            // Create a rule section for each relevant user
+            relevantUsernames.forEach(username => {
+                const userRules = allUserRules[username] || [];
+                
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'summary-card';
+                
+                const h4 = document.createElement('h4');
+                h4.textContent = `${username}'s Rules`;
+                cardDiv.appendChild(h4);
+                
+                const ul = document.createElement('ul');
+                ul.className = 'rules-list';
+                
+                if (userRules.length > 0) {
+                    userRules.forEach(rule => {
+                        const li = document.createElement('li');
+                        li.textContent = rule;
+                        ul.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.style.color = '#6c757d';
+                    li.style.fontStyle = 'italic';
+                    li.textContent = 'No rules';
+                    ul.appendChild(li);
+                }
+                
+                cardDiv.appendChild(ul);
+                container.appendChild(cardDiv);
+            });
+        }
+        
         // Update live summary as cards are selected
         function updateLiveSummary() {
             const liveSummary = document.getElementById('live-summary');
@@ -519,8 +561,7 @@
             // Calculate totals from selected cards
             let totalClothes = 1; // Base: 1 clothes point
             let totalTimer = 20; // Base: 20 minutes
-            let ianRules = [];
-            let karleighRules = [];
+            let allUserRules = {};
             
             selectedCardIds.forEach(cardId => {
                 const card = allCards.find(c => c.id === cardId);
@@ -530,43 +571,36 @@
                     totalTimer -= 2;
                     totalTimer += card.timer_minutes || 0;
                     
-                    if (card.ian_rules) {
-                        ianRules.push(...card.ian_rules);
-                    }
-                    if (card.karleigh_rules) {
-                        karleighRules.push(...card.karleigh_rules);
+                    // Aggregate user rules from card
+                    if (card.user_rules && typeof card.user_rules === 'object') {
+                        Object.keys(card.user_rules).forEach(username => {
+                            if (!allUserRules[username]) {
+                                allUserRules[username] = [];
+                            }
+                            const rules = card.user_rules[username];
+                            if (Array.isArray(rules)) {
+                                allUserRules[username].push(...rules);
+                            }
+                        });
                     }
                 }
             });
             
-            // Update totals
+            // Update totals (always show base values even with no cards selected)
             document.getElementById('live-clothes').textContent = totalClothes;
             document.getElementById('live-timer').textContent = totalTimer;
             
-            // Update rules
-            const ianRulesList = document.getElementById('live-ian-rules');
-            ianRulesList.innerHTML = '';
-            if (ianRules.length > 0) {
-                ianRules.forEach(rule => {
-                    const li = document.createElement('li');
-                    li.textContent = rule;
-                    ianRulesList.appendChild(li);
-                });
-            } else {
-                ianRulesList.innerHTML = '<li style="color: #6c757d; font-style: italic;">No rules</li>';
-            }
-            
-            const karleighRulesList = document.getElementById('live-karleigh-rules');
-            karleighRulesList.innerHTML = '';
-            if (karleighRules.length > 0) {
-                karleighRules.forEach(rule => {
-                    const li = document.createElement('li');
-                    li.textContent = rule;
-                    karleighRulesList.appendChild(li);
-                });
-            } else {
-                karleighRulesList.innerHTML = '<li style="color: #6c757d; font-style: italic;">No rules</li>';
-            }
+            // Render rules dynamically
+            renderRules('live-rules-container', allUserRules);
+        }
+        
+        // Update live summary on page load to show defaults
+        function updateLiveSummaryOnLoad() {
+            const baseClothes = 1;
+            const baseTimer = 20;
+            document.getElementById('live-clothes').textContent = baseClothes;
+            document.getElementById('live-timer').textContent = baseTimer;
+            renderRules('live-rules-container', {});
         }
         
         // Update selection counter
@@ -592,17 +626,14 @@
         
         // Lock selection
         async function lockSelection() {
+            console.log('Lock button clicked. Selected cards:', selectedCardIds.length, 'Required:', collaborationScore);
+            
             if (selectedCardIds.length !== collaborationScore) {
                 alert(`You must select exactly ${collaborationScore} cards`);
                 return;
             }
             
-            // Check if user is Karleigh
-            if (window.authState.currentUsername !== 'Karleigh') {
-                alert('Only Karleigh can lock the card selection');
-                return;
-            }
-            
+            // Permission check happens on backend
             try {
                 const response = await fetch('/api/morning-cards/today/select', {
                     method: 'POST',
@@ -615,6 +646,7 @@
                 });
                 
                 const data = await response.json();
+                console.log('Lock response:', data);
                 
                 if (data.status === 'success') {
                     // Hide the wiggle icon in the nav bar
@@ -625,7 +657,7 @@
                     
                     // Reload data and show summary
                     await loadData();
-                    renderInterface();
+                    renderMorningCardsInterface();
                 } else {
                     alert('Failed to lock selection: ' + data.message);
                 }
@@ -640,34 +672,13 @@
             document.getElementById('selection-interface').style.display = 'none';
             document.getElementById('summary-display').style.display = 'block';
             
-            // Update summary values
+            // Update summary values (backend already includes base values)
             document.getElementById('summary-clothes').textContent = currentSelection.total_clothes_points || 0;
             document.getElementById('summary-timer').textContent = currentSelection.total_timer_minutes || 0;
             
-            // Update rules
-            const ianRulesList = document.getElementById('summary-ian-rules');
-            ianRulesList.innerHTML = '';
-            if (currentSelection.ian_rules && currentSelection.ian_rules.length > 0) {
-                currentSelection.ian_rules.forEach(rule => {
-                    const li = document.createElement('li');
-                    li.textContent = rule;
-                    ianRulesList.appendChild(li);
-                });
-            } else {
-                ianRulesList.innerHTML = '<li style="color: #6c757d; font-style: italic;">No rules</li>';
-            }
-            
-            const karleighRulesList = document.getElementById('summary-karleigh-rules');
-            karleighRulesList.innerHTML = '';
-            if (currentSelection.karleigh_rules && currentSelection.karleigh_rules.length > 0) {
-                currentSelection.karleigh_rules.forEach(rule => {
-                    const li = document.createElement('li');
-                    li.textContent = rule;
-                    karleighRulesList.appendChild(li);
-                });
-            } else {
-                karleighRulesList.innerHTML = '<li style="color: #6c757d; font-style: italic;">No rules</li>';
-            }
+            // Render rules dynamically
+            const userRules = currentSelection.user_rules || {};
+            renderRules('summary-rules-container', userRules);
             
             // Update selected cards
             const cardsList = document.getElementById('summary-cards');

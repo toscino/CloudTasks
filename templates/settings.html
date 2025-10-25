@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Settings{% endblock %}
+
+{% block styles %}
+<style>
+    .settings-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .settings-section h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        color: #1c1e21;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    .pairing-code-display {
+        background-color: #fff;
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin: 15px 0;
+        font-size: 24px;
+        font-weight: bold;
+        letter-spacing: 2px;
+        color: #007bff;
+    }
+    
+    .countdown {
+        color: #666;
+        font-size: 14px;
+        margin-top: 10px;
+    }
+    
+    .spouse-status {
+        padding: 12px;
+        background-color: #e7f3ff;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        color: #0c5460;
+    }
+    
+    .code-input {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        letter-spacing: 2px;
+        text-align: center;
+        margin-right: 10px;
+        text-transform: uppercase;
+    }
+    
+    .preference-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+    
+    .status-message {
+        padding: 10px;
+        border-radius: 4px;
+        margin-top: 15px;
+    }
+    
+    .status-message.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .status-message.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-section">
+    <h3>Current User</h3>
+    <p><strong>Username:</strong> <span id="current-username">Loading...</span></p>
+</div>
+
+<div class="settings-section">
+    <h3>Spouse Linking</h3>
+    
+    <div id="pairing-code-section" style="display: none;">
+        <p>Share this code with your spouse:</p>
+        <div class="pairing-code-display">
+            <div id="pairing-code-text">-</div>
+            <div class="countdown" id="countdown">Expires in 15:00</div>
+        </div>
+        <button class="btn" id="cancel-pairing-btn">Cancel</button>
+    </div>
+    
+    <div id="no-spouse-section">
+        <p>Generate a pairing code to link with your spouse:</p>
+        <button class="btn" id="generate-pairing-btn">Generate Pairing Code</button>
+    </div>
+    
+    <div id="linked-spouse-section" style="display: none;">
+        <div class="spouse-status">
+            ✓ Linked to spouse: <strong id="spouse-username">-</strong>
+        </div>
+        <button class="btn" id="unlink-spouse-btn">Unlink Spouse</button>
+    </div>
+    
+    <div id="link-spouse-section" style="display: none;">
+        <h4>Enter Your Spouse's Code</h4>
+        <input type="text" id="spouse-code-input" class="code-input" placeholder="AB3-X9K" maxlength="7">
+        <button class="btn" id="link-spouse-btn">Link Spouse</button>
+    </div>
+</div>
+
+<div class="settings-section">
+    <h3>Preferences</h3>
+    <div class="preference-group">
+        <input type="checkbox" id="can-select-morning-cards" class="checkbox" onchange="savePreferences()">
+        <label for="can-select-morning-cards">Can select morning cards</label>
+    </div>
+</div>
+
+<div id="status-message"></div>
+
+<script>
+let countdownInterval = null;
+
+async function loadSettings() {
+    try {
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('current-username').textContent = data.settings.username;
+            
+            if (data.settings.spouse_username) {
+                document.getElementById('spouse-username').textContent = data.settings.spouse_username;
+                document.getElementById('linked-spouse-section').style.display = 'block';
+                document.getElementById('no-spouse-section').style.display = 'none';
+                document.getElementById('link-spouse-section').style.display = 'none';
+            } else {
+                document.getElementById('linked-spouse-section').style.display = 'none';
+                document.getElementById('no-spouse-section').style.display = 'block';
+                document.getElementById('link-spouse-section').style.display = 'block';
+            }
+            
+            document.getElementById('can-select-morning-cards').checked = data.settings.can_select_morning_cards || false;
+        }
+    } catch (error) {
+        showStatus('Error loading settings', 'error');
+    }
+}
+
+async function generatePairingCode() {
+    try {
+        const response = await fetch('/api/user/generate-pairing-code', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('pairing-code-text').textContent = data.code;
+            document.getElementById('pairing-code-section').style.display = 'block';
+            document.getElementById('no-spouse-section').style.display = 'none';
+            
+            // Start countdown
+            const expiresAt = new Date(data.expires_at);
+            startCountdown(expiresAt);
+        } else {
+            showStatus(data.message || 'Failed to generate code', 'error');
+        }
+    } catch (error) {
+        showStatus('Error generating pairing code', 'error');
+    }
+}
+
+function cancelPairingCode() {
+    document.getElementById('pairing-code-section').style.display = 'none';
+    document.getElementById('no-spouse-section').style.display = 'block';
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+}
+
+function startCountdown(expiresAt) {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+    }
+    
+    countdownInterval = setInterval(() => {
+        const now = new Date();
+        const diff = expiresAt - now;
+        
+        if (diff <= 0) {
+            clearInterval(countdownInterval);
+            document.getElementById('countdown').textContent = 'Expired';
+            document.getElementById('pairing-code-section').style.display = 'none';
+        } else {
+            const minutes = Math.floor(diff / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            document.getElementById('countdown').textContent = `Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+async function linkWithCode() {
+    const code = document.getElementById('spouse-code-input').value.trim().toUpperCase();
+    
+    if (!code) {
+        showStatus('Please enter a pairing code', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/user/link-with-code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code: code })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showStatus(data.message || 'Successfully linked to spouse', 'success');
+            document.getElementById('spouse-code-input').value = '';
+            setTimeout(loadSettings, 1000);
+        } else {
+            showStatus(data.message || 'Failed to link', 'error');
+        }
+    } catch (error) {
+        showStatus('Error linking with code', 'error');
+    }
+}
+
+async function unlinkSpouse() {
+    if (!confirm('Are you sure you want to unlink your spouse?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/user/spouse', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showStatus(data.message || 'Successfully unlinked', 'success');
+            setTimeout(loadSettings, 1000);
+        } else {
+            showStatus(data.message || 'Failed to unlink', 'error');
+        }
+    } catch (error) {
+        showStatus('Error unlinking spouse', 'error');
+    }
+}
+
+async function savePreferences() {
+    const canSelectMorningCards = document.getElementById('can-select-morning-cards').checked;
+    
+    try {
+        const response = await fetch('/api/user/preferences', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                can_select_morning_cards: canSelectMorningCards
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showStatus('Preferences saved', 'success');
+        } else {
+            showStatus('Failed to save preferences', 'error');
+        }
+    } catch (error) {
+        showStatus('Error saving preferences', 'error');
+    }
+}
+
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('status-message');
+    statusDiv.textContent = message;
+    statusDiv.className = `status-message ${type}`;
+    
+    setTimeout(() => {
+        statusDiv.textContent = '';
+        statusDiv.className = '';
+    }, 5000);
+}
+
+// Load settings on page load
+loadSettings();
+
+// Set up event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    const generateBtn = document.getElementById('generate-pairing-btn');
+    const cancelBtn = document.getElementById('cancel-pairing-btn');
+    const unlinkBtn = document.getElementById('unlink-spouse-btn');
+    const linkBtn = document.getElementById('link-spouse-btn');
+    
+    if (generateBtn) {
+        generateBtn.addEventListener('click', generatePairingCode);
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', cancelPairingCode);
+    }
+    
+    if (unlinkBtn) {
+        unlinkBtn.addEventListener('click', unlinkSpouse);
+    }
+    
+    if (linkBtn) {
+        linkBtn.addEventListener('click', linkWithCode);
+    }
+});
+</script>
+
+{% endblock %}
+

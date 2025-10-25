@@ -19,15 +19,73 @@ class MorningCardService:
         self.db = db
         self.central_tz = get_timezone()
     
-    def get_card_templates(self) -> Dict[str, Any]:
-        """Get all card templates"""
+    def _convert_generic_rules_to_usernames(self, user_rules: Dict[str, List[str]], card_owner: str) -> Dict[str, List[str]]:
+        """Convert generic 'mine'/'spouse' keys to actual usernames"""
+        if not isinstance(user_rules, dict):
+            return {}
+        
+        converted_rules = {}
+        
+        # Get spouse username from database
+        spouse_username = None
         try:
-            templates_query = self.db.collection('morning_card_templates')
-            templates_docs = templates_query.stream()
+            user_ref = self.db.collection('users').document(card_owner)
+            user_doc = user_ref.get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                spouse_username = user_data.get('spouse_username')
+        except Exception as e:
+            logger.debug(f"Could not fetch spouse for {card_owner}: {e}")
+        
+        for key, rules in user_rules.items():
+            if key == 'mine':
+                converted_rules[card_owner] = rules
+            elif key == 'spouse' and spouse_username:
+                converted_rules[spouse_username] = rules
+            else:
+                # Keep other keys as-is
+                converted_rules[key] = rules
+        
+        return converted_rules
+    
+    def get_card_templates(self, username: str) -> Dict[str, Any]:
+        """Get all card templates for user and their spouse"""
+        try:
+            # Query cards for current user
+            templates_query = self.db.collection('morning_card_templates').where(
+                filter=FieldFilter('username', '==', username)
+            )
+            templates_docs = list(templates_query.stream())
+            
+            # Query cards for spouse if linked
+            spouse_username = None
+            try:
+                user_ref = self.db.collection('users').document(username)
+                user_doc = user_ref.get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    spouse_username = user_data.get('spouse_username')
+            except Exception as e:
+                logger.debug(f"Could not fetch spouse for {username}: {e}")
+            
+            if spouse_username:
+                spouse_query = self.db.collection('morning_card_templates').where(
+                    filter=FieldFilter('username', '==', spouse_username)
+                )
+                templates_docs.extend(list(spouse_query.stream()))
             
             templates = []
             for doc in templates_docs:
                 template_data = prepare_firestore_document(doc)
+                
+                # Convert generic rules to actual usernames for display
+                card_owner = template_data.get('username')
+                if card_owner and 'user_rules' in template_data:
+                    template_data['user_rules'] = self._convert_generic_rules_to_usernames(
+                        template_data['user_rules'], 
+                        card_owner
+                    )
+                
                 templates.append(template_data)
             
             return {
@@ -47,27 +105,34 @@ class MorningCardService:
             card_text = data['card_text'].strip()
             clothes_points = int(data.get('clothes_points', 0))
             timer_minutes = int(data.get('timer_minutes', 0))
-            ian_rules = data.get('ian_rules', []) or []
-            karleigh_rules = data.get('karleigh_rules', []) or []
+            user_rules = data.get('user_rules', {}) or {}
             active = data.get('active', True)
             
-            # Ensure rules are arrays
-            if not isinstance(ian_rules, list):
-                ian_rules = []
-            if not isinstance(karleigh_rules, list):
-                karleigh_rules = []
+            # Ensure user_rules is a dict
+            if not isinstance(user_rules, dict):
+                user_rules = {}
             
-            # Filter out empty rules
-            ian_rules = [r.strip() for r in ian_rules if r and r.strip()]
-            karleigh_rules = [r.strip() for r in karleigh_rules if r and r.strip()]
+            # Get username from auth context (passed from API endpoint)
+            username = data.get('username')
+            if not username:
+                return {'status': 'error', 'message': 'Username is required'}
+            
+            # Validate and clean user_rules
+            # Keep as generic keys ('mine', 'spouse') for storage
+            cleaned_user_rules = {}
+            for rule_key, rules in user_rules.items():
+                if isinstance(rules, list):
+                    cleaned_rules = [r.strip() for r in rules if r and r.strip()]
+                    if cleaned_rules:  # Only include non-empty rule lists
+                        cleaned_user_rules[rule_key] = cleaned_rules
             
             # Create template data
             template_data = {
+                'username': username,
                 'card_text': card_text,
                 'clothes_points': clothes_points,
                 'timer_minutes': timer_minutes,
-                'ian_rules': ian_rules,
-                'karleigh_rules': karleigh_rules,
+                'user_rules': cleaned_user_rules,
                 'active': active,
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP
@@ -87,7 +152,7 @@ class MorningCardService:
         except Exception as e:
             return handle_exception(e, "Failed to create card template")
     
-    def update_card_template(self, card_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_card_template(self, card_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Update an existing card template"""
         try:
             doc_ref = self.db.collection('morning_card_templates').document(card_id)
@@ -99,6 +164,21 @@ class MorningCardService:
                     'message': 'Card template not found'
                 }
             
+            # Verify ownership: allow if user owns card OR user is card owner's spouse
+            doc_data = doc.to_dict()
+            card_owner = doc_data.get('username')
+            
+            # Get spouse username from database
+            from src.utils.config import get_spouse
+            spouse_username = get_spouse(username)
+            
+            # Allow if current user is owner, or current user is owner's spouse
+            if card_owner != username and card_owner != spouse_username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Card belongs to another user'
+                }
+            
             # Validate and prepare update data
             update_data = {'updated_at': firestore.SERVER_TIMESTAMP}
             
@@ -108,16 +188,21 @@ class MorningCardService:
                 update_data['clothes_points'] = int(data['clothes_points'])
             if 'timer_minutes' in data:
                 update_data['timer_minutes'] = int(data['timer_minutes'])
-            if 'ian_rules' in data:
-                ian_rules = data['ian_rules'] or []
-                if not isinstance(ian_rules, list):
-                    ian_rules = []
-                update_data['ian_rules'] = [r.strip() for r in ian_rules if r and r.strip()]
-            if 'karleigh_rules' in data:
-                karleigh_rules = data['karleigh_rules'] or []
-                if not isinstance(karleigh_rules, list):
-                    karleigh_rules = []
-                update_data['karleigh_rules'] = [r.strip() for r in karleigh_rules if r and r.strip()]
+            if 'user_rules' in data:
+                user_rules = data['user_rules'] or {}
+                if not isinstance(user_rules, dict):
+                    user_rules = {}
+                
+                # Validate and clean user_rules
+                # Keep as generic keys ('mine', 'spouse') for storage
+                cleaned_user_rules = {}
+                for rule_key, rules in user_rules.items():
+                    if isinstance(rules, list):
+                        cleaned_rules = [r.strip() for r in rules if r and r.strip()]
+                        if cleaned_rules:  # Only include non-empty rule lists
+                            cleaned_user_rules[rule_key] = cleaned_rules
+                
+                update_data['user_rules'] = cleaned_user_rules
             if 'active' in data:
                 update_data['active'] = bool(data['active'])
             
@@ -132,7 +217,7 @@ class MorningCardService:
         except Exception as e:
             return handle_exception(e, f"Failed to update card template {card_id}")
     
-    def delete_card_template(self, card_id: str) -> Dict[str, Any]:
+    def delete_card_template(self, card_id: str, username: str) -> Dict[str, Any]:
         """Delete a card template"""
         try:
             doc_ref = self.db.collection('morning_card_templates').document(card_id)
@@ -142,6 +227,21 @@ class MorningCardService:
                 return {
                     'status': 'error',
                     'message': 'Card template not found'
+                }
+            
+            # Verify ownership: allow if user owns card OR user is card owner's spouse
+            doc_data = doc.to_dict()
+            card_owner = doc_data.get('username')
+            
+            # Get spouse username from database
+            from src.utils.config import get_spouse
+            spouse_username = get_spouse(username)
+            
+            # Allow if current user is owner, or current user is owner's spouse
+            if card_owner != username and card_owner != spouse_username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Card belongs to another user'
                 }
             
             # Delete template
@@ -187,8 +287,7 @@ class MorningCardService:
                     'collaboration_score': 0,
                     'total_clothes_points': 0,
                     'total_timer_minutes': 0,
-                    'ian_rules': [],
-                    'karleigh_rules': [],
+                    'user_rules': {},
                     'locked': False,
                     'created_at': firestore.SERVER_TIMESTAMP
                 }
@@ -206,13 +305,21 @@ class MorningCardService:
             return handle_exception(e, "Failed to get today's selection")
     
     def select_cards(self, card_ids: List[str], username: str) -> Dict[str, Any]:
-        """Lock in card selection (Karleigh only)"""
+        """Lock in card selection (configured users only)"""
         try:
-            # Enforce Karleigh-only restriction
-            if username != 'Karleigh':
+            # Check if user has permission to select morning cards
+            user_ref = self.db.collection('users').document(username)
+            user_doc = user_ref.get()
+            
+            can_select = False
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                can_select = user_data.get('can_select_morning_cards', False)
+            
+            if not can_select:
                 return {
                     'status': 'error',
-                    'message': 'Only Karleigh can select morning cards'
+                    'message': 'You do not have permission to select morning cards'
                 }
             
             # Validate input
@@ -260,8 +367,7 @@ class MorningCardService:
             selected_cards = []
             total_clothes = 0
             total_timer = 0
-            all_ian_rules = []
-            all_karleigh_rules = []
+            all_user_rules = {}
             
             for card_id in card_ids:
                 card_doc = self.db.collection('morning_card_templates').document(card_id).get()
@@ -278,19 +384,30 @@ class MorningCardService:
                         'message': f'Card {card_id} is not active'
                     }
                 
+                # Convert generic rules to actual usernames for aggregation
+                card_owner = card_data.get('username')
+                card_user_rules = card_data.get('user_rules', {})
+                if card_owner:
+                    card_user_rules = self._convert_generic_rules_to_usernames(card_user_rules, card_owner)
+                
                 selected_cards.append({
                     'id': card_id,
                     'card_text': card_data.get('card_text', ''),
                     'clothes_points': card_data.get('clothes_points', 0),
                     'timer_minutes': card_data.get('timer_minutes', 0),
-                    'ian_rules': card_data.get('ian_rules', []),
-                    'karleigh_rules': card_data.get('karleigh_rules', [])
+                    'user_rules': card_user_rules
                 })
                 
                 total_clothes += card_data.get('clothes_points', 0)
                 total_timer += card_data.get('timer_minutes', 0)
-                all_ian_rules.extend(card_data.get('ian_rules', []))
-                all_karleigh_rules.extend(card_data.get('karleigh_rules', []))
+                
+                # Aggregate user_rules from card (now with actual usernames)
+                if isinstance(card_user_rules, dict):
+                    for username, rules in card_user_rules.items():
+                        if username not in all_user_rules:
+                            all_user_rules[username] = []
+                        if isinstance(rules, list):
+                            all_user_rules[username].extend(rules)
             
             # Calculate final timer: base (20) - 2 per card + card adjustments
             base_timer = 20
@@ -308,8 +425,7 @@ class MorningCardService:
                 'collaboration_score': collaboration_score,
                 'total_clothes_points': final_clothes,
                 'total_timer_minutes': final_timer,
-                'ian_rules': all_ian_rules,
-                'karleigh_rules': all_karleigh_rules,
+                'user_rules': all_user_rules,
                 'locked': True
             })
             
@@ -323,8 +439,7 @@ class MorningCardService:
                     'collaboration_score': collaboration_score,
                     'total_clothes_points': final_clothes,
                     'total_timer_minutes': final_timer,
-                    'ian_rules': all_ian_rules,
-                    'karleigh_rules': all_karleigh_rules,
+                    'user_rules': all_user_rules,
                     'locked': True
                 }
             }
@@ -412,8 +527,7 @@ class MorningCardService:
                 'selected_card_ids': [],
                 'total_clothes_points': 0,
                 'total_timer_minutes': 0,
-                'ian_rules': [],
-                'karleigh_rules': []
+                'user_rules': {}
             })
             
             logger.info(f"Unlocked morning card selection for {today_central}")

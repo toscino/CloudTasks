@@ -130,13 +130,13 @@
                 <h4>Progress Day Simulation</h4>
                 <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
                     <div>
-                        <label for="ian-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Ian's Points</label>
-                        <input type="number" id="ian-points" placeholder="Auto" style="width: 100px; padding: 5px;">
+                        <label for="user-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Your Points</label>
+                        <input type="number" id="user-points" placeholder="Auto" style="width: 100px; padding: 5px;">
                         <small style="display: block; color: #666;">Leave blank to use actual</small>
                     </div>
                     <div>
-                        <label for="karleigh-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Karleigh's Points</label>
-                        <input type="number" id="karleigh-points" placeholder="Auto" style="width: 100px; padding: 5px;">
+                        <label for="spouse-points" style="display: block; font-size: 12px; margin-bottom: 5px;">Spouse's Points</label>
+                        <input type="number" id="spouse-points" placeholder="Auto" style="width: 100px; padding: 5px;">
                         <small style="display: block; color: #666;">Leave blank to use actual</small>
                     </div>
                     <button onclick="progressDay()">Progress Day</button>
@@ -566,10 +566,10 @@
                     let html = '<table class="history-table">';
                     html += '<thead><tr>';
                     html += '<th>Date</th>';
-                    html += '<th>Ian Pts</th>';
-                    html += '<th>K Pts</th>';
-                    html += '<th>Ian Δ</th>';
-                    html += '<th>K Δ</th>';
+                    html += '<th>You Pts</th>';
+                    html += '<th>Spouse Pts</th>';
+                    html += '<th>You Δ</th>';
+                    html += '<th>Spouse Δ</th>';
                     html += '<th>Tracker</th>';
                     html += '</tr></thead><tbody>';
                     
@@ -603,15 +603,15 @@
         }
         
         async function progressDay() {
-            const ianPointsInput = document.getElementById('ian-points');
-            const karleighPointsInput = document.getElementById('karleigh-points');
+            const userPointsInput = document.getElementById('user-points');
+            const spousePointsInput = document.getElementById('spouse-points');
             
-            const ianPoints = ianPointsInput.value.trim() ? parseInt(ianPointsInput.value) : null;
-            const karleighPoints = karleighPointsInput.value.trim() ? parseInt(karleighPointsInput.value) : null;
+            const userPoints = userPointsInput.value.trim() ? parseInt(userPointsInput.value) : null;
+            const spousePoints = spousePointsInput.value.trim() ? parseInt(spousePointsInput.value) : null;
             
             let confirmMessage = 'This will process today as complete and update the tracker. Continue?';
-            if (ianPoints !== null || karleighPoints !== null) {
-                confirmMessage = `This will simulate a day with:\n- Ian: ${ianPoints !== null ? ianPoints : 'auto'} points\n- Karleigh: ${karleighPoints !== null ? karleighPoints : 'auto'} points\n\nContinue?`;
+            if (userPoints !== null || spousePoints !== null) {
+                confirmMessage = `This will simulate a day with:\n- You: ${userPoints !== null ? userPoints : 'auto'} points\n- Spouse: ${spousePoints !== null ? spousePoints : 'auto'} points\n\nContinue?`;
             }
             
             if (!confirm(confirmMessage)) {
@@ -629,8 +629,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        ian_points: ianPoints,
-                        karleigh_points: karleighPoints
+                        ian_points: userPoints,
+                        karleigh_points: spousePoints
                     })
                 });
                 
@@ -638,15 +638,15 @@
                 if (data.status === 'success') {
                     resultDiv.className = 'result success';
                     let message = `Day processed successfully! Date: ${data.date}\n\n`;
-                    message += `Ian: ${data.ian_points} points (${data.ian_adjustment > 0 ? '+' : ''}${data.ian_adjustment})\n`;
-                    message += `Karleigh: ${data.karleigh_points} points (${data.karleigh_adjustment > 0 ? '+' : ''}${data.karleigh_adjustment})\n`;
+                    message += `You: ${data.ian_points} points (${data.ian_adjustment > 0 ? '+' : ''}${data.ian_adjustment})\n`;
+                    message += `Spouse: ${data.karleigh_points} points (${data.karleigh_adjustment > 0 ? '+' : ''}${data.karleigh_adjustment})\n`;
                     message += `Tracker: ${data.old_tracker} → ${data.new_tracker}\n\n`;
                     message += `View tracker history to see all results.`;
                     resultDiv.textContent = message;
                     
                     // Clear inputs
-                    ianPointsInput.value = '';
-                    karleighPointsInput.value = '';
+                    userPointsInput.value = '';
+                    spousePointsInput.value = '';
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = 'Failed to progress day: ' + data.message;

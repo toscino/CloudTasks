@@ -426,7 +426,7 @@ class DailyTaskService:
             # Update tracker for all missed days since last update
             from src.services.collaboration_service import CollaborationService
             collab_service = CollaborationService(self.db)
-            days_processed = collab_service.update_tracker_catch_up(today_central)
+            days_processed = collab_service.update_tracker_catch_up(today_central, username=username)
             logger.info(f"Updated collaboration tracker for {days_processed} days")
             
             # Reset morning cards

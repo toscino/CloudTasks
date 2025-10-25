@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Callable, Any, Tuple
 from flask import request, session, jsonify
 from src.utils.logger import logger
+from src.utils.config import get_spouse
 
 
 def get_username_from_secret_key(secret_key):
@@ -26,13 +27,11 @@ def get_username_from_secret_key(secret_key):
 
 def get_spouse_username(username):
     """Get spouse username for a given user"""
-    spouse_mapping = {
-        'Ian': 'Karleigh',
-        'Karleigh': 'Ian',
-        'user3': 'test_user',  # Third user's spouse
-        'test_user': 'test_user'  # Demo user's spouse
-    }
-    return spouse_mapping.get(username, 'test_user')
+    spouse_username = get_spouse(username)
+    
+    # Return spouse if found, None if no spouse linked (single user mode)
+    # None is a valid state - no errors needed
+    return spouse_username
 
 
 def get_user_info():

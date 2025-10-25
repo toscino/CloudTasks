@@ -11,8 +11,10 @@ if exist .env (
         )
     )
 ) else (
-    echo Warning: .env file not found, using default values
-    set GOOGLE_CLOUD_PROJECT=crucial-haiku-473123-r7
+    echo ERROR: .env file not found!
+    echo Please create .env file with GOOGLE_CLOUD_PROJECT
+    pause
+    exit /b 1
 )
 
 echo Using Google Cloud Project: %GOOGLE_CLOUD_PROJECT%

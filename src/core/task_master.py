@@ -17,28 +17,6 @@ class TaskMaster:
     MIN_TASKS_PER_CATEGORY = 5
     TASKS_TO_ADD_IF_BELOW_MIN = 10
     
-    # Time-based category weights for different users and time periods
-    TIME_WEIGHTS = {
-        "Ian": {
-            "morning": {"Work": 0, "Kids": 2, "Spouse": 3, "House": 1, "Self": 4},
-            "workday": {"Work": 1, "Kids": 0, "Spouse": 2, "House": 10,"Self": 4},
-            "evening": {"Work": 0, "Kids": 5, "Spouse": 4, "House": 2, "Self": 2},
-            "weekend": {"Work": 0, "Kids": 3, "Spouse": 2, "House": 3, "Self": 1}
-        },
-        "Karleigh": {
-            "morning": {"Work": 0, "Kids": 1, "Spouse": 4, "House": 1, "Self": 4},
-            "workday": {"Work": 10,"Kids": 0, "Spouse": 2, "House": 0, "Self": 4},
-            "evening": {"Work": 0, "Kids": 5, "Spouse": 4, "House": 2, "Self": 2},
-            "weekend": {"Work": 1, "Kids": 3, "Spouse": 2, "House": 2, "Self": 1}
-        },
-        "default": {
-            "morning": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
-            "workday": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
-            "evening": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1},
-            "weekend": {"Work": 1, "Kids": 1, "Spouse": 1, "House": 1, "Self": 1}
-        }
-    }
-    
     def __init__(self, db):
         self.db = db
         self.task_generator = TaskGenerator(db)
@@ -81,11 +59,12 @@ class TaskMaster:
         time_period = self._get_time_period()
         
         # Get user-specific weights or default to equal weights
-        if username in self.TIME_WEIGHTS:
-            user_weights = self.TIME_WEIGHTS[username]
+        # TIME_WEIGHTS moved to AITaskPrompt, access via task_generator (which extends AITaskPrompt)
+        if username in self.task_generator.TIME_WEIGHTS:
+            user_weights = self.task_generator.TIME_WEIGHTS[username]
         else:
-            user_weights = self.TIME_WEIGHTS["default"]
-        return user_weights.get(time_period, self.TIME_WEIGHTS["default"]["workday"])
+            user_weights = self.task_generator.TIME_WEIGHTS["default"]
+        return user_weights.get(time_period, self.task_generator.TIME_WEIGHTS["default"]["workday"])
     
     def _sanitize_task_data(self, task_data):
         """Convert Firestore timestamps to datetime objects for JSON serialization"""

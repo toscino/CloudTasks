@@ -2,11 +2,11 @@
 Collaboration service - manages the shared collaboration tracker and user goals
 """
 from datetime import datetime, timedelta
+import pytz
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from src.utils.logger import logger
 from src.utils.config import get_timezone, get_spouse
-from src.auth.auth_service import get_spouse_username
 from src.utils.error_handlers import handle_exception
 
 
@@ -120,9 +120,12 @@ class CollaborationService:
             logger.error(f"Failed to set goals for {username}: {e}")
             return {'status': 'error', 'message': f'Failed to update goals: {str(e)}'}
     
-    def _calculate_user_par(self, username):
-        """Calculate par (sum of positive daily task points) for a user"""
+    def _calculate_user_par_for_date(self, username, date):
+        """Calculate par (sum of positive daily task points) for a user on a specific date"""
         try:
+            # Get the weekday for the specific date (0=Monday, 6=Sunday)
+            target_weekday = date.weekday()  # 0=Monday, 6=Sunday
+            
             # Get all active daily task templates for user
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
             templates_docs = templates_query.stream()
@@ -130,22 +133,35 @@ class CollaborationService:
             par = 0
             for template_doc in templates_docs:
                 template_data = template_doc.to_dict()
-                points = template_data.get('points', 0)
-                if points > 0:  # Only count positive points
-                    par += points
+                
+                # Check if this template should run on the target date
+                days_of_week = template_data.get('days_of_week', [])
+                if target_weekday in days_of_week:
+                    points = template_data.get('points', 0)
+                    if points > 0:  # Only count positive points
+                        par += points
             
-            logger.debug(f"Calculated par for {username}: {par}")
+            logger.debug(f"Calculated par for {username} on {date.isoformat()} (weekday {target_weekday}): {par}")
             return par
             
         except Exception as e:
-            logger.error(f"Failed to calculate par for {username}: {e}")
+            logger.error(f"Failed to calculate par for {username} on {date}: {e}")
             return 0
     
-    def calculate_tracker_adjustment(self, username, daily_points):
+    def _calculate_user_par(self, username):
+        """Calculate par (sum of positive daily task points) for a user for today"""
+        today = datetime.now(self.central_tz).date()
+        return self._calculate_user_par_for_date(username, today)
+    
+    def calculate_tracker_adjustment(self, username, daily_points, date=None):
         """Calculate +1, 0, or -1 based on user's performance, multiplied by user's adjustment multiplier"""
         try:
+            # Use provided date or today for par calculation
+            if date is None:
+                date = datetime.now(self.central_tz).date()
+            
             goals = self.get_user_goals(username)
-            par = goals['par']
+            par = self._calculate_user_par_for_date(username, date)
             stretch_goal = goals['stretch_goal']
             multiplier = goals.get('adjustment_multiplier', 1)  # Default to 1 (normal direction)
             logger.debug(f"User {username} has an adjustment multiplier of {multiplier}")
@@ -162,11 +178,11 @@ class CollaborationService:
             # Apply user's multiplier (-1 inverts the direction, 1 keeps it normal)
             adjustment = base_adjustment * multiplier
             
-            logger.debug(f"Adjustment for {username}: {daily_points} points (par: {par}, stretch: {stretch_goal}, multiplier: {multiplier}) = {adjustment}")
+            logger.debug(f"Adjustment for {username} on {date.isoformat()}: {daily_points} points (par: {par}, stretch: {stretch_goal}, multiplier: {multiplier}) = {adjustment}")
             return adjustment
             
         except Exception as e:
-            logger.error(f"Failed to calculate adjustment for {username}: {e}")
+            logger.error(f"Failed to calculate adjustment for {username} on {date}: {e}")
             return 0
     
     def _get_daily_points_for_date(self, username, date):
@@ -221,16 +237,28 @@ class CollaborationService:
             logger.error(f"Failed to get daily points for {username} on {date}: {e}")
             return 0
     
-    def _update_tracker_for_date(self, date):
+    def _update_tracker_for_date(self, date, username=None):
         """Update tracker for a specific date"""
         try:
-            # Get both users' points for this date
-            user_points = self._get_daily_points_for_date('Ian', date)
-            spouse_points = self._get_daily_points_for_date('Karleigh', date)
+            # Get the primary user (the one who triggered the update)
+            # If no username provided, skip update (can't process without knowing which user)
+            if not username:
+                logger.warning("_update_tracker_for_date called without username, skipping")
+                return
             
-            # Calculate adjustments
-            user_adjustment = self.calculate_tracker_adjustment('Ian', user_points)
-            spouse_adjustment = self.calculate_tracker_adjustment('Karleigh', spouse_points)
+            # Get spouse from database
+            spouse_username = get_spouse(username)
+            
+            # If no spouse, tracker uses only user's points
+            if not spouse_username:
+                spouse_points = 0
+                spouse_adjustment = 0
+            else:
+                spouse_points = self._get_daily_points_for_date(spouse_username, date)
+                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points, date)
+            
+            user_points = self._get_daily_points_for_date(username, date)
+            user_adjustment = self.calculate_tracker_adjustment(username, user_points, date)
             
             # Get current tracker
             tracker = self.get_or_create_tracker()
@@ -253,18 +281,26 @@ class CollaborationService:
             })
             
             # Log to history
-            self._log_tracker_history(date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment)
+            self._log_tracker_history(date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username)
             
-            logger.info(f"Updated tracker for {date.isoformat()}: {old_value} → {new_value} (Ian: {user_adjustment}, Karleigh: {spouse_adjustment})")
+            logger.info(f"Updated tracker for {date.isoformat()}: {old_value} → {new_value} ({username}: {user_adjustment}, {spouse_username or 'none'}: {spouse_adjustment})")
             
         except Exception as e:
             logger.error(f"Failed to update tracker for {date}: {e}")
     
-    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment):
+    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username=None, spouse_username=None):
         """Log tracker update to history for debugging"""
         try:
-            user_goals = self.get_user_goals('Ian')
-            spouse_goals = self.get_user_goals('Karleigh')
+            # Skip logging if no username provided
+            if not username:
+                return
+            
+            # Get spouse if not provided
+            if not spouse_username:
+                spouse_username = get_spouse(username)
+            
+            user_goals = self.get_user_goals(username)
+            spouse_goals = self.get_user_goals(spouse_username) if spouse_username else None
             
             history_data = {
                 'date': date.isoformat(),
@@ -286,7 +322,7 @@ class CollaborationService:
         except Exception as e:
             logger.error(f"Failed to log tracker history: {e}")
     
-    def update_tracker_catch_up(self, today_date):
+    def update_tracker_catch_up(self, today_date, username=None):
         """Update tracker for all days since last update"""
         try:
             # Get tracker and its last_updated date
@@ -312,7 +348,7 @@ class CollaborationService:
             
             # Process each day in chronological order (oldest first)
             for date in reversed(days_to_process):
-                self._update_tracker_for_date(date)
+                self._update_tracker_for_date(date, username=username)
             
             logger.info(f"Processed {len(days_to_process)} days for tracker catch-up")
             return len(days_to_process)
@@ -398,25 +434,33 @@ class CollaborationService:
                 'message': str(e)
             }
     
-    def progress_day_for_testing(self, ian_points=None, karleigh_points=None):
-        """Manually trigger end-of-day processing for testing with optional point overrides"""
+    def progress_day_for_testing(self, username=None, spouse_username=None, user_points=None, spouse_points=None):
+        """Manually trigger end-of-day processing for testing"""
         try:
+            # Username is required
+            if not username:
+                return {'status': 'error', 'message': 'Username is required'}
+            
             # Get today's date in Central time
             today_central = datetime.now(self.central_tz).date()
             
-            # If points are provided, use them directly; otherwise calculate from database
-            if ian_points is None or karleigh_points is None:
-                # Calculate actual points from database
-                user_points = self._get_daily_points_for_date('Ian', today_central)
-                spouse_points = self._get_daily_points_for_date('Karleigh', today_central)
-            else:
-                # Use provided test values
-                user_points = ian_points
-                spouse_points = karleigh_points
+            # Get spouse if not provided
+            if not spouse_username:
+                spouse_username = get_spouse(username)
             
-            # Calculate adjustments
-            user_adjustment = self.calculate_tracker_adjustment('Ian', user_points)
-            spouse_adjustment = self.calculate_tracker_adjustment('Karleigh', spouse_points)
+            # Use provided points if given, otherwise fetch from database
+            if user_points is None:
+                user_points = self._get_daily_points_for_date(username, today_central)
+            
+            if spouse_username:
+                if spouse_points is None:
+                    spouse_points = self._get_daily_points_for_date(spouse_username, today_central)
+                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points)
+            else:
+                spouse_points = 0
+                spouse_adjustment = 0
+            
+            user_adjustment = self.calculate_tracker_adjustment(username, user_points)
             
             # Get current tracker
             tracker = self.get_or_create_tracker()
@@ -438,9 +482,9 @@ class CollaborationService:
             })
             
             # Log to history
-            self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment)
+            self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username)
             
-            logger.info(f"Manually processed day: {today_central.isoformat()} - Ian: {user_points}, Karleigh: {spouse_points}, Tracker: {old_value} → {new_value}")
+            logger.info(f"Manually processed day: {today_central.isoformat()} - {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
             
             return {
                 'status': 'success', 

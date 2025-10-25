@@ -19,7 +19,7 @@ def check_all_users():
     print("=" * 80)
     
     # Initialize Firestore client
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'cloudtasks-app-473120')
+    project_id = os.environ['GOOGLE_CLOUD_PROJECT']
     print(f"Using project: {project_id}")
     db = firestore.Client(project=project_id)
     

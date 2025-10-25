@@ -234,7 +234,10 @@
         // Load categories and goals
         await loadCategories();
         await loadGoals();
-        renderInterface();
+        renderGoalsInterface();
+        
+        // Set up event listeners
+        setupEventListeners();
     });
     
     // Load available categories
@@ -268,7 +271,7 @@
     }
     
     // Render the entire interface
-    function renderInterface() {
+    function renderGoalsInterface() {
         renderCategoryTabs();
         renderCategorySections();
         
@@ -329,13 +332,13 @@
                                 <option value="Paused">Paused</option>
                             </select>
                         </div>
-                        <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-all" onclick="toggleOneAndDone('all')">
+                        <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-all" data-action="toggle-one-and-done" data-target="all">
                             One-and-Done Goal
                         </button>
                     </div>
                     <div class="add-goal-button-row">
-                        <button class="btn" id="add-goal-btn-all" onclick="addGoal('all')">Add Goal</button>
-                        <button class="btn btn-secondary" id="cancel-btn-all" onclick="cancelEdit('all')" style="display: none; margin-left: 10px;">Cancel</button>
+                        <button class="btn" id="add-goal-btn-all" data-action="add-goal" data-target="all">Add Goal</button>
+                        <button class="btn btn-secondary" id="cancel-btn-all" data-action="cancel-edit" data-target="all" style="display: none; margin-left: 10px;">Cancel</button>
                     </div>
                 </div>
                 
@@ -379,13 +382,13 @@
                                     <option value="Paused">Paused</option>
                                 </select>
                             </div>
-                            <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-${category.value}" onclick="toggleOneAndDone('${category.value}')">
+                            <button type="button" class="btn btn-secondary" id="goal-delete-on-complete-btn-${category.value}" data-action="toggle-one-and-done" data-target="${category.value}">
                                 One-and-Done Goal
                             </button>
                         </div>
                         <div class="add-goal-button-row">
-                            <button class="btn" id="add-goal-btn-${category.value}" onclick="addGoal('${category.value}')">Add Goal</button>
-                            <button class="btn btn-secondary" id="cancel-btn-${category.value}" onclick="cancelEdit('${category.value}')" style="display: none; margin-left: 10px;">Cancel</button>
+                            <button class="btn" id="add-goal-btn-${category.value}" data-action="add-goal" data-target="${category.value}">Add Goal</button>
+                            <button class="btn btn-secondary" id="cancel-btn-${category.value}" data-action="cancel-edit" data-target="${category.value}" style="display: none; margin-left: 10px;">Cancel</button>
                         </div>
                     </div>
                     
@@ -452,8 +455,8 @@
                         <div class="goal-content">
                             <div class="goal-text">${goal.description}</div>
                             <div class="goal-actions">
-                                <button class="btn btn-sm btn-secondary" onclick="editGoal('${goal.id}')">Edit</button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteGoal('${goal.id}')">Delete</button>
+                                <button class="btn btn-sm btn-secondary" data-action="edit-goal" data-goal-id="${goal.id}">Edit</button>
+                                <button class="btn btn-sm btn-danger" data-action="delete-goal" data-goal-id="${goal.id}">Delete</button>
                             </div>
                         </div>
                         <div class="goal-meta">
@@ -491,8 +494,8 @@
                     <div class="goal-content">
                         <div class="goal-text">${goal.description}</div>
                         <div class="goal-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="editGoal('${goal.id}')">Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteGoal('${goal.id}')">Delete</button>
+                            <button class="btn btn-sm btn-secondary" data-action="edit-goal" data-goal-id="${goal.id}">Edit</button>
+                            <button class="btn btn-sm btn-danger" data-action="delete-goal" data-goal-id="${goal.id}">Delete</button>
                         </div>
                     </div>
                     <div class="goal-meta">
@@ -775,6 +778,29 @@
             console.error('Error deleting goal:', error);
             alert('Error deleting goal. Please try again.');
         }
+    }
+    
+    // Set up event listeners for buttons
+    function setupEventListeners() {
+        // Use event delegation for dynamically created buttons
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('[data-action="toggle-one-and-done"]')) {
+                const target = e.target.getAttribute('data-target');
+                toggleOneAndDone(target);
+            } else if (e.target.matches('[data-action="add-goal"]')) {
+                const target = e.target.getAttribute('data-target');
+                addGoal(target);
+            } else if (e.target.matches('[data-action="cancel-edit"]')) {
+                const target = e.target.getAttribute('data-target');
+                cancelEdit(target);
+            } else if (e.target.matches('[data-action="edit-goal"]')) {
+                const goalId = e.target.getAttribute('data-goal-id');
+                editGoal(goalId);
+            } else if (e.target.matches('[data-action="delete-goal"]')) {
+                const goalId = e.target.getAttribute('data-goal-id');
+                deleteGoal(goalId);
+            }
+        });
     }
 </script>
 {% endblock %}

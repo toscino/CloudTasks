@@ -4,13 +4,22 @@ sys.path.append('src')
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 import os
-os.environ['GOOGLE_CLOUD_PROJECT'] = 'cloudtasks-app-473120'
-db = firestore.Client(project='cloudtasks-app-473120')
+
+# Get username from command line argument
+if len(sys.argv) > 1:
+    username = sys.argv[1]
+else:
+    print("Error: Username required as argument")
+    print("Usage: python debug_house_tasks.py <username>")
+    sys.exit(1)
+
+project_id = os.environ['GOOGLE_CLOUD_PROJECT']
+db = firestore.Client(project=project_id)
 
 # Check House tasks specifically
 house_query = db.collection('tasks').where(
     filter=firestore.And([
-        FieldFilter('username', '==', 'Ian'),
+        FieldFilter('username', '==', username),
         FieldFilter('completed', '==', False),
         FieldFilter('category', '==', 'House')
     ])
@@ -30,7 +39,7 @@ print(f'\nTesting different query approaches:')
 # Approach 1: Query without presented_at filter
 query1 = db.collection('tasks').where(
     filter=firestore.And([
-        FieldFilter('username', '==', 'Ian'),
+        FieldFilter('username', '==', username),
         FieldFilter('completed', '==', False),
         FieldFilter('category', '==', 'House')
     ])
@@ -41,7 +50,7 @@ print(f'Query without presented_at filter: {len(tasks1)} tasks')
 # Approach 2: Query with saved == False (which should be the same as unpresented)
 query2 = db.collection('tasks').where(
     filter=firestore.And([
-        FieldFilter('username', '==', 'Ian'),
+        FieldFilter('username', '==', username),
         FieldFilter('completed', '==', False),
         FieldFilter('saved', '==', False),
         FieldFilter('category', '==', 'House')

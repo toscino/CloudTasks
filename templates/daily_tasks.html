@@ -442,8 +442,8 @@
                     <input type="number" id="task-points" min="-100" max="100" value="1" placeholder="Points">
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
-                    <button class="btn" id="add-task-btn" onclick="addDailyTask()">Add Task</button>
-                    <button class="btn btn-secondary" id="cancel-task-btn" onclick="cancelTaskEdit()" style="display: none;">Cancel</button>
+                    <button class="btn" id="add-task-btn">Add Task</button>
+                    <button class="btn btn-secondary" id="cancel-task-btn" style="display: none;">Cancel</button>
                 </div>
             </div>
         </div>
@@ -475,7 +475,7 @@
                         </select>
                     </div>
                     <div class="goal-button-container">
-                        <button onclick="saveGoals()">Save</button>
+                        <button id="save-goals-btn">Save</button>
                     </div>
                 </div>
             </div>
@@ -497,6 +497,7 @@
     
     // Daily Tasks Management JavaScript
     let templates = [];
+    let todaysInstances = [];
     let todaysInstancesByTemplate = {};
     
     // Wait for authentication to be ready, then load data
@@ -506,12 +507,15 @@
         // Load templates and today's instances
         await loadTemplates();
         await loadTodaysInstances();
-        await loadGoals();
-        renderInterface();
+        await loadCollaborationGoals();
+        renderDailyTasksInterface();
         
         // Initialize day checkboxes and stretch goal calculation after everything is loaded
         initializeDayCheckboxes();
         initializeStretchGoalCalculation();
+        
+        // Set up button event listeners
+        setupButtonEventListeners();
     });
     
     // Load daily task templates
@@ -551,7 +555,7 @@
     }
         
     // Render the entire interface
-    function renderInterface() {
+    function renderDailyTasksInterface() {
         renderTemplates();
     }
     
@@ -598,8 +602,8 @@
                         ${template.description}
                     </div>
                     <div class="template-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="editTemplate('${template.id}')">Edit</button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${template.id}')">Delete</button>
+                        <button class="btn btn-sm btn-secondary" data-template-id="${template.id}" data-action="edit">Edit</button>
+                        <button class="btn btn-sm btn-danger" data-template-id="${template.id}" data-action="delete">Delete</button>
                     </div>
                 </div>
                 <div class="template-meta">
@@ -660,7 +664,7 @@
                 // Reload templates and today's instances
                 await loadTemplates();
                 await loadTodaysInstances();
-                renderInterface();
+                renderDailyTasksInterface();
             } else {
                 alert('Failed to create daily task: ' + data.message);
             }
@@ -698,7 +702,6 @@
         // Change button to update
         const addBtn = document.getElementById('add-task-btn');
         addBtn.textContent = 'Update Task';
-        addBtn.onclick = updateDailyTask;
         
         // Show cancel button
         const cancelBtn = document.getElementById('cancel-task-btn');
@@ -754,7 +757,7 @@
                 // Reload templates and today's instances
                 await loadTemplates();
                 await loadTodaysInstances();
-                renderInterface();
+                renderDailyTasksInterface();
             } else {
                 alert('Failed to update template: ' + data.message);
             }
@@ -762,11 +765,6 @@
             console.error('Error updating template:', error);
             alert('Error updating template. Please try again.');
         }
-    }
-    
-    // Cancel editing
-    function cancelTaskEdit() {
-        resetTaskForm();
     }
     
     // Reset task form
@@ -787,7 +785,6 @@
         // Reset button
         const addBtn = document.getElementById('add-task-btn');
         addBtn.textContent = 'Add Task';
-        addBtn.onclick = addDailyTask;
         
         // Hide cancel button
         const cancelBtn = document.getElementById('cancel-task-btn');
@@ -811,7 +808,7 @@
                 // Reload templates and today's instances
                 await loadTemplates();
                 await loadTodaysInstances();
-                renderInterface();
+                renderDailyTasksInterface();
             } else {
                 alert('Failed to delete template: ' + data.message);
             }
@@ -822,11 +819,9 @@
     }
     
     // Load goals and update display
-    async function loadGoals() {
+    async function loadCollaborationGoals() {
         try {
             const data = await apiCall('/api/collaboration/tracker');
-            
-            console.log('DEBUG: loadGoals response:', data);
             
             if (data.status === 'success') {
                 document.getElementById('par-display').value = data.par;
@@ -834,7 +829,6 @@
                 document.getElementById('stretch-goal-display').value = data.stretch_goal;
                 
                 const multiplier = data.adjustment_multiplier || 1;
-                console.log('DEBUG: Setting adjustment multiplier to:', multiplier);
                 document.getElementById('adjustment-multiplier').value = multiplier;
             } else {
                 console.error('Failed to load goals:', data.message);
@@ -848,8 +842,6 @@
     async function saveGoals() {
         const stretchSetting = parseInt(document.getElementById('stretch-setting').value);
         const adjustmentMultiplier = parseInt(document.getElementById('adjustment-multiplier').value);
-        
-        console.log('DEBUG: Saving goals - stretchSetting:', stretchSetting, 'adjustmentMultiplier:', adjustmentMultiplier);
         
         if (isNaN(stretchSetting) || stretchSetting < 0 || stretchSetting > 100) {
             alert('Stretch setting must be between 0 and 100');
@@ -867,19 +859,15 @@
                 adjustment_multiplier: adjustmentMultiplier
             };
             
-            console.log('DEBUG: Sending request data:', requestData);
-            
             const data = await apiCall('/api/collaboration/goals', {
                 method: 'POST',
                 body: JSON.stringify(requestData)
             });
             
-            console.log('DEBUG: Save response:', data);
-            
             if (data.status === 'success') {
                 alert('Goals saved successfully!');
                 // Reload goals to update calculated values
-                await loadGoals();
+                await loadCollaborationGoals();
             } else {
                 alert('Failed to save goals: ' + data.message);
             }
@@ -923,6 +911,56 @@
     function handleDayCheckboxClick(e) {
         e.preventDefault();
         this.classList.toggle('checked');
+    }
+    
+    // Set up button event listeners
+    function setupButtonEventListeners() {
+        const addBtn = document.getElementById('add-task-btn');
+        const cancelBtn = document.getElementById('cancel-task-btn');
+        const saveGoalsBtn = document.getElementById('save-goals-btn');
+        
+        if (addBtn) {
+            addBtn.addEventListener('click', function() {
+                if (editingTemplateId) {
+                    updateDailyTask();
+                } else {
+                    addDailyTask();
+                }
+            });
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', cancelTaskEdit);
+        }
+        
+        if (saveGoalsBtn) {
+            saveGoalsBtn.addEventListener('click', saveGoals);
+        }
+        
+        // Use event delegation for dynamically created template buttons
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('[data-action="edit"]')) {
+                const templateId = e.target.getAttribute('data-template-id');
+                editTemplate(templateId);
+            } else if (e.target.matches('[data-action="delete"]')) {
+                const templateId = e.target.getAttribute('data-template-id');
+                deleteTemplate(templateId);
+            }
+        });
+    }
+    
+    // Cancel task editing
+    function cancelTaskEdit() {
+        editingTemplateId = null;
+        resetTaskForm();
+        
+        // Reset button
+        const addBtn = document.getElementById('add-task-btn');
+        addBtn.textContent = 'Add Task';
+        
+        // Hide cancel button
+        const cancelBtn = document.getElementById('cancel-task-btn');
+        cancelBtn.style.display = 'none';
     }
 </script>
 {% endblock %}

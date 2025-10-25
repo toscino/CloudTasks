@@ -12,7 +12,14 @@ def check_reward_state():
         db = firestore.Client()
         print("Connected to Firestore successfully")
         
-        username = 'Karleigh'
+        # Get username from command line argument
+        import sys
+        if len(sys.argv) > 1:
+            username = sys.argv[1]
+        else:
+            print("Error: Username required as argument")
+            print("Usage: python check_reward_state.py <username>")
+            sys.exit(1)
         
         print("=== REWARD GOALS ===")
         goals = list(db.collection('reward_goals').where(

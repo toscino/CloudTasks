@@ -9,5 +9,11 @@ app = create_app()
 
 if __name__ == '__main__':
     # For local development
+    import logging
+    
+    # Disable Flask's HTTP request logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.WARNING)
+    
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=True)

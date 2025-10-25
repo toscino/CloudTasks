@@ -19,7 +19,7 @@ def diagnose_tasks(username=None):
     print("=" * 80)
     
     # Initialize Firestore client
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'cloudtasks-app-473120')
+    project_id = os.environ['GOOGLE_CLOUD_PROJECT']
     db = firestore.Client(project=project_id)
     
     if username:

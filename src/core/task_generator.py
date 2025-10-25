@@ -9,6 +9,7 @@ from datetime import datetime
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from src.utils.logger import logger
+from src.utils.config import get_spouse
 
 
 difficulty_weights = {
@@ -65,12 +66,13 @@ class TaskGenerator(AITaskPrompt):
             if target == "Self":
                 examples_key = "self"
             elif target == "Spouse":
-                if user == "Ian":
-                    examples_key = "karleigh"  # Ian's spouse tasks
-                elif user == "Karleigh":
-                    examples_key = "ian"  # Karleigh's spouse tasks
+                # Get spouse username dynamically
+                spouse_username = get_spouse(user)
+                if spouse_username:
+                    # Use spouse's name as examples key (lowercase)
+                    examples_key = spouse_username.lower()
                 else:
-                    examples_key = "spouse"  # Fallback for other users
+                    examples_key = "spouse"  # Fallback if no spouse linked
             else:  # Kids, Work, House
                 examples_key = target.lower()
             
