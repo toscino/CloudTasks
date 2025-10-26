@@ -43,6 +43,7 @@ class TaskGenerator(AITaskPrompt):
         self.client = OpenAI()
     
     def format_prompt(self, context, taskList, user):
+        """Format prompt for AI task generation"""
         prompt = ""
 
         if context:
@@ -58,7 +59,12 @@ class TaskGenerator(AITaskPrompt):
                 targets.add(task["target"])
                 
         for combo in combos:
-            prompt += f"Context about tasks where {combo[0]} is targeting {combo[1]}:\n {self.TARGETS[combo[0]][combo[1]].strip()}\n\n"
+            # Use default context if user not found in TARGETS
+            if combo[0] in self.TARGETS and combo[1] in self.TARGETS[combo[0]]:
+                prompt += f"Context about tasks where {combo[0]} is targeting {combo[1]}:\n {self.TARGETS[combo[0]][combo[1]].strip()}\n\n"
+            else:
+                # Fallback for unknown users (like test_user)
+                prompt += f"Context about tasks where {combo[0]} is targeting {combo[1]}:\n General tasks focused on {combo[1]}.\n\n"
 
         for target in targets:
             all_examples = []
@@ -91,6 +97,7 @@ class TaskGenerator(AITaskPrompt):
         return prompt
 
     def generate_tasks(self, context, tasks, user):
+        """Generate tasks via AI"""
         logger.debug(f"Generating {len(tasks)} tasks for {user}")
         user_prompt = self.format_prompt(context, tasks, user)
         response = self.get_response(user_prompt)
@@ -119,7 +126,7 @@ class TaskGenerator(AITaskPrompt):
         return []
     
     def generate_task(self, base_idea, task_type='reward', themes=None):
-        """Generate a single task for reward goals"""
+        """Generate single reward task"""
         logger.debug(f"Generating {task_type} task with base idea: {base_idea}")
         
         # Create a single task input
@@ -141,7 +148,7 @@ class TaskGenerator(AITaskPrompt):
     
     
     def generate_reward_tasks_batch_with_weights(self, goals_data, count):
-        """Generate a batch of reward tasks from reward goals with individual difficulties per goal"""
+        """Generate reward task batch with per-goal difficulties"""
         logger.debug(f"Generating reward tasks from {len(goals_data)} goals (limited to {count} tasks) with individual difficulties")
         
         # Limit to the number of goals or requested count, whichever is smaller
@@ -182,6 +189,7 @@ class TaskGenerator(AITaskPrompt):
             return []
         
     def get_response(self, prompt):
+        """Get OpenAI API response"""
         try:
             response = self.client.chat.completions.create(
             model=self.model,
@@ -217,7 +225,7 @@ class TaskGenerator(AITaskPrompt):
             return None
     
     def get_goals_for_category(self, username, category):
-        """Fetch goals for a specific category from Firestore"""
+        """Get goals by category"""
         try:
             # Query goals for this user and category
             goals_query = self.db.collection('goals').where(
@@ -240,7 +248,7 @@ class TaskGenerator(AITaskPrompt):
             return []
     
     def get_active_goals_for_category(self, username, category):
-        """Get only active goals for a user and category with database filter"""
+        """Get active goals by category"""
         try:
             # Query only active goals for this user and category
             goals_query = self.db.collection('goals').where(
@@ -264,7 +272,7 @@ class TaskGenerator(AITaskPrompt):
             return []
 
     def select_base_idea_from_goals(self, username, category):
-        """Select a random base idea from goals using priority weighting (3x high, 1x low), with significant chance to return None"""
+        """Select weighted random goal (3x high, 1x low) or None"""
         active_goals = self.get_active_goals_for_category(username, category)
         
         if not active_goals:
@@ -316,7 +324,7 @@ class TaskGenerator(AITaskPrompt):
             }
     
     def generate_tasks_for_category(self, username, category, count=None, upload_to_firestore=True):
-        """Generate tasks for a specific category using AI - main entry point"""
+        """Generate AI tasks for category"""
         if count is None:
             return []
             

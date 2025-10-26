@@ -20,7 +20,7 @@ class RewardService:
         self.task_master = task_master
     
     def get_rewards(self, username: str) -> Dict[str, Any]:
-        """Get all rewards for current user (max 4) - Test function only"""
+        """Get rewards (max 4)"""
         try:
             # Simple query for testing purposes only
             rewards_query = self.db.collection('rewards').where('username', '==', username)
@@ -48,7 +48,7 @@ class RewardService:
             return handle_exception(e, "Failed to get rewards")
     
     def create_reward(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Create a new reward"""
+        """Create reward"""
         try:
             if not data or not data.get('description'):
                 return {'error': 'Reward description is required'}
@@ -71,7 +71,7 @@ class RewardService:
             return handle_exception(e, "Failed to create reward")
     
     def complete_reward(self, reward_id: str, username: str) -> Dict[str, Any]:
-        """Mark a reward as completed"""
+        """Complete reward"""
         try:
             # Verify the reward belongs to this user
             doc_ref = self.db.collection('rewards').document(reward_id)
@@ -103,7 +103,7 @@ class RewardService:
             return handle_exception(e, "Failed to complete reward")
     
     def save_reward(self, reward_id: str, username: str) -> Dict[str, Any]:
-        """Toggle save status for a reward"""
+        """Toggle save status"""
         try:
             doc_ref = self.db.collection('rewards').document(reward_id)
             doc = doc_ref.get()
@@ -135,7 +135,7 @@ class RewardService:
             return handle_exception(e, "Failed to update reward")
     
     def get_pending_rewards(self, username: str) -> Dict[str, Any]:
-        """Get pending earned rewards for current user"""
+        """Get pending earned rewards"""
         try:
             # Query pending earned rewards for this user
             rewards_query = self.db.collection('earned_rewards').where(
@@ -168,7 +168,7 @@ class RewardService:
             return handle_exception(e, "Failed to get pending rewards")
     
     def generate_reward_options(self, reward_id: str, username: str) -> Dict[str, Any]:
-        """Generate reward options for a specific earned reward"""
+        """Generate reward options for earned reward"""
         try:
             # Verify the earned reward belongs to this user
             doc_ref = self.db.collection('earned_rewards').document(reward_id)
@@ -206,7 +206,7 @@ class RewardService:
             return handle_exception(e, "Failed to generate reward options")
     
     def select_reward_option(self, reward_id: str, option_id: str, username: str) -> Dict[str, Any]:
-        """Select a reward option for a specific earned reward"""
+        """Select reward option and create reward goal"""
         try:
             # Verify the earned reward belongs to this user
             earned_doc_ref = self.db.collection('earned_rewards').document(reward_id)

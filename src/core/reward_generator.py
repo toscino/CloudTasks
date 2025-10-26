@@ -28,7 +28,7 @@ class RewardGenerator(AITaskPrompt):
         self.client = OpenAI()
     
     def format_prompt_theme(self, context, user, num_rewards=4):
-        """Format prompt for generating reward options with themes"""
+        """Format prompt for reward generation"""
         prompt = f"You are generating special reward options for {user}.\n"
         prompt += f"These are intimate/playful activities that {user}'s spouse will do for {user} as a treat {user} earned.\n"
 
@@ -49,7 +49,7 @@ class RewardGenerator(AITaskPrompt):
         return prompt
 
     def generate_rewards(self, context, user, num_rewards=4):
-        """Generate reward options using AI"""
+        """Generate rewards via AI"""
         logger.debug(f"Generating {num_rewards} reward options for {user}")
         user_prompt = self.format_prompt_theme(context, user, num_rewards)
         response = self.get_response(user_prompt)
@@ -110,7 +110,7 @@ class RewardGenerator(AITaskPrompt):
         return []
     
     def get_response(self, prompt):
-        """Get response from OpenAI API"""
+        """Get OpenAI API response"""
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -146,7 +146,7 @@ class RewardGenerator(AITaskPrompt):
             return None
     
     def generate_reward_options_for_user(self, username, context=None, count=4, upload_to_firestore=True):
-        """Generate reward options for a specific user - main entry point"""
+        """Generate AI reward options for user"""
         if count is None:
             return []
             

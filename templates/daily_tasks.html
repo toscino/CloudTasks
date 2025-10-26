@@ -691,8 +691,13 @@
         document.getElementById('task-description').value = template.description;
         document.getElementById('task-points').value = template.points;
         
-        // Set days
-        template.days.forEach(day => {
+        // First, clear all checkboxes
+        document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+            checkbox.classList.remove('checked');
+        });
+        
+        // Then set the selected days
+        template.days_of_week.forEach(day => {
             const dayCheckbox = document.querySelector(`[data-day="${day}"]`);
             if (dayCheckbox) {
                 dayCheckbox.classList.add('checked');
@@ -746,7 +751,7 @@
                 body: JSON.stringify({
                     description: description,
                     points: points,
-                    days: selectedDays
+                    days_of_week: selectedDays
                 })
             });
             

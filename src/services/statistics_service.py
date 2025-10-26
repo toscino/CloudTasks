@@ -19,7 +19,7 @@ class StatisticsService:
         self.task_master = task_master
     
     def get_weekly_points(self, username: str) -> Dict[str, Any]:
-        """Get weekly difficulty points for current user"""
+        """Get weekly difficulty points"""
         try:
             # Calculate Friday 5pm to Friday 5pm week boundaries
             # Get current time in local timezone (Central - Iowa/Chicago)
@@ -108,7 +108,7 @@ class StatisticsService:
             }
     
     def get_reward_comparison(self, username: str, spouse_username: str) -> Dict[str, Any]:
-        """Get pending rewards comparison between spouses"""
+        """Get pending rewards comparison"""
         try:
             # Count pending rewards for both users
             user_rewards_query = self.db.collection('reward_goals').where(
@@ -147,7 +147,7 @@ class StatisticsService:
             }
     
     def get_challenges(self, username: str) -> Dict[str, Any]:
-        """Get active challenges for current user, with background pregeneration"""
+        """Get active challenges (one per goal)"""
         try:
             logger.debug(f"Fetching challenges for user: {username}")
             
@@ -176,7 +176,7 @@ class StatisticsService:
             }
     
     def complete_challenge(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Complete a challenge and mark associated reward goal as completed"""
+        """Complete challenge and reward goal"""
         try:
             # Import ChallengeMaster
             from src.core.challenge_master import ChallengeMaster

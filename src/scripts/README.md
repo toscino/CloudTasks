@@ -28,6 +28,12 @@ This directory contains utility scripts for database maintenance, debugging, and
 **Purpose**: Check reward state  
 **Usage**: `python src/scripts/check_reward_state.py`
 
+#### `inject_test_user_tasks.py`
+**Purpose**: Inject AI-generated tasks for test_user into the database  
+**Usage**: `python src/scripts/inject_test_user_tasks.py`  
+**Output**: Generates tasks for test_user across all categories  
+**Requirements**: OpenAI API key configured in environment
+
 #### `diagnose_tasks.py [username]`
 **Purpose**: Diagnostic tool for task issues  
 **Usage**: `python src/scripts/diagnose_tasks.py Ian`

@@ -20,7 +20,7 @@ class RewardMaster:
         self.reward_generator = RewardGenerator(db)
     
     def ensure_minimum_reward_options(self, username):
-        """Ensure user has at least MIN_REWARD_OPTIONS reward options available"""
+        """Ensure minimum reward options with locking"""
         # Use database-based locking for App Engine compatibility
         lock_key = f"reward_generation_lock_{username}"
         lock_ref = None
@@ -92,7 +92,7 @@ class RewardMaster:
                     logger.error(f"Failed to release lock for {username}: {lock_error}")
     
     def _count_reward_options(self, username):
-        """Count unused reward options for a user"""
+        """Count unused reward options"""
         try:
             options_query = self.db.collection('reward_options').where(
                 filter=firestore.And([
@@ -107,7 +107,7 @@ class RewardMaster:
             return 0
     
     def get_available_reward_options(self, username, earned_reward_id):
-        """Get 4 reward options for a specific earned reward (mark as used when offered)"""
+        """Get 4 reward options and mark as used"""
         try:
             # Get available reward options that haven't been used yet
             options_query = self.db.collection('reward_options').where(
@@ -149,7 +149,7 @@ class RewardMaster:
             return []
     
     def select_reward_option(self, username, earned_reward_id, selected_option_id):
-        """Select a reward option, create base reward idea, and delete the earned reward"""
+        """Select reward option and create reward goal"""
         try:
             # Get the reward option
             doc_ref = self.db.collection('reward_options').document(selected_option_id)
@@ -204,7 +204,7 @@ class RewardMaster:
     
     
     def _sanitize_reward_data(self, reward_data):
-        """Convert Firestore timestamps to datetime objects for JSON serialization"""
+        """Convert Firestore timestamps for JSON serialization"""
         timestamp_fields = ['created_at', 'updated_at', 'selected_at']
         current_time = datetime.now()
         

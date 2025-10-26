@@ -48,7 +48,7 @@ class CollaborationService:
             return None
     
     def get_user_goals(self, username):
-        """Get user's stretch setting and calculate par/stretch goals"""
+        """Get par and stretch goal settings"""
         try:
             # Get user's stretch setting
             goals_query = self.db.collection('user_goals').where('username', '==', username).limit(1)
@@ -80,7 +80,7 @@ class CollaborationService:
             }
     
     def set_user_stretch_setting(self, username, stretch_setting, adjustment_multiplier=None):
-        """Set user's stretch setting and optional adjustment multiplier"""
+        """Set stretch setting and adjustment multiplier"""
         try:
             if stretch_setting < 0 or stretch_setting > 100:
                 return {'status': 'error', 'message': 'Stretch setting must be between 0 and 100'}
@@ -121,7 +121,7 @@ class CollaborationService:
             return {'status': 'error', 'message': f'Failed to update goals: {str(e)}'}
     
     def _calculate_user_par_for_date(self, username, date):
-        """Calculate par (sum of positive daily task points) for a user on a specific date"""
+        """Calculate par for date"""
         try:
             # Get the weekday for the specific date (0=Monday, 6=Sunday)
             target_weekday = date.weekday()  # 0=Monday, 6=Sunday
@@ -149,12 +149,12 @@ class CollaborationService:
             return 0
     
     def _calculate_user_par(self, username):
-        """Calculate par (sum of positive daily task points) for a user for today"""
+        """Calculate par for today"""
         today = datetime.now(self.central_tz).date()
         return self._calculate_user_par_for_date(username, today)
     
     def calculate_tracker_adjustment(self, username, daily_points, date=None):
-        """Calculate +1, 0, or -1 based on user's performance, multiplied by user's adjustment multiplier"""
+        """Calculate adjustment (+1/0/-1) based on performance"""
         try:
             # Use provided date or today for par calculation
             if date is None:
@@ -186,7 +186,7 @@ class CollaborationService:
             return 0
     
     def _get_daily_points_for_date(self, username, date):
-        """Get total points earned by user on a specific date"""
+        """Get daily points for date"""
         try:
             date_str = date.isoformat()
             
@@ -238,7 +238,7 @@ class CollaborationService:
             return 0
     
     def _update_tracker_for_date(self, date, username=None):
-        """Update tracker for a specific date"""
+        """Update tracker for date"""
         try:
             # Get the primary user (the one who triggered the update)
             # If no username provided, skip update (can't process without knowing which user)
@@ -358,7 +358,7 @@ class CollaborationService:
             return 0
     
     def get_tracker_display(self, username):
-        """Get tracker value and user's goals for display"""
+        """Get tracker value and goals"""
         try:
             tracker = self.get_or_create_tracker()
             goals = self.get_user_goals(username)
@@ -414,7 +414,7 @@ class CollaborationService:
             return {'status': 'error', 'message': str(e)}
     
     def get_todays_total_points(self, username):
-        """Get total points earned today (daily tasks + regular tasks)"""
+        """Get total points today"""
         try:
             # Get today's date in Central time
             today_central = datetime.now(self.central_tz).date()

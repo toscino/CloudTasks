@@ -22,7 +22,7 @@ class ChallengeMaster:
         self.task_generator = TaskGenerator(db)
     
     def _acquire_generation_lock(self, username):
-        """Acquire generation lock with timeout checking"""
+        """Acquire generation lock with timeout"""
         lock_key = f"challenge_generation_lock_{username}"
         lock_ref = self.db.collection('generation_locks').document(lock_key)
         lock_doc = lock_ref.get()
@@ -53,7 +53,7 @@ class ChallengeMaster:
         return lock_ref
     
     def _release_generation_lock(self, lock_ref, username):
-        """Release generation lock with error handling"""
+        """Release generation lock"""
         if lock_ref:
             try:
                 lock_ref.delete()
@@ -62,7 +62,7 @@ class ChallengeMaster:
                 logger.error(f"Failed to release lock for {username}: {lock_error}")
     
     def _get_active_reward_goals(self, username):
-        """Get active reward goals for user"""
+        """Get active reward goals"""
         goals_query = self.db.collection('reward_goals').where(
             filter=firestore.And([
                 FieldFilter('username', '==', username),
@@ -76,7 +76,7 @@ class ChallengeMaster:
         return goals_docs, goal_ids
     
     def _cleanup_invalid_challenges(self, username, goal_ids):
-        """Clean up challenges for non-existent or completed goals"""
+        """Delete invalid challenges"""
         current_time = datetime.now()
         challenges_query = self.db.collection('reward_tasks').where(
             filter=firestore.And([
@@ -104,7 +104,7 @@ class ChallengeMaster:
                 logger.debug(f"Failed to delete invalid challenge {challenge_doc.id}: {e}")
     
     def _count_queued_challenges_per_goal(self, username, goal_ids):
-        """Count existing unpresented challenges per goal (only unpresented count toward minimum)"""
+        """Count unpresented challenges per goal"""
         local_tz = pytz.timezone('US/Central')
         current_time = datetime.now(local_tz)
         challenges_query = self.db.collection('reward_tasks').where(
@@ -158,7 +158,7 @@ class ChallengeMaster:
         return challenges_by_goal
     
     def _identify_goals_needing_challenges(self, username, challenges_by_goal, goal_ids, goals_docs):
-        """Identify goals that need more challenges"""
+        """Find goals needing challenges"""
         goals_needing_challenges = []
         
         for goal_id in goal_ids:
@@ -176,7 +176,7 @@ class ChallengeMaster:
         return goals_needing_challenges
     
     def _generate_challenges_for_goals(self, username, goals_needing_challenges, total_goals_count):
-        """Generate new challenges for goals that need them"""
+        """Generate challenges for goals needing them"""
         if not goals_needing_challenges:
             logger.debug("All goals already have sufficient challenges")
             return
@@ -249,7 +249,7 @@ class ChallengeMaster:
             logger.error(f"Failed to generate challenges for {username}: {e}")
     
     def ensure_minimum_challenges(self, username):
-        """Ensure user has at least MIN_CHALLENGES_PER_GOAL queued challenges for each active reward goal"""
+        """Ensure minimum challenges per active reward goal"""
         lock_ref = None
         
         try:
@@ -282,7 +282,7 @@ class ChallengeMaster:
             self._release_generation_lock(lock_ref, username)
     
     def get_active_challenges(self, username, limit=4):
-        """Get active challenges for user, prioritizing one challenge per goal (used by API endpoint)"""
+        """Get active challenges (one per goal, max limit)"""
         try:
             # Get active reward goals for this user and sort them randomly
             goals_query = self.db.collection('reward_goals').where(
@@ -398,7 +398,7 @@ class ChallengeMaster:
             return []
     
     def complete_challenge_and_goal(self, username, task_id):
-        """Complete a challenge and mark associated reward goal as completed"""
+        """Complete challenge and associated reward goal"""
         try:
             # Get the challenge
             challenge_ref = self.db.collection('reward_tasks').document(task_id)

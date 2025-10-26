@@ -49,7 +49,7 @@ class MorningCardService:
         return converted_rules
     
     def get_card_templates(self, username: str) -> Dict[str, Any]:
-        """Get all card templates for user and their spouse"""
+        """Get card templates for user and spouse"""
         try:
             # Query cards for current user
             templates_query = self.db.collection('morning_card_templates').where(
@@ -96,7 +96,7 @@ class MorningCardService:
             return handle_exception(e, "Failed to get card templates")
     
     def create_card_template(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new card template"""
+        """Create card template"""
         try:
             if not data or not data.get('card_text'):
                 return {'status': 'error', 'message': 'Card text is required'}
@@ -153,7 +153,7 @@ class MorningCardService:
             return handle_exception(e, "Failed to create card template")
     
     def update_card_template(self, card_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Update an existing card template"""
+        """Update card template"""
         try:
             doc_ref = self.db.collection('morning_card_templates').document(card_id)
             doc = doc_ref.get()
@@ -218,7 +218,7 @@ class MorningCardService:
             return handle_exception(e, f"Failed to update card template {card_id}")
     
     def delete_card_template(self, card_id: str, username: str) -> Dict[str, Any]:
-        """Delete a card template"""
+        """Delete card template"""
         try:
             doc_ref = self.db.collection('morning_card_templates').document(card_id)
             doc = doc_ref.get()
@@ -257,7 +257,7 @@ class MorningCardService:
             return handle_exception(e, f"Failed to delete card template {card_id}")
     
     def get_todays_selection(self) -> Dict[str, Any]:
-        """Get today's card selection (creates if needed)"""
+        """Get today's card selection"""
         try:
             # First check if reset is needed
             self.check_and_reset_cards()
@@ -305,7 +305,7 @@ class MorningCardService:
             return handle_exception(e, "Failed to get today's selection")
     
     def select_cards(self, card_ids: List[str], username: str) -> Dict[str, Any]:
-        """Lock in card selection (configured users only)"""
+        """Lock in card selection"""
         try:
             # Check if user has permission to select morning cards
             user_ref = self.db.collection('users').document(username)
@@ -447,7 +447,7 @@ class MorningCardService:
             return handle_exception(e, "Failed to select cards")
     
     def check_and_reset_cards(self) -> Dict[str, Any]:
-        """Check if card selections need to be reset (lazy reset after 2am)"""
+        """Check and reset cards after 2am"""
         try:
             now_central = datetime.now(self.central_tz)
             today_central = now_central.date()

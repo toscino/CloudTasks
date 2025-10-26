@@ -16,11 +16,11 @@ class GoalService:
     """Service for goal-related operations"""
     
     def __init__(self, db):
-        """Initialize the GoalService with Firestore database client"""
+        """Initialize GoalService"""
         self.db = db
     
     def get_goals(self, username: str) -> Dict[str, Any]:
-        """Get all goals for current user organized by category"""
+        """Get goals by category"""
         try:
             # Query goals for this user
             goals_query = self.db.collection('goals').where('username', '==', username)
@@ -46,7 +46,7 @@ class GoalService:
             }
     
     def create_goal(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Create a new goal"""
+        """Create goal"""
         try:
             if not data or not data.get('description'):
                 raise ValidationError(
@@ -77,7 +77,7 @@ class GoalService:
             return handle_exception(e, "Unexpected error creating goal")
     
     def update_goal(self, goal_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Update an existing goal"""
+        """Update goal"""
         try:
             doc_ref = self.db.collection('goals').document(goal_id)
             doc = doc_ref.get()
@@ -120,7 +120,7 @@ class GoalService:
             return handle_exception(e, "Unexpected error updating goal")
     
     def delete_goal(self, goal_id: str, username: str) -> Dict[str, Any]:
-        """Delete a goal"""
+        """Delete goal"""
         try:
             doc_ref = self.db.collection('goals').document(goal_id)
             doc = doc_ref.get()
@@ -150,7 +150,7 @@ class GoalService:
             return handle_exception(e, "Unexpected error deleting goal")
     
     def get_categories(self) -> Dict[str, Any]:
-        """Get available goal categories"""
+        """Get goal categories"""
         categories = [
             {'value': 'Work', 'label': 'Work', 'icon': '💼'},
             {'value': 'Kids', 'label': 'Kids', 'icon': '👶'},
@@ -165,7 +165,7 @@ class GoalService:
         }
     
     def get_rewards_owed(self, username: str) -> Dict[str, Any]:
-        """Get pending rewards owed for current user"""
+        """Get pending rewards owed"""
         try:
             logger.debug(f"Fetching rewards for user: {username}")
             
@@ -204,7 +204,7 @@ class GoalService:
             }
     
     def complete_reward_owed(self, goal_id: str, username: str) -> Dict[str, Any]:
-        """Complete a reward owed"""
+        """Complete reward owed"""
         try:
             doc_ref = self.db.collection('reward_goals').document(goal_id)
             doc = doc_ref.get()

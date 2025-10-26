@@ -21,7 +21,7 @@ class UserService:
         self.db = db
     
     def get_user_settings(self, username: str) -> dict:
-        """Get user settings, creating default if doesn't exist"""
+        """Get user settings (create default if missing)"""
         try:
             user_ref = self.db.collection('users').document(username)
             user_doc = user_ref.get()
@@ -53,7 +53,7 @@ class UserService:
             }
     
     def generate_pairing_code(self, username: str) -> dict:
-        """Generate a new pairing code for spouse linking"""
+        """Generate pairing code"""
         try:
             # Generate random 6-character code (3 chars - 3 chars)
             code_parts = []
@@ -88,7 +88,7 @@ class UserService:
             return handle_exception(e, f"Failed to generate pairing code for {username}")
     
     def link_with_pairing_code(self, username: str, code: str) -> dict:
-        """Link spouses using a pairing code"""
+        """Link spouses via pairing code"""
         try:
             # Get the pairing code
             code_ref = self.db.collection('pairing_codes').document(code)
@@ -187,7 +187,7 @@ class UserService:
             return handle_exception(e, f"Failed to link with pairing code")
     
     def remove_spouse(self, username: str) -> dict:
-        """Remove spouse link (bidirectional)"""
+        """Remove spouse link"""
         try:
             user_settings = self.get_user_settings(username)
             spouse_username = user_settings.get('spouse_username')

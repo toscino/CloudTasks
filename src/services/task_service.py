@@ -17,7 +17,7 @@ class TaskService:
         self.task_master = task_master
     
     def get_tasks(self, username: str) -> Dict[str, Any]:
-        """Get active task session (4 tasks) for current user"""
+        """Get active task session (4 tasks)"""
         try:
             logger.debug(f"Getting tasks for username: {username}")
             
@@ -37,7 +37,7 @@ class TaskService:
             return handle_exception(e, f"Failed to get tasks for {username}")
     
     def get_task_statistics(self, username: str) -> Dict[str, Any]:
-        """Get task statistics including counts by category"""
+        """Get task counts by category"""
         try:
             logger.debug(f"Getting task statistics for username: {username}")
             
@@ -88,7 +88,7 @@ class TaskService:
             return handle_exception(e, f"Failed to get task statistics for {username}")
     
     def create_task(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Create a new task"""
+        """Create task"""
         try:
             if not data or not data.get('description'):
                 return {'error': 'Task description is required'}
@@ -111,7 +111,7 @@ class TaskService:
             return handle_exception(e, "Failed to create task")
     
     def complete_task(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Mark a task as completed and refresh the task session"""
+        """Complete task and refresh session"""
         try:
             logger.debug(f"Completing task {task_id} for user {username}")
             
@@ -151,7 +151,7 @@ class TaskService:
             return handle_exception(e, f"Error completing task {task_id}")
     
     def save_task(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Toggle save status for a task"""
+        """Toggle save status"""
         try:
             doc_ref = self.db.collection('tasks').document(task_id)
             doc = doc_ref.get()

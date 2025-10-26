@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import pytz
 from .task_generator import TaskGenerator
 from src.utils.logger import logger
+from src.utils.config import get_spouse
 
 
 class TaskMaster:
@@ -28,14 +29,14 @@ class TaskMaster:
         self.challenge_master = ChallengeMaster(db)
     
     def earn_reward(self, user, difficulty):
-        """Check if user earns a reward based on task difficulty"""
+        """Check if reward earned based on difficulty"""
         difficulty = difficulty ** 1.5
         if difficulty > random.randint(0, 40):
             return True
         return False
     
     def _get_time_period(self):
-        """Determine current time period based on time and day (using Chicago timezone)"""
+        """Get current time period (morning/workday/evening/weekend)"""
         # Use Chicago timezone for consistent time-based task selection
         local_tz = pytz.timezone('US/Central')
         now = datetime.now(local_tz)
@@ -55,7 +56,7 @@ class TaskMaster:
             return "evening"
     
     def _get_time_based_weights(self, username):
-        """Get time-based category weights for user"""
+        """Get category weights for current time period"""
         time_period = self._get_time_period()
         
         # Get user-specific weights or default to equal weights
@@ -67,7 +68,7 @@ class TaskMaster:
         return user_weights.get(time_period, self.task_generator.TIME_WEIGHTS["default"]["workday"])
     
     def _sanitize_task_data(self, task_data):
-        """Convert Firestore timestamps to datetime objects for JSON serialization"""
+        """Convert Firestore timestamps for JSON serialization"""
         timestamp_fields = ['created_at', 'updated_at', 'presented_at']
         current_time = datetime.now()
         
@@ -87,7 +88,7 @@ class TaskMaster:
         return task_data
     
     def ensure_minimum_tasks(self, username):
-        """Ensure user has at least MIN_TASKS_PER_CATEGORY tasks in each category"""
+        """Ensure minimum tasks per category with locking"""
         # Use database-based locking for App Engine compatibility
         lock_key = f"task_generation_lock_{username}"
         
@@ -117,6 +118,13 @@ class TaskMaster:
             
             logger.info(f"Ensuring minimum tasks for {username}")
             for category in self.CATEGORIES:
+                # Skip Spouse category if user has no linked spouse
+                if category == "Spouse":
+                    spouse_username = get_spouse(username)
+                    if not spouse_username:
+                        logger.debug(f"Skipping Spouse category for {username} (no linked spouse)")
+                        continue
+                
                 count = self._count_tasks_in_category(username, category)
                 logger.debug(f"Category {category}: {count} tasks (minimum: {self.MIN_TASKS_PER_CATEGORY})")
                 logger.ensure_minimum_check(username, f"tasks_{category}", count, self.MIN_TASKS_PER_CATEGORY)
@@ -145,11 +153,7 @@ class TaskMaster:
                 pass
     
     def _count_tasks_in_category(self, username, category):
-        """Count queue tasks (unpresented tasks) for a user in a specific category
-        
-        Counts only unpresented tasks (presented_at == None) - these are the tasks
-        available in the queue for selection.
-        """
+        """Count unpresented tasks in category"""
         try:
             # Get unpresented tasks for this category
             tasks_query = self.db.collection('tasks').where(
@@ -169,7 +173,7 @@ class TaskMaster:
             return 0
     
     def _select_tasks_with_weights(self, username, unpresented_tasks, tasks_needed):
-        """Selects tasks using a dynamic weighted-choice algorithm."""
+        """Select tasks using weighted-choice algorithm"""
         if not unpresented_tasks or tasks_needed <= 0:
             return []
 
@@ -215,7 +219,7 @@ class TaskMaster:
         return selected_tasks    
     
     def get_active_session_tasks(self, username):
-        """Get current active task session (4 tasks) for user"""
+        """Get active task session (4 tasks)"""
         try:
             # First, check if we have enough active presented tasks
             local_tz = pytz.timezone('US/Central')
@@ -274,7 +278,7 @@ class TaskMaster:
             return []
     
     def create_new_task_session(self, username, existing_saved_tasks=None):
-        """Create a new task session with 4 tasks using time-based weights"""
+        """Create new task session (4 tasks) with time-based weights"""
         try:
             # Get saved tasks with database filter
             saved_query = self.db.collection('tasks').where(
@@ -358,7 +362,7 @@ class TaskMaster:
             return []
     
     def complete_task_and_refresh_session(self, username, completed_task_id):
-        """Complete a task and refresh the entire session"""
+        """Complete task and refresh session"""
         try:
             # First, get the current session tasks BEFORE marking as completed
             current_tasks = self.get_active_session_tasks(username)
@@ -370,13 +374,28 @@ class TaskMaster:
                     completed_task = task
                     break
             
-            # Mark the completed task as completed
-            completed_task_ref = self.db.collection('tasks').document(completed_task_id)
-            completed_task_ref.update({
-                'completed': True,
-                'completed_at': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
+            # Special handling for test_user: return completed tasks to pool instead of marking as completed
+            if username == 'test_user':
+                logger.debug(f"test_user exception: returning task {completed_task_id} to pool instead of marking as completed")
+                
+                # Reset the task to unpresented state instead of marking as completed
+                completed_task_ref = self.db.collection('tasks').document(completed_task_id)
+                completed_task_ref.update({
+                    'presented': False,
+                    'presented_at': None,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
+                
+                # For test_user, we still want to process rewards and create new session
+                # but we don't mark the task as permanently completed
+            else:
+                # Normal behavior for all other users: mark task as completed
+                completed_task_ref = self.db.collection('tasks').document(completed_task_id)
+                completed_task_ref.update({
+                    'completed': True,
+                    'completed_at': firestore.SERVER_TIMESTAMP,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
             
             # Check if this task is from a one-and-done goal that needs cleanup
             goal_id = completed_task.get('goal_id') if completed_task else None
@@ -440,10 +459,24 @@ class TaskMaster:
                     except Exception as e:
                         logger.error(f"Failed to store earned reward for {username}: {e}")
             
-            # Delete all non-saved tasks from current session (except the completed one)
-            for task in current_tasks:
-                if not task.get('saved', False) and task['id'] != completed_task_id:
-                    self.db.collection('tasks').document(task['id']).delete()
+            # Handle non-saved tasks from current session
+            if username == 'test_user':
+                # For test_user: return all non-saved tasks to pool instead of deleting them
+                logger.debug(f"test_user exception: returning non-saved tasks to pool instead of deleting")
+                for task in current_tasks:
+                    if not task.get('saved', False) and task['id'] != completed_task_id:
+                        task_ref = self.db.collection('tasks').document(task['id'])
+                        task_ref.update({
+                            'presented': False,
+                            'presented_at': None,
+                            'updated_at': firestore.SERVER_TIMESTAMP
+                        })
+                        logger.debug(f"Returned task {task['id']} to pool for test_user")
+            else:
+                # Normal behavior: delete all non-saved tasks from current session (except the completed one)
+                for task in current_tasks:
+                    if not task.get('saved', False) and task['id'] != completed_task_id:
+                        self.db.collection('tasks').document(task['id']).delete()
             
             # Create new session with 4 fresh tasks (saved tasks will be fetched automatically)
             new_session = self.create_new_task_session(username)

@@ -1,0 +1,57 @@
+# CloudTasks Design Patterns
+
+## Documentation
+Read docs/DESIGN_GUIDE.md for complete architecture and patterns.
+
+## Docstrings
+Follow the style guide in docs/DESIGN_GUIDE.md:
+- Brief one-liners: """Action the noun"""
+- With detail: """Action noun (detail)"""  
+- With side effect: """Action noun and side effect"""
+- Drop "for user" unless contrasting multiple users
+- Skip docstrings for trivial getters/setters
+- Help understand WHAT, not HOW
+
+Examples:
+- ✅ """Get active task session (4 tasks)"""
+- ✅ """Complete task and refresh session"""
+- ✅ """Ensure minimum tasks per category with locking"""
+- ❌ """Get all goals for current user organized by category""" (too wordy)
+
+## Architecture
+Layered pattern: Routes → Services → Core → Database
+
+Services (src/services/):
+- Business logic and API contracts
+- Request validation
+- Error handling
+- Response formatting
+
+Core (src/core/):
+- Domain logic and orchestration
+- Master classes: ensure minimums, session management
+- Generator classes: AI integration, creation logic
+
+## File Organization
+- One class per file
+- Naming: {domain}_service.py, {domain}_master.py, {domain}_generator.py
+- Single responsibility principle
+- Group by responsibility, not by feature
+
+## Code Style
+- Type hints on function signatures
+- Clear, descriptive variable names
+- No global state
+- Explicit dependency injection
+- Keep functions focused
+
+## Documentation Philosophy
+Only create docs that matter in 6+ months:
+- ✅ Permanent reference docs (README, DESIGN_GUIDE, API_CONTRACTS)
+- ❌ No "COMPLETE", "PROGRESS", "SUMMARY" docs
+- Use /plans/ for active work (delete when done)
+- Keep /docs/ minimal and valuable
+- Prefer inline docstrings over separate documentation
+
+Rule: If a future developer won't need it to understand the system, don't create a separate doc for it.
+

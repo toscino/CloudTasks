@@ -20,7 +20,7 @@ class DailyTaskService:
         self.central_tz = get_timezone()
     
     def get_daily_tasks(self, username: str) -> Dict[str, Any]:
-        """Get all daily task templates for user"""
+        """Get daily task templates"""
         try:
             # Query daily task templates for this user
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
@@ -43,7 +43,7 @@ class DailyTaskService:
             }
     
     def create_daily_task(self, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Create a new daily task template"""
+        """Create daily task template"""
         try:
             if not data or not data.get('description'):
                 raise ValidationError(
@@ -118,7 +118,7 @@ class DailyTaskService:
             return handle_exception(e, f"Unexpected error creating daily task for {username}")
     
     def update_daily_task(self, task_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
-        """Update an existing daily task template"""
+        """Update daily task template"""
         try:
             doc_ref = self.db.collection('daily_task_templates').document(task_id)
             doc = doc_ref.get()
@@ -194,7 +194,7 @@ class DailyTaskService:
             }
     
     def delete_daily_task(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Delete a daily task template"""
+        """Delete daily task template"""
         try:
             doc_ref = self.db.collection('daily_task_templates').document(task_id)
             doc = doc_ref.get()
@@ -239,7 +239,7 @@ class DailyTaskService:
             }
     
     def get_todays_instances(self, username: str) -> Dict[str, Any]:
-        """Get today's task instances (after checking if reset is needed)"""
+        """Get today's task instances"""
         try:
             # First check if reset is needed
             self.check_and_reset_daily_tasks(username)
@@ -282,7 +282,7 @@ class DailyTaskService:
             }
     
     def complete_daily_task(self, instance_id: str, username: str) -> Dict[str, Any]:
-        """Mark a daily task instance as complete"""
+        """Complete daily task instance"""
         try:
             doc_ref = self.db.collection('daily_task_instances').document(instance_id)
             doc = doc_ref.get()
@@ -325,7 +325,7 @@ class DailyTaskService:
             }
     
     def check_and_reset_daily_tasks(self, username: str) -> Dict[str, Any]:
-        """Check if daily tasks need to be reset (lazy reset on first access after 2am)"""
+        """Check and reset daily tasks after 2am"""
         try:
             now_central = datetime.now(self.central_tz)
             today_central = now_central.date()
