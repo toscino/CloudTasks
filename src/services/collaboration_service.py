@@ -165,7 +165,7 @@ class CollaborationService:
             stretch_goal = goals['stretch_goal']
             multiplier = goals.get('adjustment_multiplier', 1)  # Default to 1 (normal direction)
             logger.debug(f"User {username} has an adjustment multiplier of {multiplier}")
-            if daily_points > stretch_goal:
+            if daily_points >= stretch_goal:
                 # Above stretch goal (good day)
                 base_adjustment = 1
             elif daily_points >= par:
@@ -288,7 +288,7 @@ class CollaborationService:
         except Exception as e:
             logger.error(f"Failed to update tracker for {date}: {e}")
     
-    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username=None, spouse_username=None):
+    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username=None, spouse_username=None, is_test=False):
         """Log tracker update to history for debugging"""
         try:
             # Skip logging if no username provided
@@ -317,44 +317,108 @@ class CollaborationService:
                 'created_at': firestore.SERVER_TIMESTAMP
             }
             
+            # Only include is_test field if True (for backward compatibility)
+            if is_test:
+                history_data['is_test'] = True
+            
             self.db.collection('tracker_history').add(history_data)
             
         except Exception as e:
             logger.error(f"Failed to log tracker history: {e}")
     
-    def update_tracker_catch_up(self, today_date, username=None):
-        """Update tracker for all days since last update"""
+    def record_day(self, username=None):
+        """Record tracker day based on last non-test history"""
         try:
-            # Get tracker and its last_updated date
-            tracker = self.get_or_create_tracker()
-            if not tracker:
-                logger.error("Failed to get tracker for catch-up")
+            if not username:
+                logger.warning("record_day called without username, skipping")
                 return 0
             
-            # Convert last_updated to date
-            last_updated_timestamp = tracker['last_updated']
-            if hasattr(last_updated_timestamp, 'timestamp'):
-                last_updated = datetime.fromtimestamp(last_updated_timestamp.timestamp(), tz=self.central_tz).date()
+            today_central = datetime.now(self.central_tz).date()
+            yesterday = today_central - timedelta(days=1)
+            
+            # Query for last non-test record
+            # Filter out test records: where is_test != True or field doesn't exist
+            history_query = self.db.collection('tracker_history').order_by('date', direction=firestore.Query.DESCENDING).limit(100)
+            history_docs = list(history_query.stream())
+            
+            last_record_date = None
+            for doc in history_docs:
+                data = doc.to_dict()
+                # Skip test records
+                if data.get('is_test') is True:
+                    continue
+                # Found a non-test record
+                last_record_date_str = data.get('date')
+                if last_record_date_str:
+                    last_record_date = datetime.fromisoformat(last_record_date_str).date()
+                    break
+            
+            # Determine target date
+            if last_record_date:
+                target_date = last_record_date + timedelta(days=1)
+                # If calculated date is today or future, record yesterday instead
+                if target_date >= today_central:
+                    target_date = yesterday
+                    # If yesterday already has records, skip
+                    if last_record_date >= yesterday:
+                        logger.info(f"Last record {last_record_date.isoformat()} is yesterday or later, skipping")
+                        return 0
             else:
-                last_updated = last_updated_timestamp.date()
+                # No history exists, assume yesterday
+                target_date = yesterday
             
-            # Calculate days to process (yesterday backwards to last_updated)
-            days_to_process = []
-            current_date = today_date - timedelta(days=1)  # Start with yesterday
+            # Idempotency check: verify target_date doesn't already have a non-test record
+            existing_query = self.db.collection('tracker_history').where('date', '==', target_date.isoformat()).limit(1)
+            existing_docs = list(existing_query.stream())
+            for doc in existing_docs:
+                data = doc.to_dict()
+                # If record exists and is not a test record, skip
+                if data.get('is_test') is not True:
+                    logger.info(f"Day {target_date.isoformat()} already recorded, skipping")
+                    return 0
             
-            while current_date > last_updated:
-                days_to_process.append(current_date)
-                current_date -= timedelta(days=1)
+            # Get spouse
+            spouse_username = get_spouse(username)
             
-            # Process each day in chronological order (oldest first)
-            for date in reversed(days_to_process):
-                self._update_tracker_for_date(date, username=username)
+            # Get points for target date
+            user_points = self._get_daily_points_for_date(username, target_date)
+            if spouse_username:
+                spouse_points = self._get_daily_points_for_date(spouse_username, target_date)
+                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points, target_date)
+            else:
+                spouse_points = 0
+                spouse_adjustment = 0
             
-            logger.info(f"Processed {len(days_to_process)} days for tracker catch-up")
-            return len(days_to_process)
+            user_adjustment = self.calculate_tracker_adjustment(username, user_points, target_date)
+            
+            # Get current tracker
+            tracker = self.get_or_create_tracker()
+            if not tracker:
+                logger.error("Failed to get tracker for record_day")
+                return 0
+            
+            old_value = tracker['current_value']
+            new_value = old_value + user_adjustment + spouse_adjustment
+            
+            # Cap at 1-9 range
+            new_value = max(1, min(9, new_value))
+            
+            # Update tracker
+            tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
+            tracker_ref.update({
+                'current_value': new_value,
+                'last_updated': firestore.SERVER_TIMESTAMP,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+            
+            # Log to history (not a test record)
+            self._log_tracker_history(target_date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=False)
+            
+            logger.info(f"Recorded day {target_date.isoformat()}: {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
+            return 1
             
         except Exception as e:
-            logger.error(f"Failed to update tracker catch-up: {e}")
+            logger.error(f"Failed to record day: {e}")
             return 0
     
     def get_tracker_display(self, username):
@@ -481,8 +545,8 @@ class CollaborationService:
                 'updated_at': firestore.SERVER_TIMESTAMP
             })
             
-            # Log to history
-            self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username)
+            # Log to history (mark as test record)
+            self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=True)
             
             logger.info(f"Manually processed day: {today_central.isoformat()} - {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
             

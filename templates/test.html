@@ -126,6 +126,7 @@
             <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
             <button onclick="unlockMorningCards()">Unlock Morning Cards (Testing)</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
+            <button onclick="viewAllTrackerHistory()">View All Tracker History (with test status)</button>
             <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h4>Progress Day Simulation</h4>
                 <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
@@ -590,6 +591,43 @@
                     });
                     
                     html += '</tbody></table>';
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.className = 'result';
+                    resultDiv.innerHTML = 'No history found.';
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error loading history: ' + error.message;
+            }
+        }
+        
+        async function viewAllTrackerHistory() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = 'Loading all history...';
+            
+            try {
+                const response = await fetch('/api/collaboration/history/all');
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.history.length > 0) {
+                    let html = `<div style="font-family: monospace; white-space: pre-wrap; background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 600px; overflow-y: auto;">`;
+                    html += `Total records: ${data.count}\n\n`;
+                    
+                    data.history.forEach(day => {
+                        const testMarker = day.is_test ? '[TEST]' : '[REAL]';
+                        const testColor = day.is_test ? '#ff6b6b' : '#51cf66';
+                        const userAdj = day.user_adjustment > 0 ? `+${day.user_adjustment}` : day.user_adjustment === 0 ? '0' : `${day.user_adjustment}`;
+                        const spouseAdj = day.spouse_adjustment > 0 ? `+${day.spouse_adjustment}` : day.spouse_adjustment === 0 ? '0' : `${day.spouse_adjustment}`;
+                        const trackerChange = day.new_tracker - day.old_tracker;
+                        const trackerChangeStr = trackerChange > 0 ? `+${trackerChange}` : trackerChange === 0 ? '0' : `${trackerChange}`;
+                        
+                        html += `<span style="color: ${testColor};">${testMarker}</span> ${day.date} | U:${day.user_points}(${userAdj}) S:${day.spouse_points}(${spouseAdj}) | ${day.old_tracker}→${day.new_tracker}(${trackerChangeStr})\n`;
+                    });
+                    
+                    html += '</div>';
                     resultDiv.className = 'result success';
                     resultDiv.innerHTML = html;
                 } else {

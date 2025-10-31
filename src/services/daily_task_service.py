@@ -423,11 +423,11 @@ class DailyTaskService:
             
             logger.info(f"Created {instances_created} daily task instances for {username}")
             
-            # Update tracker for all missed days since last update
+            # Record single day for tracker
             from src.services.collaboration_service import CollaborationService
             collab_service = CollaborationService(self.db)
-            days_processed = collab_service.update_tracker_catch_up(today_central, username=username)
-            logger.info(f"Updated collaboration tracker for {days_processed} days")
+            days_processed = collab_service.record_day(username=username)
+            logger.info(f"Recorded collaboration tracker for {days_processed} day(s)")
             
             # Reset morning cards
             from src.services.morning_card_service import MorningCardService
@@ -437,7 +437,7 @@ class DailyTaskService:
             
             return {
                 'status': 'success',
-                'message': f'Reset completed, created {instances_created} instances, updated tracker for {days_processed} days',
+                'message': f'Reset completed, created {instances_created} instances, recorded tracker for {days_processed} day(s)',
                 'instances_created': instances_created,
                 'tracker_days_processed': days_processed
             }

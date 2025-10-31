@@ -829,6 +829,34 @@ def create_app():
         
         return jsonify({'status': 'success', 'history': history})
     
+    @app.route('/api/collaboration/history/all', methods=['GET'])
+    @limiter.limit("20 per minute")
+    @require_auth
+    @with_error_handling
+    def get_all_collaboration_history(username):
+        """Get all tracker history records with test status for debugging"""
+        # Query all tracker_history records ordered by date desc
+        history_query = db.collection('tracker_history').order_by('date', direction=firestore.Query.DESCENDING).limit(500)
+        
+        history_docs = history_query.stream()
+        history = []
+        
+        for doc in history_docs:
+            data = doc.to_dict()
+            is_test = data.get('is_test', False)
+            history.append({
+                'date': data['date'],
+                'is_test': is_test,
+                'user_points': data.get('user_points', 0),
+                'spouse_points': data.get('spouse_points', 0),
+                'user_adjustment': data.get('user_adjustment', 0),
+                'spouse_adjustment': data.get('spouse_adjustment', 0),
+                'old_tracker': data.get('old_value', 0),
+                'new_tracker': data.get('new_value', 0)
+            })
+        
+        return jsonify({'status': 'success', 'history': history, 'count': len(history)})
+    
     @app.route('/api/collaboration/progress-day', methods=['POST'])
     @limiter.limit("5 per minute")
     @require_auth
