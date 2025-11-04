@@ -4,7 +4,6 @@ Daily Task Service - handles daily task templates and instances
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
-from src.utils.logger import logger
 from src.utils.config import get_timezone, get_collection
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
@@ -15,8 +14,9 @@ from typing import List, Dict, Any
 class DailyTaskService:
     """Service for daily task operations"""
     
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, app_manager):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.central_tz = get_timezone()
     
     def get_daily_tasks(self, username: str) -> Dict[str, Any]:
@@ -36,7 +36,7 @@ class DailyTaskService:
                 'templates': templates
             }
         except Exception as e:
-            logger.error(f"Failed to get daily tasks for {username}: {e}")
+            self.logger.error(f"Failed to get daily tasks for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to get daily tasks: {str(e)}'
@@ -105,7 +105,7 @@ class DailyTaskService:
                     'created_at': firestore.SERVER_TIMESTAMP
                 }
                 self.db.collection('daily_task_instances').add(instance_data)
-                logger.info(f"Created today's instance for new template {template_id}")
+                self.logger.info(f"Created today's instance for new template {template_id}")
             
             return {
                 'status': 'success',
@@ -180,14 +180,14 @@ class DailyTaskService:
                 
                 if update_instance_data:
                     instance_doc.reference.update(update_instance_data)
-                    logger.info(f"Updated today's instance for template {task_id}")
+                    self.logger.info(f"Updated today's instance for template {task_id}")
             
             return {
                 'status': 'success',
                 'message': 'Daily task updated successfully'
             }
         except Exception as e:
-            logger.error(f"Failed to update daily task {task_id} for {username}: {e}")
+            self.logger.error(f"Failed to update daily task {task_id} for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to update daily task: {str(e)}'
@@ -232,7 +232,7 @@ class DailyTaskService:
                 'message': 'Daily task deleted successfully'
             }
         except Exception as e:
-            logger.error(f"Failed to delete daily task {task_id} for {username}: {e}")
+            self.logger.error(f"Failed to delete daily task {task_id} for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to delete daily task: {str(e)}'
@@ -275,7 +275,7 @@ class DailyTaskService:
                 'date': today_central.isoformat()
             }
         except Exception as e:
-            logger.error(f"Failed to get today's instances for {username}: {e}")
+            self.logger.error(f"Failed to get today's instances for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to get today\'s instances: {str(e)}'
@@ -318,7 +318,7 @@ class DailyTaskService:
                 'points_earned': instance_data.get('points', 0)
             }
         except Exception as e:
-            logger.error(f"Failed to complete daily task {instance_id} for {username}: {e}")
+            self.logger.error(f"Failed to complete daily task {instance_id} for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to complete daily task: {str(e)}'
@@ -363,7 +363,7 @@ class DailyTaskService:
                     return {'status': 'success', 'message': 'Reset not needed yet'}
             
             # Need to reset - create new instances for today
-            logger.info(f"Resetting daily tasks for {username} on {today_central}")
+            self.logger.info(f"Resetting daily tasks for {username} on {today_central}")
             
             # Before creating new instances, delete any existing instances for today
             instances_query = self.db.collection('daily_task_instances').where(
@@ -374,7 +374,7 @@ class DailyTaskService:
             )
             for instance in instances_query.stream():
                 instance.reference.delete()
-            logger.info(f"Deleted old instances for {username} on {today_central}")
+            self.logger.info(f"Deleted old instances for {username} on {today_central}")
             
             # Get all active templates
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
@@ -421,19 +421,19 @@ class DailyTaskService:
             # Add new reset record
             self.db.collection('daily_task_resets').add(reset_data)
             
-            logger.info(f"Created {instances_created} daily task instances for {username}")
+            self.logger.info(f"Created {instances_created} daily task instances for {username}")
             
             # Record single day for tracker
             from src.services.collaboration_service import CollaborationService
             collab_service = CollaborationService(self.db)
             days_processed = collab_service.record_day(username=username)
-            logger.info(f"Recorded collaboration tracker for {days_processed} day(s)")
+            self.logger.info(f"Recorded collaboration tracker for {days_processed} day(s)")
             
             # Reset morning cards
             from src.services.morning_card_service import MorningCardService
             morning_card_service = MorningCardService(self.db)
             morning_card_reset = morning_card_service.check_and_reset_cards()
-            logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
+            self.logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
             
             return {
                 'status': 'success',
@@ -442,7 +442,7 @@ class DailyTaskService:
                 'tracker_days_processed': days_processed
             }
         except Exception as e:
-            logger.error(f"Failed to reset daily tasks for {username}: {e}")
+            self.logger.error(f"Failed to reset daily tasks for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to reset daily tasks: {str(e)}'

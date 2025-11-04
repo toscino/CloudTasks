@@ -6,7 +6,6 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 import random
 import string
-from src.utils.logger import logger
 from src.utils.error_handlers import handle_exception
 from src.utils.firestore_helpers import convert_firestore_timestamp
 
@@ -17,8 +16,9 @@ class UserService:
     PAIRING_CODE_LENGTH = 6
     PAIRING_CODE_EXPIRY_MINUTES = 15
     
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, app_manager):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
     
     def get_user_settings(self, username: str) -> dict:
         """Get user settings (create default if missing)"""
@@ -41,11 +41,11 @@ class UserService:
             }
             
             user_ref.set(default_settings)
-            logger.info(f"Created default settings for user: {username}")
+            self.logger.info(f"Created default settings for user: {username}")
             return default_settings
             
         except Exception as e:
-            logger.error(f"Failed to get user settings for {username}: {e}")
+            self.logger.error(f"Failed to get user settings for {username}: {e}")
             return {
                 'username': username,
                 'spouse_username': None,
@@ -73,7 +73,7 @@ class UserService:
             
             self.db.collection('pairing_codes').document(code).set(pairing_data)
             
-            logger.info(f"Generated pairing code for {username}: {code}")
+            self.logger.info(f"Generated pairing code for {username}: {code}")
             
             # Calculate expiration time for return value
             expires_at_iso = (datetime.now() + timedelta(minutes=self.PAIRING_CODE_EXPIRY_MINUTES)).isoformat()
@@ -126,7 +126,7 @@ class UserService:
             
             # Compare with current time (same approach as task_master.py)
             current_time = datetime.now()
-            logger.debug(f"Checking code expiration: current={current_time}, expires={expires_datetime}, diff={(expires_datetime - current_time).total_seconds()}s")
+            self.logger.debug(f"Checking code expiration: current={current_time}, expires={expires_datetime}, diff={(expires_datetime - current_time).total_seconds()}s")
             
             if current_time > expires_datetime:
                 return {
@@ -175,7 +175,7 @@ class UserService:
             # Mark code as used
             code_ref.update({'used': True})
             
-            logger.info(f"Linked users: {username} <-> {creator_username}")
+            self.logger.info(f"Linked users: {username} <-> {creator_username}")
             
             return {
                 'status': 'success',
@@ -212,7 +212,7 @@ class UserService:
                 'updated_at': firestore.SERVER_TIMESTAMP
             })
             
-            logger.info(f"Removed spouse link: {username} <-> {spouse_username}")
+            self.logger.info(f"Removed spouse link: {username} <-> {spouse_username}")
             
             return {
                 'status': 'success',
@@ -239,7 +239,7 @@ class UserService:
             
             user_ref.update(update_data)
             
-            logger.info(f"Updated preferences for {username}: {preferences}")
+            self.logger.info(f"Updated preferences for {username}: {preferences}")
             
             return {
                 'status': 'success',

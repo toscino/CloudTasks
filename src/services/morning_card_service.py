@@ -5,7 +5,6 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
 import random
-from src.utils.logger import logger
 from src.utils.config import get_timezone
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.error_handlers import handle_exception
@@ -15,8 +14,9 @@ from typing import List, Dict, Any
 class MorningCardService:
     """Service for morning card operations"""
     
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, app_manager):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.central_tz = get_timezone()
     
     def _convert_generic_rules_to_usernames(self, user_rules: Dict[str, List[str]], card_owner: str) -> Dict[str, List[str]]:
@@ -35,7 +35,7 @@ class MorningCardService:
                 user_data = user_doc.to_dict()
                 spouse_username = user_data.get('spouse_username')
         except Exception as e:
-            logger.debug(f"Could not fetch spouse for {card_owner}: {e}")
+            self.logger.debug(f"Could not fetch spouse for {card_owner}: {e}")
         
         for key, rules in user_rules.items():
             if key == 'mine':
@@ -66,7 +66,7 @@ class MorningCardService:
                     user_data = user_doc.to_dict()
                     spouse_username = user_data.get('spouse_username')
             except Exception as e:
-                logger.debug(f"Could not fetch spouse for {username}: {e}")
+                self.logger.debug(f"Could not fetch spouse for {username}: {e}")
             
             if spouse_username:
                 spouse_query = self.db.collection('morning_card_templates').where(
@@ -142,7 +142,7 @@ class MorningCardService:
             doc_ref = self.db.collection('morning_card_templates').add(template_data)
             template_id = doc_ref[1].id
             
-            logger.info(f"Created morning card template: {template_id}")
+            self.logger.info(f"Created morning card template: {template_id}")
             
             return {
                 'status': 'success',
@@ -208,7 +208,7 @@ class MorningCardService:
             
             doc_ref.update(update_data)
             
-            logger.info(f"Updated morning card template: {card_id}")
+            self.logger.info(f"Updated morning card template: {card_id}")
             
             return {
                 'status': 'success',
@@ -247,7 +247,7 @@ class MorningCardService:
             # Delete template
             doc_ref.delete()
             
-            logger.info(f"Deleted morning card template: {card_id}")
+            self.logger.info(f"Deleted morning card template: {card_id}")
             
             return {
                 'status': 'success',
@@ -295,7 +295,7 @@ class MorningCardService:
                 doc_ref = self.db.collection('morning_card_selections').add(selection_data)
                 selection_data['id'] = doc_ref[1].id
                 
-                logger.info(f"Created new selection for {today_central}")
+                self.logger.info(f"Created new selection for {today_central}")
                 
                 return {
                     'status': 'success',
@@ -429,7 +429,7 @@ class MorningCardService:
                 'locked': True
             })
             
-            logger.info(f"Locked {len(card_ids)} cards for {datetime.now(self.central_tz).date()}")
+            self.logger.info(f"Locked {len(card_ids)} cards for {datetime.now(self.central_tz).date()}")
             
             return {
                 'status': 'success',
@@ -481,7 +481,7 @@ class MorningCardService:
                     return {'status': 'success', 'message': 'Reset not needed yet'}
             
             # Need to reset - delete old selections
-            logger.info(f"Resetting morning cards for {today_central}")
+            self.logger.info(f"Resetting morning cards for {today_central}")
             
             # Delete all selections older than today
             old_selections_query = self.db.collection('morning_card_selections').where(
@@ -493,7 +493,7 @@ class MorningCardService:
                 doc.reference.delete()
                 deleted_count += 1
             
-            logger.info(f"Deleted {deleted_count} old morning card selections")
+            self.logger.info(f"Deleted {deleted_count} old morning card selections")
             
             return {
                 'status': 'success',
@@ -530,7 +530,7 @@ class MorningCardService:
                 'user_rules': {}
             })
             
-            logger.info(f"Unlocked morning card selection for {today_central}")
+            self.logger.info(f"Unlocked morning card selection for {today_central}")
             
             return {
                 'status': 'success',

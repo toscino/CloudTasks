@@ -6,8 +6,6 @@ A comprehensive task management application built for Google App Engine with Fir
 
 1. **Install dependencies:**
    ```bash
-   install.bat
-   # or
    pip install -r requirements.txt
    ```
 
@@ -19,15 +17,15 @@ A comprehensive task management application built for Google App Engine with Fir
 
 3. **Local Development:**
    ```bash
-   # Run locally
-   run.bat
-   # or
-   python Main.py
+   # Run locally using flask_base
+   python app.py --run
    ```
 
 4. **Deploy to App Engine:**
    ```bash
-   # Deploy to development
+   # Deploy using flask_base
+   python app.py --deploy
+   # or manually
    gcloud app deploy config/development.yaml
    
    # Deploy to production
@@ -152,7 +150,9 @@ Set these in your `.env` file or deployment environment:
 ```bash
 # Required
 GOOGLE_CLOUD_PROJECT=your-project-id
-FLASK_SECRET_KEY=your-flask-secret-key
+FLASK_SECRET=your-flask-secret-key
+ADMIN_KEY=your-admin-key
+FLASK_BASE_KEY_PREFIX=CT_KEY_
 
 # User-specific secret keys
 USER1_SECRET_KEY=user1-demo-key-abc123
@@ -250,8 +250,7 @@ python -m pytest tests/test_firestore.py -v
 ## Project Structure
 
 ```
-├── App.py                # Main Flask application with all routes
-├── Main.py               # Entry point
+├── app.py                # Main Flask application with all routes
 ├── src/core/TaskMaster.py         # Task management and generation
 ├── src/core/TaskGenerator.py      # AI task generation
 ├── src/core/RewardGenerator.py    # Reward generation
@@ -272,9 +271,6 @@ python -m pytest tests/test_firestore.py -v
 │   ├── test.html         # Testing interface
 │   └── about.html        # About page
 ├── requirements.txt      # Python dependencies
-├── run.bat              # Run the application
-├── test.bat             # Run tests
-├── install.bat          # Install dependencies
 ├── .env                 # Environment variables
 ├── .gitignore           # Git ignore rules
 └── README.md            # This file
@@ -282,11 +278,10 @@ python -m pytest tests/test_firestore.py -v
 
 ## Available Commands
 
-- `install.bat` - Install dependencies
-- `test.bat` - Run all tests
-- `run.bat` - Run locally
-- `gcloud app deploy app.yaml` - Deploy to development
-- `gcloud app deploy production.yaml` - Deploy to production
+- `pip install -r requirements.txt` - Install dependencies
+- `python -m pytest tests/` - Run all tests
+- `python app.py --run` - Run locally (flask_base)
+- `python app.py --deploy` - Deploy to App Engine (flask_base)
 
 ## Naming Convention
 

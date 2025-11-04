@@ -55,7 +55,9 @@ This application uses multiple configuration files for different deployment envi
 
 ```bash
 GOOGLE_CLOUD_PROJECT=your-project-id
-FLASK_SECRET_KEY=your-flask-secret-key
+FLASK_SECRET=your-flask-secret-key
+ADMIN_KEY=your-admin-key
+FLASK_BASE_KEY_PREFIX=CT_KEY_
 OPENAI_API_KEY=your-openai-api-key
 ```
 

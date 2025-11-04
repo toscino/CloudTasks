@@ -15,8 +15,9 @@ from typing import List, Dict, Any
 class RewardService:
     """Service for reward-related operations"""
     
-    def __init__(self, db, task_master):
-        self.db = db
+    def __init__(self, app_manager, task_master):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.task_master = task_master
     
     def get_rewards(self, username: str) -> Dict[str, Any]:

@@ -1,12 +1,8 @@
 runtime: python311
 
-env_variables:
-  GOOGLE_CLOUD_PROJECT: cloudtasks-app-473120
-  FLASK_ENV: development
-  FLASK_SECRET_KEY: dev-flask-secret-key-change-in-production
-  USER1_SECRET_KEY: dev-user1-secret-key  # Ian's secret key
-  USER2_SECRET_KEY: dev-user2-secret-key  # Karleigh's secret key
-  USER3_SECRET_KEY: dev-user3-secret-key
+env: standard
+
+entrypoint: gunicorn -b :$PORT app:app
 
 automatic_scaling:
   min_instances: 1
@@ -15,6 +11,20 @@ automatic_scaling:
   min_idle_instances: 0
   max_idle_instances: 0
 
+env_variables:
+  GOOGLE_CLOUD_PROJECT: cloudtasks-app-473120
+  FLASK_ENV: development
+  # flask_base required variables
+  FLASK_SECRET: JECM3x7UynZt
+  ADMIN_KEY: MQQYPDMC6QRr
+  FLASK_BASE_KEY_PREFIX: CT_KEY_
+  # flask_base auth keys (format: CT_KEY_USERNAME=user_key:permissions)
+  # Username extracted from env var name (underscores become spaces)
+  # User provides the actual key value in ?key= parameter
+  CT_KEY_IAN: dev-user1-secret-key
+  CT_KEY_KARLEIGH: dev-user2-secret-key
+  CT_KEY_USER3: dev-user3-secret-key
+
 handlers:
 - url: /.*
-  script: main.app
+  script: auto

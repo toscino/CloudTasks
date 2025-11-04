@@ -5,7 +5,6 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime
 from src.models.goal import GoalModel, RewardGoalModel, create_goal_from_request_data, create_reward_goal_from_option
-from src.utils.logger import logger
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import NotFoundError, UnauthorizedError, ValidationError, FirestoreError
 from src.utils.error_handlers import handle_exception
@@ -15,9 +14,10 @@ from typing import List, Dict, Any
 class GoalService:
     """Service for goal-related operations"""
     
-    def __init__(self, db):
+    def __init__(self, app_manager):
         """Initialize GoalService"""
-        self.db = db
+        self.logger = app_manager.logger
+        self.db = app_manager.db
     
     def get_goals(self, username: str) -> Dict[str, Any]:
         """Get goals by category"""
@@ -167,7 +167,7 @@ class GoalService:
     def get_rewards_owed(self, username: str) -> Dict[str, Any]:
         """Get pending rewards owed"""
         try:
-            logger.debug(f"Fetching rewards for user: {username}")
+            self.logger.debug(f"Fetching rewards for user: {username}")
             
             # Query pending reward goals for this user only
             goals_query = self.db.collection('reward_goals').where(
@@ -177,7 +177,7 @@ class GoalService:
                 ])
             )
             goals_docs = list(goals_query.stream())  # Convert to list to avoid iterator issues
-            logger.debug(f"Found {len(goals_docs)} reward goal documents")
+            self.logger.debug(f"Found {len(goals_docs)} reward goal documents")
             
             rewards = []
             for doc in goals_docs:
@@ -192,7 +192,7 @@ class GoalService:
                 
                 rewards.append(goal_data)
             
-            logger.debug(f"Returning {len(rewards)} rewards")
+            self.logger.debug(f"Returning {len(rewards)} rewards")
             return {
                 'status': 'success',
                 'rewards': rewards

@@ -5,7 +5,6 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, timedelta
 from src.utils.background_tasks import ensure_minimums
-from src.utils.logger import logger
 from src.utils.config import get_timezone
 from src.utils.error_handlers import handle_exception
 from typing import Dict, Any
@@ -14,8 +13,9 @@ from typing import Dict, Any
 class StatisticsService:
     """Service for statistics and comparison operations"""
     
-    def __init__(self, db, task_master):
-        self.db = db
+    def __init__(self, app_manager, task_master):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.task_master = task_master
     
     def get_weekly_points(self, username: str) -> Dict[str, Any]:
@@ -61,10 +61,10 @@ class StatisticsService:
                 current_week_start = current_week_start - timedelta(days=7)
                 current_week_end = current_week_end - timedelta(days=7)
             
-            logger.debug(f"Weekly points calculation for {username}")
-            logger.debug(f"Week start: {current_week_start}")
-            logger.debug(f"Week end: {current_week_end}")
-            logger.debug(f"Current time: {now}")
+            self.logger.debug(f"Weekly points calculation for {username}")
+            self.logger.debug(f"Week start: {current_week_start}")
+            self.logger.debug(f"Week end: {current_week_end}")
+            self.logger.debug(f"Current time: {now}")
             
             # COMPOSITE INDEX REQUIRED: tasks(username, completed, completed_at)
             # Optimized query: filter by username, completed=true, and completed_at within week range
@@ -78,7 +78,7 @@ class StatisticsService:
             )
             tasks_docs = list(tasks_query.stream())
             
-            logger.debug(f"Found {len(tasks_docs)} completed tasks within week for {username}")
+            self.logger.debug(f"Found {len(tasks_docs)} completed tasks within week for {username}")
             
             total_points = 0
             completed_tasks_count = 0
@@ -89,7 +89,7 @@ class StatisticsService:
                 total_points += difficulty
                 completed_tasks_count += 1
             
-            logger.debug(f"Total weekly points: {total_points} from {completed_tasks_count} tasks")
+            self.logger.debug(f"Total weekly points: {total_points} from {completed_tasks_count} tasks")
             
             return {
                 'status': 'success',
@@ -101,7 +101,7 @@ class StatisticsService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get weekly points: {e}")
+            self.logger.error(f"Failed to get weekly points: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to get weekly points: {str(e)}'
@@ -129,7 +129,7 @@ class StatisticsService:
             spouse_rewards_docs = list(spouse_rewards_query.stream())
             spouse_rewards_count = len(spouse_rewards_docs)
             
-            logger.debug(f"Reward comparison - {username}: {user_rewards_count}, {spouse_username}: {spouse_rewards_count}")
+            self.logger.debug(f"Reward comparison - {username}: {user_rewards_count}, {spouse_username}: {spouse_rewards_count}")
             
             return {
                 'status': 'success',
@@ -140,7 +140,7 @@ class StatisticsService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get reward comparison: {e}")
+            self.logger.error(f"Failed to get reward comparison: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to get reward comparison: {str(e)}'
@@ -149,7 +149,7 @@ class StatisticsService:
     def get_challenges(self, username: str) -> Dict[str, Any]:
         """Get active challenges (one per goal)"""
         try:
-            logger.debug(f"Fetching challenges for user: {username}")
+            self.logger.debug(f"Fetching challenges for user: {username}")
             
             # Import ChallengeMaster
             from src.core.challenge_master import ChallengeMaster
@@ -158,7 +158,7 @@ class StatisticsService:
             # Get existing active challenges (fast - no AI calls)
             challenges = challenge_master.get_active_challenges(username, limit=4)
             
-            logger.debug(f"Active challenges for {username}: {len(challenges)}")
+            self.logger.debug(f"Active challenges for {username}: {len(challenges)}")
             
             # Fire off background task generation (non-blocking)
             ensure_minimums(self.task_master, username, check_tasks=False, check_rewards=False, check_challenges=True)
@@ -169,7 +169,7 @@ class StatisticsService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get challenges for {username}: {str(e)}")
+            self.logger.error(f"Failed to get challenges for {username}: {str(e)}")
             return {
                 'status': 'error',
                 'message': f'Failed to get challenges: {str(e)}'

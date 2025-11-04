@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import pytz
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
-from src.utils.logger import logger
 from src.utils.config import get_timezone, get_spouse
 from src.utils.error_handlers import handle_exception
 
@@ -13,8 +12,9 @@ from src.utils.error_handlers import handle_exception
 class CollaborationService:
     """Service for collaboration tracker and goal management"""
     
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, app_manager):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.central_tz = get_timezone()
     
     def get_or_create_tracker(self):
@@ -39,12 +39,12 @@ class CollaborationService:
             
             doc_ref = self.db.collection('collaboration_tracker').add(tracker_data)
             tracker_data['id'] = doc_ref[1].id
-            logger.info("Created new collaboration tracker with value 5")
+            self.logger.info("Created new collaboration tracker with value 5")
             
             return tracker_data
             
         except Exception as e:
-            logger.error(f"Failed to get or create tracker: {e}")
+            self.logger.error(f"Failed to get or create tracker: {e}")
             return None
     
     def get_user_goals(self, username):
@@ -72,7 +72,7 @@ class CollaborationService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get user goals for {username}: {e}")
+            self.logger.error(f"Failed to get user goals for {username}: {e}")
             return {
                 'par': 0,
                 'stretch_setting': 10,
@@ -105,19 +105,19 @@ class CollaborationService:
             if goals_docs:
                 # Update existing
                 goals_docs[0].reference.update(goals_data)
-                logger.info(f"Updated goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier}")
+                self.logger.info(f"Updated goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier}")
             else:
                 # Create new (default multiplier to 1 if not provided)
                 if adjustment_multiplier is None:
                     goals_data['adjustment_multiplier'] = 1
                 goals_data['created_at'] = firestore.SERVER_TIMESTAMP
                 self.db.collection('user_goals').add(goals_data)
-                logger.info(f"Created goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier or 1}")
+                self.logger.info(f"Created goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier or 1}")
             
             return {'status': 'success', 'message': 'Goals updated successfully'}
             
         except Exception as e:
-            logger.error(f"Failed to set goals for {username}: {e}")
+            self.logger.error(f"Failed to set goals for {username}: {e}")
             return {'status': 'error', 'message': f'Failed to update goals: {str(e)}'}
     
     def _calculate_user_par_for_date(self, username, date):
@@ -141,11 +141,11 @@ class CollaborationService:
                     if points > 0:  # Only count positive points
                         par += points
             
-            logger.debug(f"Calculated par for {username} on {date.isoformat()} (weekday {target_weekday}): {par}")
+            self.logger.debug(f"Calculated par for {username} on {date.isoformat()} (weekday {target_weekday}): {par}")
             return par
             
         except Exception as e:
-            logger.error(f"Failed to calculate par for {username} on {date}: {e}")
+            self.logger.error(f"Failed to calculate par for {username} on {date}: {e}")
             return 0
     
     def _calculate_user_par(self, username):
@@ -164,7 +164,7 @@ class CollaborationService:
             par = self._calculate_user_par_for_date(username, date)
             stretch_goal = goals['stretch_goal']
             multiplier = goals.get('adjustment_multiplier', 1)  # Default to 1 (normal direction)
-            logger.debug(f"User {username} has an adjustment multiplier of {multiplier}")
+            self.logger.debug(f"User {username} has an adjustment multiplier of {multiplier}")
             if daily_points >= stretch_goal:
                 # Above stretch goal (good day)
                 base_adjustment = 1
@@ -178,11 +178,11 @@ class CollaborationService:
             # Apply user's multiplier (-1 inverts the direction, 1 keeps it normal)
             adjustment = base_adjustment * multiplier
             
-            logger.debug(f"Adjustment for {username} on {date.isoformat()}: {daily_points} points (par: {par}, stretch: {stretch_goal}, multiplier: {multiplier}) = {adjustment}")
+            self.logger.debug(f"Adjustment for {username} on {date.isoformat()}: {daily_points} points (par: {par}, stretch: {stretch_goal}, multiplier: {multiplier}) = {adjustment}")
             return adjustment
             
         except Exception as e:
-            logger.error(f"Failed to calculate adjustment for {username} on {date}: {e}")
+            self.logger.error(f"Failed to calculate adjustment for {username} on {date}: {e}")
             return 0
     
     def _get_daily_points_for_date(self, username, date):
@@ -230,11 +230,11 @@ class CollaborationService:
                 # Use difficulty as points for regular tasks
                 total_points += task_data.get('difficulty', 0)
             
-            logger.debug(f"Daily points for {username} on {date_str}: {total_points}")
+            self.logger.debug(f"Daily points for {username} on {date_str}: {total_points}")
             return total_points
             
         except Exception as e:
-            logger.error(f"Failed to get daily points for {username} on {date}: {e}")
+            self.logger.error(f"Failed to get daily points for {username} on {date}: {e}")
             return 0
     
     def _update_tracker_for_date(self, date, username=None):
@@ -243,7 +243,7 @@ class CollaborationService:
             # Get the primary user (the one who triggered the update)
             # If no username provided, skip update (can't process without knowing which user)
             if not username:
-                logger.warning("_update_tracker_for_date called without username, skipping")
+                self.logger.warning("_update_tracker_for_date called without username, skipping")
                 return
             
             # Get spouse from database
@@ -263,7 +263,7 @@ class CollaborationService:
             # Get current tracker
             tracker = self.get_or_create_tracker()
             if not tracker:
-                logger.error("Failed to get tracker for update")
+                self.logger.error("Failed to get tracker for update")
                 return
             
             old_value = tracker['current_value']
@@ -283,10 +283,10 @@ class CollaborationService:
             # Log to history
             self._log_tracker_history(date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username)
             
-            logger.info(f"Updated tracker for {date.isoformat()}: {old_value} → {new_value} ({username}: {user_adjustment}, {spouse_username or 'none'}: {spouse_adjustment})")
+            self.logger.info(f"Updated tracker for {date.isoformat()}: {old_value} → {new_value} ({username}: {user_adjustment}, {spouse_username or 'none'}: {spouse_adjustment})")
             
         except Exception as e:
-            logger.error(f"Failed to update tracker for {date}: {e}")
+            self.logger.error(f"Failed to update tracker for {date}: {e}")
     
     def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username=None, spouse_username=None, is_test=False):
         """Log tracker update to history for debugging"""
@@ -324,13 +324,13 @@ class CollaborationService:
             self.db.collection('tracker_history').add(history_data)
             
         except Exception as e:
-            logger.error(f"Failed to log tracker history: {e}")
+            self.logger.error(f"Failed to log tracker history: {e}")
     
     def record_day(self, username=None):
         """Record tracker day based on last non-test history"""
         try:
             if not username:
-                logger.warning("record_day called without username, skipping")
+                self.logger.warning("record_day called without username, skipping")
                 return 0
             
             today_central = datetime.now(self.central_tz).date()
@@ -361,7 +361,7 @@ class CollaborationService:
                     target_date = yesterday
                     # If yesterday already has records, skip
                     if last_record_date >= yesterday:
-                        logger.info(f"Last record {last_record_date.isoformat()} is yesterday or later, skipping")
+                        self.logger.info(f"Last record {last_record_date.isoformat()} is yesterday or later, skipping")
                         return 0
             else:
                 # No history exists, assume yesterday
@@ -374,7 +374,7 @@ class CollaborationService:
                 data = doc.to_dict()
                 # If record exists and is not a test record, skip
                 if data.get('is_test') is not True:
-                    logger.info(f"Day {target_date.isoformat()} already recorded, skipping")
+                    self.logger.info(f"Day {target_date.isoformat()} already recorded, skipping")
                     return 0
             
             # Get spouse
@@ -394,7 +394,7 @@ class CollaborationService:
             # Get current tracker
             tracker = self.get_or_create_tracker()
             if not tracker:
-                logger.error("Failed to get tracker for record_day")
+                self.logger.error("Failed to get tracker for record_day")
                 return 0
             
             old_value = tracker['current_value']
@@ -414,11 +414,11 @@ class CollaborationService:
             # Log to history (not a test record)
             self._log_tracker_history(target_date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=False)
             
-            logger.info(f"Recorded day {target_date.isoformat()}: {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
+            self.logger.info(f"Recorded day {target_date.isoformat()}: {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
             return 1
             
         except Exception as e:
-            logger.error(f"Failed to record day: {e}")
+            self.logger.error(f"Failed to record day: {e}")
             return 0
     
     def get_tracker_display(self, username):
@@ -443,7 +443,7 @@ class CollaborationService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get tracker display for {username}: {e}")
+            self.logger.error(f"Failed to get tracker display for {username}: {e}")
             return {
                 'status': 'error',
                 'message': f'Failed to get tracker display: {str(e)}'
@@ -471,10 +471,10 @@ class CollaborationService:
                     'updated_at': firestore.SERVER_TIMESTAMP
                 })
             
-            logger.info(f"Reset tracker history - deleted {deleted_count} records, reset tracker to 5")
+            self.logger.info(f"Reset tracker history - deleted {deleted_count} records, reset tracker to 5")
             return {'status': 'success', 'deleted': deleted_count}
         except Exception as e:
-            logger.error(f"Failed to reset tracker history: {e}")
+            self.logger.error(f"Failed to reset tracker history: {e}")
             return {'status': 'error', 'message': str(e)}
     
     def get_todays_total_points(self, username):
@@ -492,7 +492,7 @@ class CollaborationService:
                 'date': today_central.isoformat()
             }
         except Exception as e:
-            logger.error(f"Failed to get today's points for {username}: {e}")
+            self.logger.error(f"Failed to get today's points for {username}: {e}")
             return {
                 'status': 'error',
                 'message': str(e)
@@ -548,7 +548,7 @@ class CollaborationService:
             # Log to history (mark as test record)
             self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=True)
             
-            logger.info(f"Manually processed day: {today_central.isoformat()} - {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
+            self.logger.info(f"Manually processed day: {today_central.isoformat()} - {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
             
             return {
                 'status': 'success', 
@@ -562,5 +562,5 @@ class CollaborationService:
                 'karleigh_adjustment': spouse_adjustment
             }
         except Exception as e:
-            logger.error(f"Failed to progress day: {e}")
+            self.logger.error(f"Failed to progress day: {e}")
             return {'status': 'error', 'message': str(e)}

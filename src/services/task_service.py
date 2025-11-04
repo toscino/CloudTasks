@@ -4,7 +4,6 @@ Task service - handles task-related business logic
 from google.cloud import firestore
 from src.models.task import TaskModel, create_task_from_request_data
 from src.utils.background_tasks import ensure_minimums
-from src.utils.logger import logger
 from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
@@ -12,22 +11,23 @@ from typing import List, Dict, Any
 class TaskService:
     """Service for task-related operations"""
     
-    def __init__(self, db, task_master):
-        self.db = db
+    def __init__(self, app_manager, task_master):
+        self.logger = app_manager.logger
+        self.db = app_manager.db
         self.task_master = task_master
     
     def get_tasks(self, username: str) -> Dict[str, Any]:
         """Get active task session (4 tasks)"""
         try:
-            logger.debug(f"Getting tasks for username: {username}")
+            self.logger.debug(f"Getting tasks for username: {username}")
             
             # Use TaskMaster to get active session tasks (fast - no AI calls)
             tasks = self.task_master.get_active_session_tasks(username)
             
-            logger.debug(f"Active session tasks for {username}: {len(tasks)}")
+            self.logger.debug(f"Active session tasks for {username}: {len(tasks)}")
             
-            # Fire off background task generation (non-blocking)
-            ensure_minimums(self.task_master, username, check_tasks=True, check_rewards=False, check_challenges=False)
+            # Fire off background task and reward generation (non-blocking)
+            ensure_minimums(self.task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
         
             return {
                 'status': 'success',
@@ -39,7 +39,7 @@ class TaskService:
     def get_task_statistics(self, username: str) -> Dict[str, Any]:
         """Get task counts by category"""
         try:
-            logger.debug(f"Getting task statistics for username: {username}")
+            self.logger.debug(f"Getting task statistics for username: {username}")
             
             # Get all tasks for user
             all_tasks_query = self.db.collection('tasks').where('username', '==', username)
@@ -113,14 +113,14 @@ class TaskService:
     def complete_task(self, task_id: str, username: str) -> Dict[str, Any]:
         """Complete task and refresh session"""
         try:
-            logger.debug(f"Completing task {task_id} for user {username}")
+            self.logger.debug(f"Completing task {task_id} for user {username}")
             
             # Verify the task belongs to this user
             doc_ref = self.db.collection('tasks').document(task_id)
             doc = doc_ref.get()
             
             if not doc.exists:
-                logger.error(f"Task {task_id} not found")
+                self.logger.error(f"Task {task_id} not found")
                 return {
                     'status': 'error',
                     'message': 'Task not found'
@@ -128,18 +128,18 @@ class TaskService:
             
             task_data = doc.to_dict()
             if task_data.get('username') != username:
-                logger.error(f"Task {task_id} belongs to {task_data.get('username')}, not {username}")
+                self.logger.error(f"Task {task_id} belongs to {task_data.get('username')}, not {username}")
                 return {
                     'status': 'error',
                     'message': 'Unauthorized: Task belongs to another user'
                 }
             
-            logger.debug(f"Task {task_id} verified, calling TaskMaster")
+            self.logger.debug(f"Task {task_id} verified, calling TaskMaster")
             
             # Use TaskMaster to complete task and refresh session
             result = self.task_master.complete_task_and_refresh_session(username, task_id)
             
-            logger.debug(f"TaskMaster returned {len(result['tasks'])} new tasks, reward earned: {result['reward_earned']}")
+            self.logger.debug(f"TaskMaster returned {len(result['tasks'])} new tasks, reward earned: {result['reward_earned']}")
             
             return {
                 'status': 'success',
