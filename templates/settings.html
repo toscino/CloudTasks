@@ -132,6 +132,18 @@
         <input type="checkbox" id="can-select-morning-cards" class="checkbox" onchange="savePreferences()">
         <label for="can-select-morning-cards">Can select morning cards</label>
     </div>
+    <div class="preference-group" style="margin-top: 10px;">
+        <input type="checkbox" id="inverted" class="checkbox" onchange="savePreferences()">
+        <label for="inverted">Inverted (Tracker moves toward 1 instead of 9)</label>
+    </div>
+</div>
+
+<div class="settings-section">
+    <h3>Collaboration Tracker Status</h3>
+    <p><strong>Your Status:</strong> <span id="inverted-status">Loading...</span></p>
+    <div id="spouse-inverted-status" style="display: none;">
+        <p><strong>Spouse Status:</strong> <span id="spouse-inverted-status-text">-</span></p>
+    </div>
 </div>
 
 <div id="status-message"></div>
@@ -159,6 +171,23 @@ async function loadSettings() {
             }
             
             document.getElementById('can-select-morning-cards').checked = data.settings.can_select_morning_cards || false;
+            
+            // Display inverted status
+            const invertedStatus = data.settings.inverted || false;
+            const invertedCheckbox = document.getElementById('inverted');
+            if (invertedCheckbox) {
+                invertedCheckbox.checked = invertedStatus;
+            }
+            const invertedDisplay = document.getElementById('inverted-status');
+            if (invertedDisplay) {
+                invertedDisplay.textContent = invertedStatus ? 'Yes (Tracker moves toward 1)' : 'No (Tracker moves toward 9)';
+            }
+            
+            // Show spouse inverted status if linked
+            if (data.settings.spouse_username) {
+                // Fetch spouse settings to show their inverted status
+                fetchSpouseInvertedStatus(data.settings.spouse_username);
+            }
         }
     } catch (error) {
         showStatus('Error loading settings', 'error');
@@ -274,6 +303,7 @@ async function unlinkSpouse() {
 
 async function savePreferences() {
     const canSelectMorningCards = document.getElementById('can-select-morning-cards').checked;
+    const inverted = document.getElementById('inverted').checked;
     
     try {
         const response = await fetch('/api/user/preferences', {
@@ -282,7 +312,8 @@ async function savePreferences() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                can_select_morning_cards: canSelectMorningCards
+                can_select_morning_cards: canSelectMorningCards,
+                inverted: inverted
             })
         });
         
@@ -290,11 +321,33 @@ async function savePreferences() {
         
         if (data.status === 'success') {
             showStatus('Preferences saved', 'success');
+            // Update display
+            const invertedDisplay = document.getElementById('inverted-status');
+            if (invertedDisplay) {
+                invertedDisplay.textContent = inverted ? 'Yes (Tracker moves toward 1)' : 'No (Tracker moves toward 9)';
+            }
         } else {
             showStatus('Failed to save preferences', 'error');
         }
     } catch (error) {
         showStatus('Error saving preferences', 'error');
+    }
+}
+
+async function fetchSpouseInvertedStatus(spouseUsername) {
+    try {
+        // Note: This would need a backend endpoint to fetch spouse settings
+        // For now, we'll show a placeholder or fetch via the same endpoint
+        // Actually, we can't fetch spouse settings easily without a new endpoint
+        // So we'll just show that spouse info is available but not their inverted status
+        const spouseStatusDiv = document.getElementById('spouse-inverted-status');
+        const spouseStatusText = document.getElementById('spouse-inverted-status-text');
+        if (spouseStatusDiv && spouseStatusText) {
+            spouseStatusDiv.style.display = 'block';
+            spouseStatusText.textContent = 'Not available (check spouse\'s settings page)';
+        }
+    } catch (error) {
+        console.error('Error fetching spouse status:', error);
     }
 }
 

@@ -46,7 +46,7 @@ class FirestoreError(DatabaseError):
 
 
 class ExternalServiceError(CloudTasksException):
-    """Raised when an external service (e.g., OpenAI) fails"""
+    """Raised when an external service fails"""
     pass
 
 

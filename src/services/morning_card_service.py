@@ -15,6 +15,7 @@ class MorningCardService:
     """Service for morning card operations"""
     
     def __init__(self, app_manager):
+        self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.central_tz = get_timezone()
@@ -345,7 +346,7 @@ class MorningCardService:
             
             # Get collaboration score
             from src.services.collaboration_service import CollaborationService
-            collab_service = CollaborationService(self.db)
+            collab_service = CollaborationService(self.app_manager)
             tracker_result = collab_service.get_or_create_tracker()
             
             if not tracker_result:

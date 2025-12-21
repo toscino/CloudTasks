@@ -69,29 +69,6 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .complete-btn {
-            border: 2px solid #cecece;
-            background-color: transparent;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            cursor: pointer;
-            margin-left: 15px;
-            transition: background-color 0.2s, border-color 0.2s;
-            flex-shrink: 0; /* Prevents the button from shrinking */
-        }
-        .complete-btn:hover {
-            background-color: #e0f2e9;
-            border-color: #34c759;
-        }
-        .complete-btn.saved {
-            background-color: #34c759;
-            border-color: #34c759;
-        }
-        .complete-btn.saved:hover {
-            background-color: #2fb84d;
-            border-color: #2fb84d;
-        }
         .task-item {
             position: relative;
             overflow: hidden;
@@ -115,6 +92,9 @@
             opacity: 1;
             pointer-events: auto;
         }
+        .swipe-confirmation.abandon {
+            background-color: #ff3b30;
+        }
         .complete-confirm-btn {
             background-color: white;
             color: #34c759;
@@ -126,6 +106,19 @@
             font-size: 16px;
         }
         .complete-confirm-btn:hover {
+            background-color: #f0f0f0;
+        }
+        .abandon-confirm-btn {
+            background-color: white;
+            color: #ff3b30;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .abandon-confirm-btn:hover {
             background-color: #f0f0f0;
         }
         .section-divider {
@@ -406,87 +399,58 @@
         try {
             console.log('Starting to fetch tasks...');
             
-            // Fetch both regular tasks and daily tasks
-            const [tasksData, dailyTasksData] = await Promise.all([
-                apiCall('/api/tasks'),
-                apiCall('/api/daily-tasks/today')
-            ]);
+            // Fetch tasks (includes stats)
+            const tasksData = await apiCall('/api/tasks');
             
-            console.log('Got regular tasks:', tasksData);
-            console.log('Got daily tasks:', dailyTasksData);
+            console.log('Got tasks:', tasksData);
             
             // Clear any old tasks
             taskListElement.innerHTML = '';
 
-            // Combine tasks
+            // Only use tasks from /api/tasks for display
             let allTasks = [];
             
-            // Add regular tasks
+            // Add tasks from /api/tasks
             if (tasksData.status === 'success' && tasksData.tasks && tasksData.tasks.length > 0) {
-                const regularTasks = tasksData.tasks.map(task => ({
+                allTasks = tasksData.tasks.map(task => ({
                     ...task,
-                    type: 'regular',
-                    points: task.difficulty // Use difficulty as points for regular tasks
+                    points: task.points || task.difficulty || 0 // Use points if available, fallback to difficulty
                 }));
-                allTasks = allTasks.concat(regularTasks);
-            }
-            
-            // Add daily tasks (only incomplete ones)
-            if (dailyTasksData.status === 'success' && dailyTasksData.instances && dailyTasksData.instances.length > 0) {
-                const incompleteDailyTasks = dailyTasksData.instances
-                    .filter(instance => !instance.completed)
-                    .map(instance => ({
-                        id: instance.id,
-                        description: instance.description,
-                        category: 'Daily',
-                        difficulty: instance.points, // Use points as difficulty for display
-                        duration: null, // No duration for daily tasks
-                        saved: false,
-                        type: 'daily',
-                        points: instance.points
-                    }));
-                allTasks = allTasks.concat(incompleteDailyTasks);
             }
 
             if (allTasks.length > 0) {
                 console.log('Found', allTasks.length, 'total tasks to display');
                 
-                // Sort regular tasks alphabetically, then daily tasks alphabetically
-                const regularTasks = allTasks.filter(task => task.type === 'regular')
-                    .sort((a, b) => a.description.localeCompare(b.description));
-                const dailyTasks = allTasks.filter(task => task.type === 'daily')
-                    .sort((a, b) => a.description.localeCompare(b.description));
-                
-                const sortedTasks = [...regularTasks, ...dailyTasks];
+                // Sort tasks alphabetically
+                const sortedTasks = allTasks.sort((a, b) => a.description.localeCompare(b.description));
                 
                 // Create and display a list item for each task
-                sortedTasks.forEach(task => {
+                sortedTasks.forEach((task, index) => {
                     const li = document.createElement('li');
                     li.className = 'task-item';
                     li.dataset.taskId = task.id;
-                    li.dataset.taskType = task.type; // Add task type for completion detection
                     
                     // Add completion timestamp if task is completed
                     if (task.completed && task.completed_at) {
                         li.dataset.completedAt = task.completed_at;
                     }
                     
-                    const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
-                    
                     li.innerHTML = `
                         <div class="task-content">
                             <div class="task-info">
                                 <span class="task-text">${task.description}</span>
                                 <div class="task-meta">
-                                    <span class="category">${task.category}</span>
-                                    <span class="difficulty">Points: ${task.difficulty}</span>
+                                    <span class="category">${task.category || 'Daily'}</span>
+                                    <span class="difficulty">Points: ${task.points || task.difficulty || 0}</span>
                                     ${task.duration ? `<span class="duration">Duration: ${task.duration} min</span>` : ''}
                                 </div>
                             </div>
-                            ${task.type === 'regular' ? `<button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>` : ''}
                         </div>
                         <div class="swipe-confirmation">
                             <button class="complete-confirm-btn">Complete?</button>
+                        </div>
+                        <div class="swipe-confirmation abandon">
+                            <button class="abandon-confirm-btn">Abandon?</button>
                         </div>
                     `;
                     
@@ -496,8 +460,21 @@
                 taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
             }
             
-            // Update stats
-            updateDailyTasksStats(dailyTasksData);
+            // Update stats from tasksData.stats
+            if (tasksData.status === 'success' && tasksData.stats) {
+                const stats = tasksData.stats;
+                const totalPoints = stats.total_points || 0;
+                const completedPoints = stats.completed_points || 0;
+
+                // Update points detail (only element that exists)
+                const dailyPointsDetail = document.getElementById('daily-points-detail');
+                if (dailyPointsDetail) {
+                    dailyPointsDetail.textContent = totalPoints > 0 ? `${completedPoints}/${totalPoints} points earned today` : 'No points earned today';
+                }
+                
+                // Update progress bar (uses totalPoints for collaboration tracker)
+                updateDailyTasksStats(stats);
+            }
 
         } catch (error) {
             console.error("Failed to fetch tasks:", error);
@@ -505,35 +482,35 @@
         }
     }
 
-        // Function to load and display daily tasks
+        // Function to load and display task stats
         async function loadDailyTasks() {
             try {
-                console.log('Loading daily tasks...');
-                const response = await fetch('/api/daily-tasks/today');
+                console.log('Loading task stats...');
+                const response = await fetch('/api/tasks');
                 const data = await response.json();
-                console.log('Daily tasks data:', data);
+                console.log('Tasks data:', data);
 
-                if (data.status === 'success') {
-                    const instances = data.instances || [];
-                    const completed = instances.filter(instance => instance.completed).length;
-                    const total = instances.length;
-                    const completedPoints = instances.filter(instance => instance.completed).reduce((sum, instance) => sum + instance.points, 0);
-                    const totalPoints = instances.reduce((sum, instance) => sum + instance.points, 0);
+                if (data.status === 'success' && data.stats) {
+                    const stats = data.stats;
+                    const completed = stats.completed_instances || 0;
+                    const total = stats.total_instances || 0;
+                    const completedPoints = stats.completed_points || 0;
+                    const totalPoints = stats.total_points || 0;
 
-                    // Update daily tasks progress
+                    // Update task progress stats
                     document.getElementById('daily-tasks-progress').textContent = `${completed}/${total}`;
                     document.getElementById('daily-tasks-detail').textContent = total > 0 ? `${completed}/${total} completed` : 'No tasks today';
 
-                    // Update daily points
+                    // Update points stats
                     document.getElementById('daily-points').textContent = `${completedPoints}/${totalPoints}`;
                     document.getElementById('daily-points-detail').textContent = totalPoints > 0 ? `${completedPoints}/${totalPoints} points` : 'No points today';
                 } else {
-                    console.error('Failed to load daily tasks:', data.message);
+                    console.error('Failed to load task stats:', data.message);
                     document.getElementById('daily-tasks-progress').textContent = 'Error';
                     document.getElementById('daily-points').textContent = 'Error';
                 }
             } catch (error) {
-                console.error('Error loading daily tasks:', error);
+                console.error('Error loading task stats:', error);
                 document.getElementById('daily-tasks-progress').textContent = 'Error';
                 document.getElementById('daily-points').textContent = 'Error';
             }
@@ -553,11 +530,7 @@
                     marker.style.left = leftPercent + '%';
                     marker.querySelector('.tracker-value').textContent = value;
                     
-                    // Update progress indicator using backend data
-                    await updateProgressIndicatorFromBackend(data.par, data.stretch_goal);
-                    
-                    // Update goal markers
-                    updateGoalMarkers(data.par, data.stretch_goal);
+                    // Note: par/stretch goals removed - tracker_value is now the only metric
                 } else {
                     console.error('Failed to load collaboration tracker:', data.message);
                 }
@@ -658,58 +631,37 @@
         
         // Function to update daily tasks stats
         // Update to use backend API
-        async function updateDailyTasksStats(dailyTasksData) {
-            // Fetch total points from backend instead of calculating
-            const totalPoints = await getTodaysTotalPoints();
+        async function updateDailyTasksStats(stats) {
+            // Extract total points from stats
+            const totalPoints = stats.total_points || 0;
+            const completedPoints = stats.completed_points || 0;
             
-            // Update the detail text
-            document.getElementById('daily-points-detail').textContent = 
-                totalPoints > 0 ? `${totalPoints} points earned today` : 'No points earned today';
+            // Update the detail text (with null check)
+            const dailyPointsDetail = document.getElementById('daily-points-detail');
+            if (dailyPointsDetail) {
+                dailyPointsDetail.textContent = totalPoints > 0 ? `${completedPoints}/${totalPoints} points earned today` : 'No points earned today';
+            }
             
-            // Get par and stretch goal from collaboration tracker API
-            try {
-                const response = await fetch('/api/collaboration/tracker');
-                const data = await response.json();
+            // Update progress bar to track progress toward next 100-point threshold
+            const progressFill = document.getElementById('progress-fill');
+            if (progressFill) {
+                // Calculate progress to next threshold: (completedPoints % 100) / 100 * 100
+                const progressToNextThreshold = (completedPoints % 100) / 100 * 100;
                 
-                if (data.status === 'success') {
-                    const par = data.par;
-                    const stretchGoal = data.stretch_goal;
-                    
-                    // Update progress indicator with current points
-                    const progressFill = document.getElementById('progress-fill');
-                    if (progressFill) {
-                        // Update progress bar color based on current points
-                        let progressPercent = 0;
-                        if (totalPoints >= stretchGoal) {
-                            progressPercent = 100;
-                        } else if (totalPoints > 0) {
-                            progressPercent = (totalPoints / stretchGoal) * 100;
-                        }
-                        
-                        // Update progress bar width
-                        progressFill.style.width = progressPercent + '%';
-                        
-                        // Update color based on progress
-                        progressFill.classList.remove('par-reached', 'stretch-reached');
-                        console.log(`Stats update - totalPoints: ${totalPoints}, par: ${par}, stretchGoal: ${stretchGoal}`);
-                        if (totalPoints >= stretchGoal) {
-                            progressFill.classList.add('stretch-reached'); // Green
-                            console.log('Added stretch-reached class (green)');
-                        } else if (totalPoints >= par) {
-                            progressFill.classList.add('par-reached'); // Yellow
-                            console.log('Added par-reached class (yellow)');
-                        } else {
-                            console.log('Using default red color (below par)');
-                        }
-                        
-                        // Update goal markers
-                        updateGoalMarkers(par, stretchGoal);
-                    }
-                } else {
-                    console.error('Failed to get collaboration tracker data:', data.message);
+                // Update progress bar width
+                progressFill.style.width = progressToNextThreshold + '%';
+                
+                // Remove old color classes
+                progressFill.classList.remove('par-reached', 'stretch-reached');
+                
+                // Add color class based on progress (yellow at 50%, green at 100%)
+                const remainder = completedPoints % 100;
+                if (remainder >= 100) {
+                    progressFill.classList.add('stretch-reached'); // Green at 100+
+                } else if (remainder >= 50) {
+                    progressFill.classList.add('par-reached'); // Yellow at 50-99
                 }
-            } catch (error) {
-                console.error('Error fetching collaboration tracker:', error);
+                // Otherwise stays red (default)
             }
         }
         
@@ -743,12 +695,10 @@
                 // Sort tasks alphabetically by description
                 const sortedTasks = tasks.sort((a, b) => a.description.localeCompare(b.description));
                 // Create and display a list item for each task
-                sortedTasks.forEach(task => {
+                sortedTasks.forEach((task, index) => {
                     const li = document.createElement('li');
                     li.className = 'task-item';
                     li.dataset.taskId = task.id;
-                    
-                    const saveBtnClass = task.saved ? 'complete-btn saved' : 'complete-btn';
                     
                     li.innerHTML = `
                         <div class="task-content">
@@ -760,7 +710,6 @@
                                     <span class="duration">Duration: ${task.duration} min</span>
                                 </div>
                             </div>
-                            <button class="${saveBtnClass}" title="${task.saved ? 'Unsave Task' : 'Save Task'}"></button>
                         </div>
                         <div class="swipe-confirmation">
                             <button class="complete-confirm-btn">Complete?</button>
@@ -855,51 +804,8 @@
         //     }
         // }
 
-        // Function to save/unsave a task via API
-        async function toggleTaskSave(taskId, isSaved) {
-            try {
-                const response = await fetch(`/api/tasks/${taskId}/save`, {
-                    method: 'PUT'
-                });
-
-                if (response.ok) {
-                    return true;
-                } else {
-                    console.error('Failed to toggle task save:', await response.text());
-                    return false;
-                }
-            } catch (error) {
-                console.error('Error toggling task save:', error);
-                return false;
-            }
-        }
-
-
         // Add a click listener to the entire task list for event delegation
         taskListElement.addEventListener('click', async function(event) {
-            // Check if a save button was clicked
-            if (event.target.classList.contains('complete-btn')) {
-                const taskItem = event.target.closest('.task-item');
-                const taskId = taskItem.dataset.taskId;
-                const isSaved = event.target.classList.contains('saved');
-                
-                // Toggle save state
-                const success = await toggleTaskSave(taskId, isSaved);
-                
-                if (success) {
-                    // Update visual state
-                    if (isSaved) {
-                        event.target.classList.remove('saved');
-                        event.target.title = 'Save Task';
-                    } else {
-                        event.target.classList.add('saved');
-                        event.target.title = 'Unsave Task';
-                    }
-                } else {
-                    alert('Failed to update task. Please try again.');
-                }
-            }
-            
             // Check if complete confirmation button was clicked
             if (event.target.classList.contains('complete-confirm-btn')) {
                 const taskItem = event.target.closest('.task-item');
@@ -914,61 +820,70 @@
                 taskItem.style.opacity = '0';
                 taskItem.style.transform = 'translateX(20px)';
 
-                // Determine if this is a daily task or regular task
-                // Check if the task has a 'type' data attribute or if it's in the daily tasks section
-                const taskType = taskItem.dataset.taskType || (taskItem.closest('#daily-task-list') !== null ? 'daily' : 'regular');
-                const isDailyTask = taskType === 'daily';
-                const apiEndpoint = isDailyTask ? `/api/daily-tasks/today/${taskId}/complete` : `/api/tasks/${taskId}/complete`;
-
-                // Complete the task via API
-                const response = await fetch(apiEndpoint, {
+                // Complete the task via API (all tasks are daily tasks now)
+                const response = await fetch(`/api/tasks/${taskId}/complete`, {
                     method: 'PUT'
                 });
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Task completion response:', data);
+                    console.log('Task completed!');
                     
-                    if (isDailyTask) {
-                        // Handle daily task completion
-                        console.log('Daily task completed!');
-                        
-                        // Remove the task from the view after the animation completes
+                    // Remove the task from the view after the animation completes
+                    setTimeout(() => {
+                        taskItem.remove();
+                        // Add small delay to ensure database is updated before fetching
                         setTimeout(() => {
-                            taskItem.remove();
-                            // Add small delay to ensure database is updated before fetching
-                            setTimeout(() => {
-                                fetchAndDisplayTasks();
-                            }, 100);
-                        }, 400);
-                    } else {
-                        // Handle regular task completion
-                        // Check if user earned a reward
-                        if (data.reward_earned) {
-                            console.log('Reward earned! (notifications disabled)');
-                            // DISABLED: Reward notifications temporarily disabled
-                            // showRewardEarnedNotification();
-                            // checkPendingRewards();
-                        } else {
-                            console.log('No reward earned this time');
-                        }
-                        
-                        // Remove the task from the view after the animation completes
-                        setTimeout(() => {
-                            taskItem.remove();
-                            
-                            // Add small delay to ensure database is updated before fetching
-                            setTimeout(() => {
-                                fetchAndDisplayTasks();
-                            }, 100);
-                        }, 400);
-                    }
+                            fetchAndDisplayTasks();
+                            // Refresh collaboration tracker after task completion
+                            loadCollaborationTracker();
+                        }, 100);
+                    }, 400);
                 } else {
                     // Revert the visual changes if API call failed
                     taskItem.style.textDecoration = '';
                     taskItem.style.opacity = '';
                     taskItem.style.transform = '';
                     alert('Failed to complete task. Please try again.');
+                }
+            }
+            
+            // Check if abandon confirmation button was clicked
+            if (event.target.classList.contains('abandon-confirm-btn')) {
+                const taskItem = event.target.closest('.task-item');
+                const taskId = taskItem.dataset.taskId;
+                
+                // Hide confirmation
+                const abandonConfirmation = taskItem.querySelector('.swipe-confirmation.abandon');
+                abandonConfirmation.classList.remove('show');
+                
+                // Add visual effect for abandonment
+                taskItem.style.textDecoration = 'line-through';
+                taskItem.style.opacity = '0.5';
+                taskItem.style.transform = 'translateX(-20px)';
+
+                // Abandon the task via API
+                const response = await fetch(`/api/tasks/${taskId}/abandon`, {
+                    method: 'PUT'
+                });
+                
+                if (response.ok) {
+                    console.log('Task abandoned successfully');
+                    
+                    // Remove the task from the view after the animation completes
+                    setTimeout(() => {
+                        taskItem.remove();
+                        // Refresh tasks to update display
+                        setTimeout(() => {
+                            fetchAndDisplayTasks();
+                        }, 100);
+                    }, 400);
+                } else {
+                    alert('Failed to abandon task. Please try again.');
+                    // Reset visual state
+                    taskItem.style.opacity = '1';
+                    taskItem.style.transform = 'translateX(0)';
+                    taskItem.style.textDecoration = 'none';
                 }
             }
         });
@@ -1037,8 +952,9 @@
             
             currentX = clientX;
             const deltaX = currentX - startX;
+            const absDeltaX = Math.abs(deltaX);
             
-            // Only allow right swipes (positive deltaX)
+            // Handle right swipes (complete) - positive deltaX
             if (deltaX > 0) {
                 const maxSwipe = 100; // Maximum swipe distance
                 const swipeDistance = Math.min(deltaX, maxSwipe);
@@ -1047,12 +963,45 @@
                 const taskContent = currentTaskItem.querySelector('.task-content');
                 taskContent.style.transform = `translateX(${swipeDistance}px)`;
                 
-                // Show confirmation if swiped far enough
-                const confirmation = currentTaskItem.querySelector('.swipe-confirmation');
-                if (swipeDistance > 50) {
+                // Show confirmation only if swiped far enough (fix UX issue - increase threshold)
+                const confirmation = currentTaskItem.querySelector('.swipe-confirmation:not(.abandon)');
+                const abandonConfirmation = currentTaskItem.querySelector('.swipe-confirmation.abandon');
+                
+                // Hide abandon confirmation if showing
+                if (abandonConfirmation) {
+                    abandonConfirmation.classList.remove('show');
+                }
+                
+                // Show complete confirmation only after 70px swipe (visible threshold)
+                if (swipeDistance > 70) {
                     confirmation.classList.add('show');
                 } else {
                     confirmation.classList.remove('show');
+                }
+            }
+            // Handle left swipes (abandon) - negative deltaX
+            else if (deltaX < 0) {
+                const maxSwipe = 100; // Maximum swipe distance
+                const swipeDistance = Math.max(deltaX, -maxSwipe);
+                
+                // Move only the task content, not the confirmation
+                const taskContent = currentTaskItem.querySelector('.task-content');
+                taskContent.style.transform = `translateX(${swipeDistance}px)`;
+                
+                // Show abandon confirmation only if swiped far enough
+                const abandonConfirmation = currentTaskItem.querySelector('.swipe-confirmation.abandon');
+                const confirmation = currentTaskItem.querySelector('.swipe-confirmation:not(.abandon)');
+                
+                // Hide complete confirmation if showing
+                if (confirmation) {
+                    confirmation.classList.remove('show');
+                }
+                
+                // Show abandon confirmation only after 70px swipe (visible threshold)
+                if (absDeltaX > 70) {
+                    abandonConfirmation.classList.add('show');
+                } else {
+                    abandonConfirmation.classList.remove('show');
                 }
             }
         }
@@ -1061,14 +1010,17 @@
             if (!isDragging || !currentTaskItem) return;
             
             const deltaX = currentX - startX;
-            const confirmation = currentTaskItem.querySelector('.swipe-confirmation');
+            const absDeltaX = Math.abs(deltaX);
+            const confirmation = currentTaskItem.querySelector('.swipe-confirmation:not(.abandon)');
+            const abandonConfirmation = currentTaskItem.querySelector('.swipe-confirmation.abandon');
             const taskContent = currentTaskItem.querySelector('.task-content');
             
-            // Reset position if not swiped far enough
-            if (deltaX < 50) {
+            // Reset position if not swiped far enough to activate (80px threshold)
+            if (absDeltaX < 80) {
                 taskContent.style.transition = 'transform 0.3s ease';
                 taskContent.style.transform = 'translateX(0)';
-                confirmation.classList.remove('show');
+                if (confirmation) confirmation.classList.remove('show');
+                if (abandonConfirmation) abandonConfirmation.classList.remove('show');
             }
             
             currentTaskItem.style.cursor = '';
@@ -1092,8 +1044,7 @@
         // Mouse events for desktop
         taskListElement.addEventListener('mousedown', function(event) {
             // Only start drag if not clicking on a button
-            if (!event.target.classList.contains('complete-btn') && 
-                !event.target.classList.contains('complete-confirm-btn')) {
+            if (!event.target.classList.contains('complete-confirm-btn')) {
                 startDrag(event, event.clientX);
                 event.preventDefault(); // Prevent text selection
             }

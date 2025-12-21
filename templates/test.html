@@ -127,6 +127,7 @@
             <button onclick="unlockMorningCards()">Unlock Morning Cards (Testing)</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
             <button onclick="viewAllTrackerHistory()">View All Tracker History (with test status)</button>
+            <button onclick="getTrackerAt2am()">Get Tracker Value at 2am</button>
             <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h4>Progress Day Simulation</h4>
                 <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
@@ -716,6 +717,31 @@
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = 'Failed to reset history: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function getTrackerAt2am() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Getting tracker value at 2am...';
+            
+            try {
+                const response = await fetch('/api/collaboration/tracker-at-2am');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    let message = `Tracker value at 2am reset: ${data.tracker_value}\n`;
+                    message += `Source: ${data.source === 'history' ? 'History entry' : 'Current value (no history found)'}\n`;
+                    message += `Date: ${data.date}`;
+                    resultDiv.textContent = message;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to get tracker at 2am: ' + data.message;
                 }
             } catch (error) {
                 resultDiv.className = 'result error';

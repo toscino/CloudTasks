@@ -4,7 +4,6 @@ Statistics service - handles statistics and comparison logic
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, timedelta
-from src.utils.background_tasks import ensure_minimums
 from src.utils.config import get_timezone
 from src.utils.error_handlers import handle_exception
 from typing import Dict, Any
@@ -147,27 +146,13 @@ class StatisticsService:
             }
     
     def get_challenges(self, username: str) -> Dict[str, Any]:
-        """Get active challenges (one per goal)"""
+        """Get active challenges (AI generation disabled)"""
         try:
-            self.logger.debug(f"Fetching challenges for user: {username}")
-            
-            # Import ChallengeMaster
-            from src.core.challenge_master import ChallengeMaster
-            challenge_master = ChallengeMaster(self.db)
-            
-            # Get existing active challenges (fast - no AI calls)
-            challenges = challenge_master.get_active_challenges(username, limit=4)
-            
-            self.logger.debug(f"Active challenges for {username}: {len(challenges)}")
-            
-            # Fire off background task generation (non-blocking)
-            ensure_minimums(self.task_master, username, check_tasks=False, check_rewards=False, check_challenges=True)
-            
+            self.logger.debug(f"Challenge system disabled - returning empty list for {username}")
             return {
                 'status': 'success',
-                'challenges': challenges
+                'challenges': []
             }
-            
         except Exception as e:
             self.logger.error(f"Failed to get challenges for {username}: {str(e)}")
             return {
@@ -176,28 +161,8 @@ class StatisticsService:
             }
     
     def complete_challenge(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Complete challenge and reward goal"""
-        try:
-            # Import ChallengeMaster
-            from src.core.challenge_master import ChallengeMaster
-            challenge_master = ChallengeMaster(self.db)
-            
-            # Complete the challenge and associated goal
-            completed_task = challenge_master.complete_challenge_and_goal(username, task_id)
-            
-            if not completed_task:
-                return {
-                    'status': 'error',
-                    'message': 'Challenge not found or unauthorized'
-                }
-            
-            return {
-                'status': 'success',
-                'message': 'Challenge completed successfully'
-            }
-            
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to complete challenge: {str(e)}'
-            }
+        """Complete challenge and reward goal (AI generation disabled)"""
+        return {
+            'status': 'error',
+            'message': 'Challenge system disabled'
+        }

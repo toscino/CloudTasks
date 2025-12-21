@@ -13,6 +13,7 @@ class CollaborationService:
     """Service for collaboration tracker and goal management"""
     
     def __init__(self, app_manager):
+        self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.central_tz = get_timezone()
@@ -47,146 +48,8 @@ class CollaborationService:
             self.logger.error(f"Failed to get or create tracker: {e}")
             return None
     
-    def get_user_goals(self, username):
-        """Get par and stretch goal settings"""
-        try:
-            # Get user's stretch setting
-            goals_query = self.db.collection('user_goals').where('username', '==', username).limit(1)
-            goals_docs = list(goals_query.stream())
-            
-            stretch_setting = 10  # Default stretch setting
-            adjustment_multiplier = 1  # Default adjustment multiplier
-            if goals_docs:
-                goals_data = goals_docs[0].to_dict()
-                stretch_setting = goals_data.get('stretch_setting', 10)
-                adjustment_multiplier = goals_data.get('adjustment_multiplier', 1)
-            
-            # Calculate par (sum of positive daily task points)
-            par = self._calculate_user_par(username)
-            
-            return {
-                'par': par,
-                'stretch_setting': stretch_setting,
-                'stretch_goal': par + stretch_setting,
-                'adjustment_multiplier': adjustment_multiplier
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get user goals for {username}: {e}")
-            return {
-                'par': 0,
-                'stretch_setting': 10,
-                'stretch_goal': 10
-            }
-    
-    def set_user_stretch_setting(self, username, stretch_setting, adjustment_multiplier=None):
-        """Set stretch setting and adjustment multiplier"""
-        try:
-            if stretch_setting < 0 or stretch_setting > 100:
-                return {'status': 'error', 'message': 'Stretch setting must be between 0 and 100'}
-            
-            if adjustment_multiplier is not None and adjustment_multiplier not in [-1, 1]:
-                return {'status': 'error', 'message': 'Adjustment multiplier must be -1 or 1'}
-            
-            # Check if user goals already exist
-            goals_query = self.db.collection('user_goals').where('username', '==', username).limit(1)
-            goals_docs = list(goals_query.stream())
-            
-            goals_data = {
-                'username': username,
-                'stretch_setting': stretch_setting,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }
-            
-            # Add adjustment multiplier if provided
-            if adjustment_multiplier is not None:
-                goals_data['adjustment_multiplier'] = adjustment_multiplier
-            
-            if goals_docs:
-                # Update existing
-                goals_docs[0].reference.update(goals_data)
-                self.logger.info(f"Updated goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier}")
-            else:
-                # Create new (default multiplier to 1 if not provided)
-                if adjustment_multiplier is None:
-                    goals_data['adjustment_multiplier'] = 1
-                goals_data['created_at'] = firestore.SERVER_TIMESTAMP
-                self.db.collection('user_goals').add(goals_data)
-                self.logger.info(f"Created goals for {username}: stretch={stretch_setting}, multiplier={adjustment_multiplier or 1}")
-            
-            return {'status': 'success', 'message': 'Goals updated successfully'}
-            
-        except Exception as e:
-            self.logger.error(f"Failed to set goals for {username}: {e}")
-            return {'status': 'error', 'message': f'Failed to update goals: {str(e)}'}
-    
-    def _calculate_user_par_for_date(self, username, date):
-        """Calculate par for date"""
-        try:
-            # Get the weekday for the specific date (0=Monday, 6=Sunday)
-            target_weekday = date.weekday()  # 0=Monday, 6=Sunday
-            
-            # Get all active daily task templates for user
-            templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
-            templates_docs = templates_query.stream()
-            
-            par = 0
-            for template_doc in templates_docs:
-                template_data = template_doc.to_dict()
-                
-                # Check if this template should run on the target date
-                days_of_week = template_data.get('days_of_week', [])
-                if target_weekday in days_of_week:
-                    points = template_data.get('points', 0)
-                    if points > 0:  # Only count positive points
-                        par += points
-            
-            self.logger.debug(f"Calculated par for {username} on {date.isoformat()} (weekday {target_weekday}): {par}")
-            return par
-            
-        except Exception as e:
-            self.logger.error(f"Failed to calculate par for {username} on {date}: {e}")
-            return 0
-    
-    def _calculate_user_par(self, username):
-        """Calculate par for today"""
-        today = datetime.now(self.central_tz).date()
-        return self._calculate_user_par_for_date(username, today)
-    
-    def calculate_tracker_adjustment(self, username, daily_points, date=None):
-        """Calculate adjustment (+1/0/-1) based on performance"""
-        try:
-            # Use provided date or today for par calculation
-            if date is None:
-                date = datetime.now(self.central_tz).date()
-            
-            goals = self.get_user_goals(username)
-            par = self._calculate_user_par_for_date(username, date)
-            stretch_goal = goals['stretch_goal']
-            multiplier = goals.get('adjustment_multiplier', 1)  # Default to 1 (normal direction)
-            self.logger.debug(f"User {username} has an adjustment multiplier of {multiplier}")
-            if daily_points >= stretch_goal:
-                # Above stretch goal (good day)
-                base_adjustment = 1
-            elif daily_points >= par:
-                # Between par and stretch goal
-                base_adjustment = 0
-            else:
-                # Below par (bad day)
-                base_adjustment = -1
-            
-            # Apply user's multiplier (-1 inverts the direction, 1 keeps it normal)
-            adjustment = base_adjustment * multiplier
-            
-            self.logger.debug(f"Adjustment for {username} on {date.isoformat()}: {daily_points} points (par: {par}, stretch: {stretch_goal}, multiplier: {multiplier}) = {adjustment}")
-            return adjustment
-            
-        except Exception as e:
-            self.logger.error(f"Failed to calculate adjustment for {username} on {date}: {e}")
-            return 0
-    
     def _get_daily_points_for_date(self, username, date):
-        """Get daily points for date"""
+        """Get daily points for date (with inverted support)"""
         try:
             date_str = date.isoformat()
             
@@ -204,7 +67,9 @@ class CollaborationService:
             
             for instance_doc in instances_docs:
                 instance_data = instance_doc.to_dict()
-                total_points += instance_data.get('points', 0)
+                # Exclude abandoned tasks from point calculations
+                if not instance_data.get('abandoned', False):
+                    total_points += instance_data.get('points', 0)
             
             # Get completed regular tasks for this date using completed_at timestamp
             # Convert date to start and end of day timestamps in Central time
@@ -237,87 +102,130 @@ class CollaborationService:
             self.logger.error(f"Failed to get daily points for {username} on {date}: {e}")
             return 0
     
-    def _update_tracker_for_date(self, date, username=None):
-        """Update tracker for date"""
+    def check_and_update_tracker_on_threshold(self, username):
+        """Check if user crossed 100-point threshold and update tracker"""
         try:
-            # Get the primary user (the one who triggered the update)
-            # If no username provided, skip update (can't process without knowing which user)
-            if not username:
-                self.logger.warning("_update_tracker_for_date called without username, skipping")
-                return
+            today_central = datetime.now(self.central_tz).date()
             
-            # Get spouse from database
-            spouse_username = get_spouse(username)
+            # Get current total points for user today (with inverted support)
+            current_points = self._get_daily_points_for_date(username, today_central)
             
-            # If no spouse, tracker uses only user's points
-            if not spouse_username:
-                spouse_points = 0
-                spouse_adjustment = 0
-            else:
-                spouse_points = self._get_daily_points_for_date(spouse_username, date)
-                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points, date)
+            self.logger.debug(f"Checking threshold for {username}: {current_points} points, threshold_count calculation")
             
-            user_points = self._get_daily_points_for_date(username, date)
-            user_adjustment = self.calculate_tracker_adjustment(username, user_points, date)
+            # Calculate how many 100-point thresholds have been crossed
+            # Use absolute value for threshold count (always positive points)
+            threshold_count = abs(current_points) // 100
             
-            # Get current tracker
-            tracker = self.get_or_create_tracker()
-            if not tracker:
-                self.logger.error("Failed to get tracker for update")
-                return
+            self.logger.debug(f"Threshold count for {username}: {threshold_count} (from {current_points} points)")
             
-            old_value = tracker['current_value']
-            new_value = old_value + user_adjustment + spouse_adjustment
+            # Get last recorded threshold count for today
+            threshold_key = f"threshold_{today_central.isoformat()}_{username}"
+            threshold_ref = self.db.collection('threshold_tracking').document(threshold_key)
+            threshold_doc = threshold_ref.get()
             
-            # Cap at 1-9 range
-            new_value = max(1, min(9, new_value))
+            last_threshold_count = 0
+            if threshold_doc.exists:
+                threshold_data = threshold_doc.to_dict()
+                last_threshold_count = threshold_data.get('threshold_count', 0)
             
-            # Update tracker
-            tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
-            tracker_ref.update({
-                'current_value': new_value,
-                'last_updated': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
+            self.logger.debug(f"Last threshold count for {username}: {last_threshold_count}, current: {threshold_count}")
             
-            # Log to history
-            self._log_tracker_history(date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username)
-            
-            self.logger.info(f"Updated tracker for {date.isoformat()}: {old_value} → {new_value} ({username}: {user_adjustment}, {spouse_username or 'none'}: {spouse_adjustment})")
+            # Check if new thresholds were crossed
+            if threshold_count > last_threshold_count:
+                # Calculate how many thresholds to apply
+                thresholds_to_apply = threshold_count - last_threshold_count
+                
+                self.logger.debug(f"Applying {thresholds_to_apply} threshold(s) for {username}")
+                
+                # Get user settings (for spouse and inverted status) - single database call
+                # Use cached user_service from app_manager if available
+                user_service = getattr(self.app_manager, 'user_service', None)
+                if not user_service:
+                    from src.services.user_service import UserService
+                    user_service = UserService(self.app_manager)
+                user_settings = user_service.get_user_settings(username)
+                spouse_username = user_settings.get('spouse_username')
+                is_inverted = user_settings.get('inverted', False)
+                
+                self.logger.debug(f"User {username} inverted status: {is_inverted}")
+                
+                # Get current tracker
+                tracker = self.get_or_create_tracker()
+                if not tracker:
+                    self.logger.error("Failed to get tracker for threshold update")
+                    return
+                
+                old_value = tracker['current_value']
+                
+                # Calculate movement (how many thresholds to apply)
+                user_movement = thresholds_to_apply
+                
+                # Apply inverted status if user has inverted enabled
+                # Inverted users move tracker toward 1, non-inverted toward 9
+                if is_inverted:
+                    user_movement = -user_movement
+                    self.logger.debug(f"Inverted movement: {thresholds_to_apply} → {user_movement}")
+                
+                # Update tracker (shared tracker moves based on this user's progress)
+                new_value = old_value + user_movement
+                
+                # Cap at 1-9 range
+                new_value = max(1, min(9, new_value))
+                
+                tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
+                tracker_ref.update({
+                    'current_value': new_value,
+                    'last_updated': firestore.SERVER_TIMESTAMP,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
+                
+                # Update threshold tracking for this user
+                threshold_ref.set({
+                    'username': username,
+                    'date': today_central.isoformat(),
+                    'threshold_count': threshold_count,
+                    'points': current_points,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                }, merge=True)
+                
+                # Log to history (get spouse points for logging, but don't check their threshold)
+                spouse_points = self._get_daily_points_for_date(spouse_username, today_central) if spouse_username else 0
+                self._log_tracker_history(
+                    today_central, 
+                    current_points, 
+                    spouse_points, 
+                    old_value, 
+                    new_value, 
+                    user_movement, 
+                    0,  # No spouse movement in this call - they'll check their own
+                    username, 
+                    spouse_username
+                )
+                
+                self.logger.info(f"Updated tracker on threshold for {username}: {old_value} → {new_value} (+{user_movement} from user crossing {thresholds_to_apply} threshold(s))")
             
         except Exception as e:
-            self.logger.error(f"Failed to update tracker for {date}: {e}")
+            self.logger.error(f"Failed to check and update tracker on threshold for {username}: {e}")
     
-    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username=None, spouse_username=None, is_test=False):
-        """Log tracker update to history for debugging"""
+    def _log_tracker_history(self, date, user_points, spouse_points, old_value, new_value, user_movement, spouse_movement, username=None, spouse_username=None, is_test=False):
+        """Log tracker update to history"""
         try:
             # Skip logging if no username provided
             if not username:
                 return
             
-            # Get spouse if not provided
-            if not spouse_username:
-                spouse_username = get_spouse(username)
-            
-            user_goals = self.get_user_goals(username)
-            spouse_goals = self.get_user_goals(spouse_username) if spouse_username else None
-            
             history_data = {
                 'date': date.isoformat(),
                 'user_points': user_points,
-                'user_goal': user_goals['par'],
-                'user_stretch': user_goals['stretch_goal'],
                 'spouse_points': spouse_points,
-                'spouse_goal': spouse_goals['par'],
-                'spouse_stretch': spouse_goals['stretch_goal'],
                 'old_value': old_value,
                 'new_value': new_value,
-                'user_adjustment': user_adjustment,
-                'spouse_adjustment': spouse_adjustment,
+                'user_movement': user_movement,
+                'spouse_movement': spouse_movement,
                 'created_at': firestore.SERVER_TIMESTAMP
             }
             
-            # Only include is_test field if True (for backward compatibility)
+            # Only include is_test field if True
             if is_test:
                 history_data['is_test'] = True
             
@@ -326,106 +234,10 @@ class CollaborationService:
         except Exception as e:
             self.logger.error(f"Failed to log tracker history: {e}")
     
-    def record_day(self, username=None):
-        """Record tracker day based on last non-test history"""
-        try:
-            if not username:
-                self.logger.warning("record_day called without username, skipping")
-                return 0
-            
-            today_central = datetime.now(self.central_tz).date()
-            yesterday = today_central - timedelta(days=1)
-            
-            # Query for last non-test record
-            # Filter out test records: where is_test != True or field doesn't exist
-            history_query = self.db.collection('tracker_history').order_by('date', direction=firestore.Query.DESCENDING).limit(100)
-            history_docs = list(history_query.stream())
-            
-            last_record_date = None
-            for doc in history_docs:
-                data = doc.to_dict()
-                # Skip test records
-                if data.get('is_test') is True:
-                    continue
-                # Found a non-test record
-                last_record_date_str = data.get('date')
-                if last_record_date_str:
-                    last_record_date = datetime.fromisoformat(last_record_date_str).date()
-                    break
-            
-            # Determine target date
-            if last_record_date:
-                target_date = last_record_date + timedelta(days=1)
-                # If calculated date is today or future, record yesterday instead
-                if target_date >= today_central:
-                    target_date = yesterday
-                    # If yesterday already has records, skip
-                    if last_record_date >= yesterday:
-                        self.logger.info(f"Last record {last_record_date.isoformat()} is yesterday or later, skipping")
-                        return 0
-            else:
-                # No history exists, assume yesterday
-                target_date = yesterday
-            
-            # Idempotency check: verify target_date doesn't already have a non-test record
-            existing_query = self.db.collection('tracker_history').where('date', '==', target_date.isoformat()).limit(1)
-            existing_docs = list(existing_query.stream())
-            for doc in existing_docs:
-                data = doc.to_dict()
-                # If record exists and is not a test record, skip
-                if data.get('is_test') is not True:
-                    self.logger.info(f"Day {target_date.isoformat()} already recorded, skipping")
-                    return 0
-            
-            # Get spouse
-            spouse_username = get_spouse(username)
-            
-            # Get points for target date
-            user_points = self._get_daily_points_for_date(username, target_date)
-            if spouse_username:
-                spouse_points = self._get_daily_points_for_date(spouse_username, target_date)
-                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points, target_date)
-            else:
-                spouse_points = 0
-                spouse_adjustment = 0
-            
-            user_adjustment = self.calculate_tracker_adjustment(username, user_points, target_date)
-            
-            # Get current tracker
-            tracker = self.get_or_create_tracker()
-            if not tracker:
-                self.logger.error("Failed to get tracker for record_day")
-                return 0
-            
-            old_value = tracker['current_value']
-            new_value = old_value + user_adjustment + spouse_adjustment
-            
-            # Cap at 1-9 range
-            new_value = max(1, min(9, new_value))
-            
-            # Update tracker
-            tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
-            tracker_ref.update({
-                'current_value': new_value,
-                'last_updated': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
-            
-            # Log to history (not a test record)
-            self._log_tracker_history(target_date, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=False)
-            
-            self.logger.info(f"Recorded day {target_date.isoformat()}: {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
-            return 1
-            
-        except Exception as e:
-            self.logger.error(f"Failed to record day: {e}")
-            return 0
-    
     def get_tracker_display(self, username):
-        """Get tracker value and goals"""
+        """Get tracker value"""
         try:
             tracker = self.get_or_create_tracker()
-            goals = self.get_user_goals(username)
             
             if not tracker:
                 return {
@@ -435,11 +247,7 @@ class CollaborationService:
             
             return {
                 'status': 'success',
-                'tracker_value': tracker['current_value'],
-                'par': goals['par'],
-                'stretch_setting': goals['stretch_setting'],
-                'stretch_goal': goals['stretch_goal'],
-                'adjustment_multiplier': goals.get('adjustment_multiplier', 1)
+                'tracker_value': tracker['current_value']
             }
             
         except Exception as e:
@@ -498,69 +306,78 @@ class CollaborationService:
                 'message': str(e)
             }
     
-    def progress_day_for_testing(self, username=None, spouse_username=None, user_points=None, spouse_points=None):
-        """Manually trigger end-of-day processing for testing"""
+    def get_tracker_at_2am(self):
+        """Get the collaboration tracker value at 2am reset time (last event before 2am today)"""
         try:
-            # Username is required
-            if not username:
-                return {'status': 'error', 'message': 'Username is required'}
+            now_central = datetime.now(self.central_tz)
+            today_central = now_central.date()
             
-            # Get today's date in Central time
-            today_central = datetime.now(self.central_tz).date()
+            # Calculate 2am today in Central timezone
+            reset_time_today = datetime.combine(today_central, datetime.min.time().replace(hour=2))
+            reset_time_today = self.central_tz.localize(reset_time_today)
             
-            # Get spouse if not provided
-            if not spouse_username:
-                spouse_username = get_spouse(username)
+            # Query tracker_history for entries before 2am today
+            # Order by date descending to get the most recent entry
+            history_query = self.db.collection('tracker_history').order_by(
+                'date', direction=firestore.Query.DESCENDING
+            )
             
-            # Use provided points if given, otherwise fetch from database
-            if user_points is None:
-                user_points = self._get_daily_points_for_date(username, today_central)
+            # Get all history entries and find the last one before 2am today
+            last_entry_before_2am = None
+            for doc in history_query.stream():
+                history_data = doc.to_dict()
+                entry_date_str = history_data.get('date', '')
+                
+                # Parse the date string
+                try:
+                    entry_date = datetime.fromisoformat(entry_date_str).date()
+                    # Check if this entry is from before today, or from today but before 2am
+                    if entry_date < today_central:
+                        # This is from a previous day, so it's before 2am today
+                        last_entry_before_2am = history_data
+                        break
+                    elif entry_date == today_central:
+                        # This is from today, check the created_at timestamp
+                        created_at = history_data.get('created_at')
+                        if created_at:
+                            # Convert Firestore timestamp to datetime
+                            if hasattr(created_at, 'timestamp'):
+                                created_datetime = datetime.fromtimestamp(created_at.timestamp(), tz=self.central_tz)
+                            else:
+                                created_datetime = created_at
+                            
+                            if created_datetime < reset_time_today:
+                                # This entry was created before 2am today
+                                last_entry_before_2am = history_data
+                                break
+                except (ValueError, AttributeError) as e:
+                    self.logger.warning(f"Failed to parse date from history entry: {e}")
+                    continue
             
-            if spouse_username:
-                if spouse_points is None:
-                    spouse_points = self._get_daily_points_for_date(spouse_username, today_central)
-                spouse_adjustment = self.calculate_tracker_adjustment(spouse_username, spouse_points)
+            if last_entry_before_2am:
+                tracker_value = last_entry_before_2am.get('new_value', 5)
+                entry_date = last_entry_before_2am.get('date', 'unknown')
+                return {
+                    'status': 'success',
+                    'tracker_value': tracker_value,
+                    'date': entry_date,
+                    'source': 'history'
+                }
             else:
-                spouse_points = 0
-                spouse_adjustment = 0
-            
-            user_adjustment = self.calculate_tracker_adjustment(username, user_points)
-            
-            # Get current tracker
-            tracker = self.get_or_create_tracker()
-            if not tracker:
-                return {'status': 'error', 'message': 'Failed to get tracker'}
-            
-            old_value = tracker['current_value']
-            new_value = old_value + user_adjustment + spouse_adjustment
-            
-            # Cap at 1-9 range
-            new_value = max(1, min(9, new_value))
-            
-            # Update tracker
-            tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
-            tracker_ref.update({
-                'current_value': new_value,
-                'last_updated': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
-            
-            # Log to history (mark as test record)
-            self._log_tracker_history(today_central, user_points, spouse_points, old_value, new_value, user_adjustment, spouse_adjustment, username, spouse_username, is_test=True)
-            
-            self.logger.info(f"Manually processed day: {today_central.isoformat()} - {username}: {user_points}, {spouse_username or 'none'}: {spouse_points}, Tracker: {old_value} → {new_value}")
-            
-            return {
-                'status': 'success', 
-                'message': f'Day processed: {today_central.isoformat()}',
-                'date': today_central.isoformat(),
-                'ian_points': user_points,
-                'karleigh_points': spouse_points,
-                'old_tracker': old_value,
-                'new_tracker': new_value,
-                'ian_adjustment': user_adjustment,
-                'karleigh_adjustment': spouse_adjustment
-            }
+                # No history found before 2am, return current tracker value
+                tracker = self.get_or_create_tracker()
+                current_value = tracker['current_value'] if tracker else 5
+                return {
+                    'status': 'success',
+                    'tracker_value': current_value,
+                    'date': today_central.isoformat(),
+                    'source': 'current'
+                }
+                
         except Exception as e:
-            self.logger.error(f"Failed to progress day: {e}")
-            return {'status': 'error', 'message': str(e)}
+            self.logger.error(f"Failed to get tracker at 2am: {e}")
+            return {
+                'status': 'error',
+                'message': f'Failed to get tracker at 2am: {str(e)}'
+            }
+    

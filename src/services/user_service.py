@@ -162,13 +162,16 @@ class UserService:
             creator_ref = self.db.collection('users').document(creator_username)
             user_ref = self.db.collection('users').document(username)
             
+            # Creator (initiating partner) should be marked as inverted
             creator_ref.update({
                 'spouse_username': username,
+                'inverted': True,  # Initiating partner is always inverted
                 'updated_at': firestore.SERVER_TIMESTAMP
             })
             
             user_ref.update({
                 'spouse_username': creator_username,
+                'inverted': False,  # Joining partner is not inverted
                 'updated_at': firestore.SERVER_TIMESTAMP
             })
             
@@ -228,7 +231,7 @@ class UserService:
             user_ref = self.db.collection('users').document(username)
             
             # Only allow specific preference updates
-            allowed_prefs = ['can_select_morning_cards']
+            allowed_prefs = ['can_select_morning_cards', 'inverted']
             update_data = {
                 'updated_at': firestore.SERVER_TIMESTAMP
             }

@@ -15,6 +15,7 @@ class DailyTaskService:
     """Service for daily task operations"""
     
     def __init__(self, app_manager):
+        self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.central_tz = get_timezone()
@@ -239,7 +240,7 @@ class DailyTaskService:
             }
     
     def get_todays_instances(self, username: str) -> Dict[str, Any]:
-        """Get today's task instances"""
+        """Get today's task instances for stats only"""
         try:
             # First check if reset is needed
             self.check_and_reset_daily_tasks(username)
@@ -312,6 +313,11 @@ class DailyTaskService:
                 'completed_at': firestore.SERVER_TIMESTAMP
             })
             
+            # Check and update tracker on 100-point threshold
+            from src.services.collaboration_service import CollaborationService
+            collab_service = CollaborationService(self.app_manager)
+            collab_service.check_and_update_tracker_on_threshold(username)
+            
             return {
                 'status': 'success',
                 'message': 'Daily task completed successfully',
@@ -322,6 +328,54 @@ class DailyTaskService:
             return {
                 'status': 'error',
                 'message': f'Failed to complete daily task: {str(e)}'
+            }
+    
+    def abandon_daily_task(self, instance_id: str, username: str) -> Dict[str, Any]:
+        """Abandon daily task instance"""
+        try:
+            doc_ref = self.db.collection('daily_task_instances').document(instance_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                return {
+                    'status': 'error',
+                    'message': 'Daily task instance not found'
+                }
+            
+            instance_data = doc.to_dict()
+            if instance_data.get('username') != username:
+                return {
+                    'status': 'error',
+                    'message': 'Unauthorized: Daily task instance belongs to another user'
+                }
+            
+            if instance_data.get('completed', False):
+                return {
+                    'status': 'error',
+                    'message': 'Cannot abandon a completed task'
+                }
+            
+            if instance_data.get('abandoned', False):
+                return {
+                    'status': 'error',
+                    'message': 'Task is already abandoned'
+                }
+            
+            # Mark as abandoned
+            doc_ref.update({
+                'abandoned': True,
+                'abandoned_at': firestore.SERVER_TIMESTAMP
+            })
+            
+            return {
+                'status': 'success',
+                'message': 'Daily task abandoned successfully'
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to abandon daily task {instance_id} for {username}: {e}")
+            return {
+                'status': 'error',
+                'message': f'Failed to abandon daily task: {str(e)}'
             }
     
     def check_and_reset_daily_tasks(self, username: str) -> Dict[str, Any]:
@@ -362,19 +416,67 @@ class DailyTaskService:
                     # Reset yesterday, no need to reset today yet
                     return {'status': 'success', 'message': 'Reset not needed yet'}
             
-            # Need to reset - create new instances for today
+            # Need to reset - reset for current user
+            instances_created = self._reset_user_daily_tasks(username, today_central)
+            
+            # Also reset for spouse if linked
+            user_service = getattr(self.app_manager, 'user_service', None)
+            if not user_service:
+                from src.services.user_service import UserService
+                user_service = UserService(self.app_manager)
+            
+            user_settings = user_service.get_user_settings(username)
+            spouse_username = user_settings.get('spouse_username')
+            
+            if spouse_username:
+                self.logger.info(f"Also resetting daily tasks for spouse {spouse_username}")
+                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, today_central)
+                instances_created += spouse_instances_created
+            
+            # Reset morning cards
+            from src.services.morning_card_service import MorningCardService
+            morning_card_service = MorningCardService(self.app_manager)
+            morning_card_reset = morning_card_service.check_and_reset_cards()
+            self.logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
+            
+            return {
+                'status': 'success',
+                'message': f'Reset completed, created {instances_created} instances',
+                'instances_created': instances_created
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to reset daily tasks for {username}: {e}")
+            return {
+                'status': 'error',
+                'message': f'Failed to reset daily tasks: {str(e)}'
+            }
+    
+    def _reset_user_daily_tasks(self, username: str, today_central: date) -> int:
+        """Reset daily tasks for a specific user (helper method)"""
+        try:
             self.logger.info(f"Resetting daily tasks for {username} on {today_central}")
             
             # Before creating new instances, delete any existing instances for today
+            # This includes ALL instances regardless of status (completed, abandoned, presented)
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
                     FieldFilter('date', '==', today_central.isoformat())
                 ])
             )
+            deleted_count = 0
             for instance in instances_query.stream():
                 instance.reference.delete()
-            self.logger.info(f"Deleted old instances for {username} on {today_central}")
+                deleted_count += 1
+            self.logger.info(f"Deleted {deleted_count} old instances for {username} on {today_central}")
+            
+            # Clear threshold tracking for this user for today (reset collaboration scoring)
+            threshold_key = f"threshold_{today_central.isoformat()}_{username}"
+            threshold_ref = self.db.collection('threshold_tracking').document(threshold_key)
+            threshold_doc = threshold_ref.get()
+            if threshold_doc.exists:
+                threshold_ref.delete()
+                self.logger.info(f"Cleared threshold tracking for {username} on {today_central}")
             
             # Get all active templates
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
@@ -390,7 +492,7 @@ class DailyTaskService:
                 # Check if this template should run today
                 days_of_week = template_data.get('days_of_week', [])
                 if today_weekday in days_of_week:
-                    # Create instance for today
+                    # Create instance for today - explicitly set fields, do NOT set presented_at
                     instance_data = {
                         'username': username,
                         'template_id': template_id,
@@ -398,7 +500,9 @@ class DailyTaskService:
                         'points': template_data['points'],
                         'date': today_central.isoformat(),
                         'completed': False,
+                        'abandoned': False,  # Explicitly set to False
                         'created_at': firestore.SERVER_TIMESTAMP
+                        # Note: presented_at is NOT set - new instances should not be presented yet
                     }
                     
                     self.db.collection('daily_task_instances').add(instance_data)
@@ -422,28 +526,8 @@ class DailyTaskService:
             self.db.collection('daily_task_resets').add(reset_data)
             
             self.logger.info(f"Created {instances_created} daily task instances for {username}")
+            return instances_created
             
-            # Record single day for tracker
-            from src.services.collaboration_service import CollaborationService
-            collab_service = CollaborationService(self.db)
-            days_processed = collab_service.record_day(username=username)
-            self.logger.info(f"Recorded collaboration tracker for {days_processed} day(s)")
-            
-            # Reset morning cards
-            from src.services.morning_card_service import MorningCardService
-            morning_card_service = MorningCardService(self.db)
-            morning_card_reset = morning_card_service.check_and_reset_cards()
-            self.logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
-            
-            return {
-                'status': 'success',
-                'message': f'Reset completed, created {instances_created} instances, recorded tracker for {days_processed} day(s)',
-                'instances_created': instances_created,
-                'tracker_days_processed': days_processed
-            }
         except Exception as e:
             self.logger.error(f"Failed to reset daily tasks for {username}: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to reset daily tasks: {str(e)}'
-            }
+            return 0

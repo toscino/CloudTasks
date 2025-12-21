@@ -9,10 +9,8 @@ import pytz
 from flask_base import FlaskApp
 from src.core.task_master import TaskMaster
 from src.auth.auth_service import get_user_info, get_auth_status
-from src.utils.background_tasks import ensure_minimums
 from src.utils.error_handlers import ratelimit_handler, with_error_handling
 from src.services.task_service import TaskService
-from src.services.reward_service import RewardService
 from src.services.goal_service import GoalService
 from src.services.statistics_service import StatisticsService
 from src.services.daily_task_service import DailyTaskService
@@ -37,21 +35,21 @@ app = app_manager.app
 # Enable CORS for all routes (flask_base doesn't include CORS)
 CORS(app)
 
-# Set OpenAI API key from environment
-if not os.getenv('OPENAI_API_KEY'):
-    app_manager.logger.info("OPENAI_API_KEY not found in environment variables")
 
 # Initialize Services
 db = app_manager.db
 task_master = TaskMaster(db)
 task_service = TaskService(app_manager, task_master)
-reward_service = RewardService(app_manager, task_master)
 goal_service = GoalService(app_manager)
 statistics_service = StatisticsService(app_manager, task_master)
 daily_task_service = DailyTaskService(app_manager)
 collaboration_service = CollaborationService(app_manager)
 morning_card_service = MorningCardService(app_manager)
 user_service = UserService(app_manager)
+
+# Store services on app_manager for easy access
+app_manager.collaboration_service = collaboration_service
+app_manager.user_service = user_service
 
 # Error handler for rate limit exceeded
 @app.errorhandler(429)
@@ -143,8 +141,7 @@ def complete_task(task_id):
             status_code = 404
         elif 'unauthorized' in result['message'].lower():
             status_code = 403
-    reward_earned = result.get('reward_earned', False)
-    app_manager.logger.info(f"PUT /api/tasks/complete: {status_code} - Completed task {task_id}, reward earned: {reward_earned}", extra={'username': username})
+    app_manager.logger.info(f"PUT /api/tasks/complete: {status_code} - Completed task {task_id}", extra={'username': username})
     return result
 
 @app_manager.route('/api/tasks/<task_id>/save', ['PUT'], limit="30 per minute")
@@ -155,82 +152,12 @@ def save_task(task_id):
     result = task_service.save_task(task_id, username)
     return result
 
-# Reward Management Routes
-@app_manager.route('/api/rewards', ['GET'], limit="50 per minute")
+@app_manager.route('/api/tasks/<task_id>/abandon', ['PUT'], limit="20 per minute")
 @with_error_handling
-def get_rewards():
-    """Get all rewards for current user (max 4)"""
+def abandon_task(task_id):
+    """Abandon a task instance"""
     username = get_user_info(app_manager)
-    return reward_service.get_rewards(username)
-
-@app_manager.route('/api/rewards', ['POST'], limit="20 per minute")
-@with_error_handling
-def create_reward():
-    """Create a new reward"""
-    username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    return reward_service.create_reward(data, username)
-
-@app_manager.route('/api/rewards/<reward_id>/complete', ['PUT'], limit="30 per minute")
-@with_error_handling
-def complete_reward(reward_id):
-    """Mark a reward as completed"""
-    username = get_user_info(app_manager)
-    return reward_service.complete_reward(reward_id, username)
-
-@app_manager.route('/api/rewards/<reward_id>/save', ['PUT'], limit="30 per minute")
-@with_error_handling
-def save_reward(reward_id):
-    """Toggle save status for a reward"""
-    username = get_user_info(app_manager)
-    return reward_service.save_reward(reward_id, username)
-
-@app_manager.route('/api/reward-options/<option_id>/select', ['POST'], limit="10 per minute")
-def select_reward_option(option_id):
-    """Select a reward option and mark it as selected"""
-    try:
-        username = get_user_info(app_manager)
-        selected_option = task_master.reward_master.select_reward_option(username, option_id)
-        if selected_option:
-            return app_manager.jsonify({
-                'status': 'success',
-                'message': 'Reward option selected successfully',
-                'selected_option': selected_option
-            })
-        else:
-            return app_manager.jsonify({
-                'status': 'error',
-                'message': 'Failed to select reward option'
-            }), 400
-    except Exception as e:
-        return app_manager.jsonify({
-            'status': 'error',
-            'message': f'Failed to select reward option: {str(e)}'
-        }), 500
-
-@app_manager.route('/api/earned-rewards', ['GET'], limit="20 per minute")
-@with_error_handling
-def get_pending_rewards():
-    """Get pending earned rewards for current user"""
-    username = get_user_info(app_manager)
-    return reward_service.get_pending_rewards(username)
-
-@app_manager.route('/api/earned-rewards/<reward_id>/generate-options', ['POST'], limit="10 per minute")
-@with_error_handling
-def generate_reward_options(reward_id):
-    """Generate reward options for a specific earned reward"""
-    username = get_user_info(app_manager)
-    return reward_service.generate_reward_options(reward_id, username)
-
-@app_manager.route('/api/earned-rewards/<reward_id>/select-option', ['POST'], limit="10 per minute")
-@with_error_handling
-def select_reward_option_from_earned(reward_id):
-    """Select a reward option for a specific earned reward"""
-    username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    if not data or not data.get('option_id'):
-        return app_manager.jsonify({'error': 'Option ID is required'}), 400
-    return reward_service.select_reward_option(reward_id, data['option_id'], username)
+    return daily_task_service.abandon_daily_task(task_id, username)
 
 # Goals Management Routes
 @app_manager.route('/api/goals', ['GET'], limit="50 per minute")
@@ -323,6 +250,13 @@ def complete_daily_task(instance_id):
     username = get_user_info(app_manager)
     return daily_task_service.complete_daily_task(instance_id, username)
 
+@app_manager.route('/api/daily-tasks/today/<instance_id>/abandon', ['PUT'], limit="20 per minute")
+@with_error_handling
+def abandon_daily_task(instance_id):
+    """Abandon a daily task instance"""
+    username = get_user_info(app_manager)
+    return daily_task_service.abandon_daily_task(instance_id, username)
+
 @app_manager.route('/api/daily-tasks/reset', ['POST'], limit="5 per minute")
 def reset_daily_tasks():
     """Reset daily tasks (for testing) - deletes today's instances and recreates them"""
@@ -364,20 +298,6 @@ def get_todays_points():
     """Get today's total points for current user"""
     username = get_user_info(app_manager)
     return collaboration_service.get_todays_total_points(username)
-
-@app_manager.route('/api/collaboration/goals', ['POST'], limit="20 per minute")
-@with_error_handling
-def set_collaboration_goals():
-    """Set user's stretch setting and adjustment multiplier"""
-    username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    if not data or 'stretch_setting' not in data:
-        return app_manager.jsonify({
-            'status': 'error',
-            'message': 'Stretch setting is required'
-        }), 400
-    adjustment_multiplier = data.get('adjustment_multiplier', None)
-    return collaboration_service.set_user_stretch_setting(username, data['stretch_setting'], adjustment_multiplier)
 
 @app_manager.route('/api/collaboration/history', ['GET'], limit="20 per minute")
 def get_collaboration_history():
@@ -428,25 +348,27 @@ def get_all_collaboration_history():
     
     return app_manager.jsonify({'status': 'success', 'history': history, 'count': len(history)})
 
-@app_manager.route('/api/collaboration/progress-day', ['POST'], limit="5 per minute")
-@with_error_handling
-def progress_day_testing():
-    """Manually trigger day progression for testing"""
-    username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    result = collaboration_service.progress_day_for_testing(
-        username=username,
-        user_points=data.get('ian_points'),
-        spouse_points=data.get('karleigh_points')
-    )
-    return result
-
 @app_manager.route('/api/collaboration/reset-history', ['POST'], limit="5 per minute")
 @with_error_handling
 def reset_tracker_history():
     """Reset tracker history for testing"""
     username = get_user_info(app_manager)
     return collaboration_service.reset_tracker_history()
+
+@app_manager.route('/api/collaboration/tracker-at-2am', ['GET'], limit="20 per minute")
+@with_error_handling
+def get_tracker_at_2am():
+    """Get the collaboration tracker value at 2am reset time"""
+    username = get_user_info(app_manager)
+    return collaboration_service.get_tracker_at_2am()
+
+@app_manager.route('/api/collaboration/progress-day', ['POST'], limit="5 per minute")
+@with_error_handling
+def progress_day_testing():
+    """Manually trigger daily reset for testing"""
+    username = get_user_info(app_manager)
+    result = daily_task_service.check_and_reset_daily_tasks(username)
+    return result
 
 # Rewards Owed Routes
 @app_manager.route('/api/rewards-owed', ['GET'], limit="50 per minute")

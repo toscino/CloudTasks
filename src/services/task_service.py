@@ -3,7 +3,6 @@ Task service - handles task-related business logic
 """
 from google.cloud import firestore
 from src.models.task import TaskModel, create_task_from_request_data
-from src.utils.background_tasks import ensure_minimums
 from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
 
@@ -12,26 +11,41 @@ class TaskService:
     """Service for task-related operations"""
     
     def __init__(self, app_manager, task_master):
+        self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.task_master = task_master
     
     def get_tasks(self, username: str) -> Dict[str, Any]:
-        """Get active task session (4 tasks)"""
+        """Get active task session (5 tasks) and stats"""
         try:
             self.logger.debug(f"Getting tasks for username: {username}")
             
-            # Use TaskMaster to get active session tasks (fast - no AI calls)
+            # Use TaskMaster to get active session tasks
             tasks = self.task_master.get_active_session_tasks(username)
             
             self.logger.debug(f"Active session tasks for {username}: {len(tasks)}")
             
-            # Fire off background task and reward generation (non-blocking)
-            ensure_minimums(self.task_master, username, check_tasks=True, check_rewards=True, check_challenges=False)
+            # Get stats from daily_task_service
+            from src.services.daily_task_service import DailyTaskService
+            daily_task_service = DailyTaskService(self.app_manager)
+            stats_data = daily_task_service.get_todays_instances(username)
+            
+            # Extract stats
+            stats = {}
+            if stats_data.get('status') == 'success':
+                instances = stats_data.get('instances', [])
+                stats = {
+                    'total_instances': len(instances),
+                    'completed_instances': len([i for i in instances if i.get('completed', False)]),
+                    'total_points': stats_data.get('total_points', 0),
+                    'completed_points': stats_data.get('completed_points', 0)
+                }
         
             return {
                 'status': 'success',
-                'tasks': tasks
+                'tasks': tasks,
+                'stats': stats
             }
         except Exception as e:
             return handle_exception(e, f"Failed to get tasks for {username}")
@@ -111,41 +125,57 @@ class TaskService:
             return handle_exception(e, "Failed to create task")
     
     def complete_task(self, task_id: str, username: str) -> Dict[str, Any]:
-        """Complete task and refresh session"""
+        """Complete daily task and refresh session"""
         try:
-            self.logger.debug(f"Completing task {task_id} for user {username}")
+            self.logger.debug(f"Completing daily task {task_id} for user {username}")
             
-            # Verify the task belongs to this user
-            doc_ref = self.db.collection('tasks').document(task_id)
+            # Verify the daily task instance belongs to this user
+            doc_ref = self.db.collection('daily_task_instances').document(task_id)
             doc = doc_ref.get()
             
             if not doc.exists:
-                self.logger.error(f"Task {task_id} not found")
+                self.logger.error(f"Daily task instance {task_id} not found")
                 return {
                     'status': 'error',
                     'message': 'Task not found'
                 }
             
-            task_data = doc.to_dict()
-            if task_data.get('username') != username:
-                self.logger.error(f"Task {task_id} belongs to {task_data.get('username')}, not {username}")
+            instance_data = doc.to_dict()
+            if instance_data.get('username') != username:
+                self.logger.error(f"Daily task instance {task_id} belongs to {instance_data.get('username')}, not {username}")
                 return {
                     'status': 'error',
                     'message': 'Unauthorized: Task belongs to another user'
                 }
             
-            self.logger.debug(f"Task {task_id} verified, calling TaskMaster")
+            if instance_data.get('completed', False):
+                return {
+                    'status': 'error',
+                    'message': 'Task already completed'
+                }
+            
+            if instance_data.get('abandoned', False):
+                return {
+                    'status': 'error',
+                    'message': 'Task has been abandoned'
+                }
+            
+            self.logger.debug(f"Daily task instance {task_id} verified, calling TaskMaster")
             
             # Use TaskMaster to complete task and refresh session
             result = self.task_master.complete_task_and_refresh_session(username, task_id)
             
-            self.logger.debug(f"TaskMaster returned {len(result['tasks'])} new tasks, reward earned: {result['reward_earned']}")
+            self.logger.debug(f"TaskMaster returned {len(result['tasks'])} new tasks")
+            
+            # Check and update collaboration tracker on 100-point threshold
+            # Use existing collaboration_service from app_manager
+            collab_service = self.app_manager.collaboration_service
+            collab_service.check_and_update_tracker_on_threshold(username)
             
             return {
                 'status': 'success',
                 'message': 'Task completed successfully',
-                'new_tasks': result['tasks'],
-                'reward_earned': result['reward_earned']
+                'new_tasks': result['tasks']
             }
         except Exception as e:
             return handle_exception(e, f"Error completing task {task_id}")
