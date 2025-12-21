@@ -1,13 +1,14 @@
 """
 User service - manages user settings and spouse relationships
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 import random
 import string
 from src.utils.error_handlers import handle_exception
 from src.utils.firestore_helpers import convert_firestore_timestamp
+from src.utils.config import get_timezone
 
 
 class UserService:
@@ -17,6 +18,7 @@ class UserService:
     PAIRING_CODE_EXPIRY_MINUTES = 15
     
     def __init__(self, app_manager):
+        self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
     
@@ -36,6 +38,7 @@ class UserService:
                 'username': username,
                 'spouse_username': None,
                 'can_select_morning_cards': False,
+                'vacation_mode': False,
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP
             }
@@ -49,7 +52,8 @@ class UserService:
             return {
                 'username': username,
                 'spouse_username': None,
-                'can_select_morning_cards': False
+                'can_select_morning_cards': False,
+                'vacation_mode': False
             }
     
     def generate_pairing_code(self, username: str) -> dict:
@@ -226,21 +230,52 @@ class UserService:
             return handle_exception(e, f"Failed to remove spouse link")
     
     def update_preferences(self, username: str, preferences: dict) -> dict:
-        """Update user preferences"""
+        """Update user preferences and sync vacation_mode to spouse"""
         try:
             user_ref = self.db.collection('users').document(username)
+            user_settings = self.get_user_settings(username)
             
             # Only allow specific preference updates
-            allowed_prefs = ['can_select_morning_cards', 'inverted']
+            allowed_prefs = ['can_select_morning_cards', 'inverted', 'vacation_mode']
             update_data = {
                 'updated_at': firestore.SERVER_TIMESTAMP
             }
             
+            # Track if vacation_mode changed
+            old_vacation_mode = user_settings.get('vacation_mode', False)
+            vacation_mode_changed = False
+            
             for key, value in preferences.items():
                 if key in allowed_prefs:
                     update_data[key] = value
+                    if key == 'vacation_mode' and value != old_vacation_mode:
+                        vacation_mode_changed = True
             
             user_ref.update(update_data)
+            
+            # Sync vacation_mode to spouse if changed
+            spouse_username = user_settings.get('spouse_username')
+            if vacation_mode_changed and spouse_username and 'vacation_mode' in preferences:
+                spouse_ref = self.db.collection('users').document(spouse_username)
+                spouse_ref.update({
+                    'vacation_mode': preferences['vacation_mode'],
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
+                self.logger.info(f"Synced vacation_mode to spouse {spouse_username}: {preferences['vacation_mode']}")
+            
+            # If vacation_mode changed, reset tasks for both users with tracker reversal
+            if vacation_mode_changed:
+                from src.services.daily_task_service import DailyTaskService
+                daily_task_service = DailyTaskService(self.app_manager)
+                
+                # Get current time in central timezone for date calculation
+                central_tz = get_timezone()
+                now_central = datetime.now(central_tz)
+                today_central = now_central.date()
+                
+                # Reset tasks with tracker reversal (undoes points earned today)
+                self.logger.info(f"Resetting tasks with tracker reversal for {username} due to vacation_mode change")
+                daily_task_service.reset_daily_tasks_with_tracker_reversal(username, today_central)
             
             self.logger.info(f"Updated preferences for {username}: {preferences}")
             

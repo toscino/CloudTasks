@@ -4,6 +4,7 @@ Daily Task Service - handles daily task templates and instances
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
+import pytz
 from src.utils.config import get_timezone, get_collection
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
@@ -451,6 +452,112 @@ class DailyTaskService:
                 'message': f'Failed to reset daily tasks: {str(e)}'
             }
     
+    def _reverse_tracker_movement_from_history(self, username: str, today_central: date) -> bool:
+        """Reverse collaboration tracker movement by reading today's history entries"""
+        try:
+            from src.services.collaboration_service import CollaborationService
+            collab_service = CollaborationService(self.app_manager)
+            
+            # Query all tracker history entries for today
+            date_str = today_central.isoformat()
+            history_query = self.db.collection('tracker_history').where('date', '==', date_str)
+            history_docs = list(history_query.stream())
+            
+            if not history_docs:
+                self.logger.info(f"No tracker history entries found for {today_central}, nothing to reverse")
+                return False
+            
+            # Sum up all movements from today's history entries
+            total_movement = 0
+            entries_processed = 0
+            
+            for doc in history_docs:
+                history_data = doc.to_dict()
+                user_movement = history_data.get('user_movement', 0)
+                spouse_movement = history_data.get('spouse_movement', 0)
+                
+                # Add both movements (they're already signed correctly based on inverted status)
+                total_movement += user_movement
+                total_movement += spouse_movement
+                entries_processed += 1
+                
+                self.logger.debug(f"History entry: user_movement={user_movement}, spouse_movement={spouse_movement}")
+            
+            if total_movement == 0:
+                self.logger.info(f"Total movement from {entries_processed} history entries is 0, nothing to reverse")
+                return False
+            
+            # Reverse the total movement
+            reverse_movement = -total_movement
+            
+            self.logger.info(f"Reversing {entries_processed} history entries for {today_central}: total movement {total_movement} → reverse {reverse_movement}")
+            
+            # Get current tracker
+            tracker = collab_service.get_or_create_tracker()
+            if not tracker:
+                self.logger.error("Failed to get tracker for reversal")
+                return False
+            
+            old_value = tracker['current_value']
+            new_value = old_value + reverse_movement
+            
+            # Cap at 1-9 range
+            new_value = max(1, min(9, new_value))
+            
+            # Update tracker
+            tracker_ref = self.db.collection('collaboration_tracker').document(tracker['id'])
+            tracker_ref.update({
+                'current_value': new_value,
+                'last_updated': firestore.SERVER_TIMESTAMP,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+            
+            self.logger.info(f"Reversed tracker movement for {today_central}: {old_value} → {new_value} (reversed {total_movement} total movement)")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to reverse tracker movement from history for {today_central}: {e}")
+            return False
+    
+    def reset_daily_tasks_with_tracker_reversal(self, username: str, today_central: date = None) -> Dict[str, Any]:
+        """Reset daily tasks and reverse collaboration tracker movement from today's history"""
+        try:
+            if today_central is None:
+                today_central = datetime.now(self.central_tz).date()
+            
+            # Get user settings to check for spouse
+            user_service = getattr(self.app_manager, 'user_service', None)
+            if not user_service:
+                from src.services.user_service import UserService
+                user_service = UserService(self.app_manager)
+            
+            user_settings = user_service.get_user_settings(username)
+            spouse_username = user_settings.get('spouse_username')
+            
+            # Reverse tracker movement from history (this handles both user and spouse movements)
+            # History entries already contain both user_movement and spouse_movement
+            self._reverse_tracker_movement_from_history(username, today_central)
+            
+            # Now reset tasks normally (this will delete instances and clear threshold tracking)
+            instances_created = self._reset_user_daily_tasks(username, today_central)
+            
+            if spouse_username:
+                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, today_central)
+                instances_created += spouse_instances_created
+            
+            return {
+                'status': 'success',
+                'message': f'Reset completed with tracker reversal, created {instances_created} instances',
+                'instances_created': instances_created
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to reset daily tasks with tracker reversal for {username}: {e}")
+            return {
+                'status': 'error',
+                'message': f'Failed to reset daily tasks: {str(e)}'
+            }
+    
     def _reset_user_daily_tasks(self, username: str, today_central: date) -> int:
         """Reset daily tasks for a specific user (helper method)"""
         try:
@@ -465,12 +572,22 @@ class DailyTaskService:
                 ])
             )
             deleted_count = 0
+            completed_count = 0
+            total_points_cleared = 0
             for instance in instances_query.stream():
+                instance_data = instance.to_dict()
+                if instance_data.get('completed', False):
+                    completed_count += 1
+                    total_points_cleared += instance_data.get('points', 0)
                 instance.reference.delete()
                 deleted_count += 1
-            self.logger.info(f"Deleted {deleted_count} old instances for {username} on {today_central}")
+            if completed_count > 0:
+                self.logger.info(f"Deleted {deleted_count} instances for {username} on {today_central} ({completed_count} completed, {total_points_cleared} points cleared)")
+            else:
+                self.logger.info(f"Deleted {deleted_count} instances for {username} on {today_central}")
             
             # Clear threshold tracking for this user for today (reset collaboration scoring)
+            # This ensures future threshold calculations start from 0
             threshold_key = f"threshold_{today_central.isoformat()}_{username}"
             threshold_ref = self.db.collection('threshold_tracking').document(threshold_key)
             threshold_doc = threshold_ref.get()
@@ -482,7 +599,20 @@ class DailyTaskService:
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
             templates_docs = templates_query.stream()
             
-            today_weekday = today_central.weekday()  # 0=Monday, 6=Sunday
+            # Check if user is in vacation mode - if so, use Sunday (weekday 6) for task selection
+            user_service = getattr(self.app_manager, 'user_service', None)
+            if not user_service:
+                from src.services.user_service import UserService
+                user_service = UserService(self.app_manager)
+            
+            user_settings = user_service.get_user_settings(username)
+            vacation_mode = user_settings.get('vacation_mode', False)
+            
+            if vacation_mode:
+                today_weekday = 6  # Sunday in vacation mode
+                self.logger.info(f"Vacation mode enabled for {username}, using Sunday tasks")
+            else:
+                today_weekday = today_central.weekday()  # 0=Monday, 6=Sunday
             
             instances_created = 0
             for template_doc in templates_docs:

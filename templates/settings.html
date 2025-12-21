@@ -136,6 +136,10 @@
         <input type="checkbox" id="inverted" class="checkbox" onchange="savePreferences()">
         <label for="inverted">Inverted (Tracker moves toward 1 instead of 9)</label>
     </div>
+    <div class="preference-group" style="margin-top: 10px;">
+        <input type="checkbox" id="vacation-mode" class="checkbox" onchange="savePreferences()">
+        <label for="vacation-mode">Vacation Mode (treats every day as Sunday for tasks)</label>
+    </div>
 </div>
 
 <div class="settings-section">
@@ -181,6 +185,13 @@ async function loadSettings() {
             const invertedDisplay = document.getElementById('inverted-status');
             if (invertedDisplay) {
                 invertedDisplay.textContent = invertedStatus ? 'Yes (Tracker moves toward 1)' : 'No (Tracker moves toward 9)';
+            }
+            
+            // Display vacation mode status
+            const vacationModeStatus = data.settings.vacation_mode || false;
+            const vacationModeCheckbox = document.getElementById('vacation-mode');
+            if (vacationModeCheckbox) {
+                vacationModeCheckbox.checked = vacationModeStatus;
             }
             
             // Show spouse inverted status if linked
@@ -304,6 +315,7 @@ async function unlinkSpouse() {
 async function savePreferences() {
     const canSelectMorningCards = document.getElementById('can-select-morning-cards').checked;
     const inverted = document.getElementById('inverted').checked;
+    const vacationMode = document.getElementById('vacation-mode').checked;
     
     try {
         const response = await fetch('/api/user/preferences', {
@@ -313,14 +325,15 @@ async function savePreferences() {
             },
             body: JSON.stringify({
                 can_select_morning_cards: canSelectMorningCards,
-                inverted: inverted
+                inverted: inverted,
+                vacation_mode: vacationMode
             })
         });
         
         const data = await response.json();
         
         if (data.status === 'success') {
-            showStatus('Preferences saved', 'success');
+            showStatus('Preferences saved' + (vacationMode ? ' - Tasks have been reset for vacation mode' : ''), 'success');
             // Update display
             const invertedDisplay = document.getElementById('inverted-status');
             if (invertedDisplay) {

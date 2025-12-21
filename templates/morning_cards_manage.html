@@ -548,8 +548,13 @@
             }
             
             // Change button to update
-            const btn = document.querySelector('.add-card-form .btn');
+            const btn = document.getElementById('add-card-btn');
             btn.textContent = 'Update Card';
+            
+            // Remove the addEventListener to prevent addCard from firing when updating
+            btn.removeEventListener('click', addCard);
+            
+            // Set onclick to update function
             btn.onclick = () => updateCard(cardId);
             
             // Scroll to top
@@ -615,10 +620,11 @@
                     document.getElementById('timer-minutes').value = '0';
                     initializeUserRuleSections();
                     
-                    // Reset button
-                    const btn = document.querySelector('.add-card-form .btn');
+                    // Reset button - clear onclick and re-attach event listener
+                    const btn = document.getElementById('add-card-btn');
                     btn.textContent = 'Create Card';
-                    btn.onclick = addCard;
+                    btn.onclick = null; // Clear onclick first
+                    btn.addEventListener('click', addCard);
                     
                     await loadCards();
                     renderCards();
