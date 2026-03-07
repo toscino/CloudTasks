@@ -1,5 +1,5 @@
 import os
-from flask import render_template, session
+from flask import render_template, session, request
 from flask_cors import CORS
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
@@ -17,6 +17,7 @@ from src.services.daily_task_service import DailyTaskService
 from src.services.collaboration_service import CollaborationService
 from src.services.morning_card_service import MorningCardService
 from src.services.user_service import UserService
+from src.services.dice_roll_service import DiceRollService
 from src.utils.config import get_timezone
 
 # Load environment variables
@@ -46,6 +47,7 @@ daily_task_service = DailyTaskService(app_manager)
 collaboration_service = CollaborationService(app_manager)
 morning_card_service = MorningCardService(app_manager)
 user_service = UserService(app_manager)
+dice_roll_service = DiceRollService(app_manager)
 
 # Store services on app_manager for easy access
 app_manager.collaboration_service = collaboration_service
@@ -64,6 +66,7 @@ app_manager.page("goals.html")
 app_manager.page("daily_tasks.html")
 app_manager.page("rewards_owed.html")
 app_manager.page("morning_cards.html")
+app_manager.page("dice-rolls.html")
 
 @app_manager.route('/morning-cards/manage')
 def morning_cards_manage_page():
@@ -299,6 +302,16 @@ def get_todays_points():
     username = get_user_info(app_manager)
     return collaboration_service.get_todays_total_points(username)
 
+
+def _created_at_sort_key(created_at):
+    """Return a comparable value for created_at for sorting (newer = larger)."""
+    if created_at is None:
+        return 0
+    if hasattr(created_at, 'timestamp'):
+        return created_at.timestamp()
+    return 0
+
+
 @app_manager.route('/api/collaboration/history', ['GET'], limit="20 per minute")
 def get_collaboration_history():
     """Get last 7 days of tracker history"""
@@ -313,17 +326,24 @@ def get_collaboration_history():
     history = []
     for doc in history_query.stream():
         data = doc.to_dict()
+        created_at = data.get('created_at')
         history.append({
             'date': data['date'],
             'ian_points': data['user_points'],
             'karleigh_points': data['spouse_points'],
-            'ian_adjustment': data['user_adjustment'],
-            'karleigh_adjustment': data['spouse_adjustment'],
+            'ian_adjustment': data.get('user_movement', data.get('user_adjustment', 0)),
+            'karleigh_adjustment': data.get('spouse_movement', data.get('spouse_adjustment', 0)),
             'old_tracker': data['old_value'],
-            'new_tracker': data['new_value']
+            'new_tracker': data['new_value'],
+            '_created_at': created_at,
         })
     
+    history.sort(key=lambda x: (x['date'], _created_at_sort_key(x['_created_at'])), reverse=True)
+    for item in history:
+        del item['_created_at']
+    
     return app_manager.jsonify({'status': 'success', 'history': history})
+
 
 @app_manager.route('/api/collaboration/history/all', ['GET'], limit="20 per minute")
 @with_error_handling
@@ -335,16 +355,22 @@ def get_all_collaboration_history():
     history = []
     for doc in history_query.stream():
         data = doc.to_dict()
+        created_at = data.get('created_at')
         history.append({
             'date': data['date'],
             'is_test': data.get('is_test', False),
             'user_points': data.get('user_points', 0),
             'spouse_points': data.get('spouse_points', 0),
-            'user_adjustment': data.get('user_adjustment', 0),
-            'spouse_adjustment': data.get('spouse_adjustment', 0),
+            'user_adjustment': data.get('user_movement', data.get('user_adjustment', 0)),
+            'spouse_adjustment': data.get('spouse_movement', data.get('spouse_adjustment', 0)),
             'old_tracker': data.get('old_value', 0),
-            'new_tracker': data.get('new_value', 0)
+            'new_tracker': data.get('new_value', 0),
+            '_created_at': created_at,
         })
+    
+    history.sort(key=lambda x: (x['date'], _created_at_sort_key(x['_created_at'])), reverse=True)
+    for item in history:
+        del item['_created_at']
     
     return app_manager.jsonify({'status': 'success', 'history': history, 'count': len(history)})
 
@@ -417,6 +443,16 @@ def delete_morning_card(card_id):
     username = get_user_info(app_manager)
     return morning_card_service.delete_card_template(card_id, username)
 
+@app_manager.route('/api/morning-cards/import', ['POST'], limit="20 per minute")
+@with_error_handling
+def import_morning_cards():
+    """Import card templates from JSON array"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data or 'templates' not in data:
+        return app_manager.jsonify({'status': 'error', 'message': 'templates array is required'}), 400
+    return morning_card_service.import_card_templates(username, data['templates'])
+
 @app_manager.route('/api/morning-cards/today', ['GET'], limit="50 per minute")
 @with_error_handling
 def get_todays_morning_cards():
@@ -441,6 +477,98 @@ def select_morning_cards():
 def unlock_morning_cards():
     """Unlock today's card selection for testing"""
     return morning_card_service.unlock_todays_selection()
+
+# Dice Roll API Routes
+@app_manager.route('/api/dice-rolls/credits', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_dice_roll_credits():
+    """Get current shared credits and cap (both users can access)"""
+    username = get_user_info(app_manager)
+    return dice_roll_service.get_credits(username)
+
+@app_manager.route('/api/dice-rolls/config', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_dice_roll_config():
+    """Get dice configuration for couple (includes saved_dice_selection, can_roll, can_save_selection when authenticated)"""
+    username = get_user_info(app_manager)
+    couple_id = dice_roll_service.get_couple_id(username)
+    if not couple_id:
+        return app_manager.jsonify({'status': 'error', 'message': 'Could not determine couple_id'}), 400
+    return dice_roll_service.get_dice_configuration(couple_id, username)
+
+@app_manager.route('/api/dice-rolls/config', ['POST'], limit="20 per minute")
+@with_error_handling
+def save_dice_roll_config():
+    """Save dice configuration for couple"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data or 'dice_configs' not in data:
+        return app_manager.jsonify({'status': 'error', 'message': 'dice_configs is required'}), 400
+    couple_id = dice_roll_service.get_couple_id(username)
+    if not couple_id:
+        return app_manager.jsonify({'status': 'error', 'message': 'Could not determine couple_id'}), 400
+    return dice_roll_service.save_dice_configuration(couple_id, data)
+
+@app_manager.route('/api/dice-rolls/selection', ['POST'], limit="20 per minute")
+@with_error_handling
+def save_dice_roll_selection():
+    """Save which dice are selected (non–morning-card person only)"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data or 'saved_dice_selection' not in data:
+        return app_manager.jsonify({'status': 'error', 'message': 'saved_dice_selection is required'}), 400
+    return dice_roll_service.save_saved_dice_selection(username, data['saved_dice_selection'])
+
+@app_manager.route('/api/dice-rolls/config/import', ['POST'], limit="20 per minute")
+@with_error_handling
+def import_dice_roll_config():
+    """Import (partial) dice configuration; each die present is full-replaced"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data:
+        return app_manager.jsonify({'status': 'error', 'message': 'Request body required'}), 400
+    couple_id = dice_roll_service.get_couple_id(username)
+    if not couple_id:
+        return app_manager.jsonify({'status': 'error', 'message': 'Could not determine couple_id'}), 400
+    return dice_roll_service.import_dice_configuration(couple_id, data)
+
+@app_manager.route('/api/dice-rolls/roll', ['POST'], limit="20 per minute")
+@with_error_handling
+def roll_dice():
+    """Roll dice (only users with can_select_morning_cards can call)"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data:
+        return app_manager.jsonify({
+            'status': 'error',
+            'message': 'Request body required'
+        }), 400
+    
+    dice_selected = data.get('dice_selected', [])
+    return dice_roll_service.roll_dice(username, dice_selected)
+
+@app_manager.route('/api/dice-rolls/history', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_dice_roll_history():
+    """Get recent dice game events (for couple)"""
+    username = get_user_info(app_manager)
+    limit = int(request.args.get('limit', 10))
+    return dice_roll_service.get_recent_games(username, limit)
+
+@app_manager.route('/api/dice-rolls/test/add-credits', ['POST'], limit="10 per minute")
+@with_error_handling
+def test_add_dice_credits():
+    """Test endpoint to add credits manually (test only)"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data or 'amount' not in data:
+        return app_manager.jsonify({
+            'status': 'error',
+            'message': 'Amount is required'
+        }), 400
+    
+    amount = int(data['amount'])
+    return dice_roll_service.test_add_credits(username, amount)
 
 # User Settings API Endpoints
 @app_manager.route('/api/user/settings', ['GET'], limit="50 per minute")

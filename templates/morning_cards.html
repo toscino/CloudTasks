@@ -280,8 +280,8 @@
                             <p id="live-clothes">0</p>
                         </div>
                         <div class="summary-card">
-                            <h4>⏰ Timer Minutes</h4>
-                            <p id="live-timer">0</p>
+                            <h4>🎲 Dice Rolls</h4>
+                            <p id="live-dice-rolls">0</p>
                         </div>
                     </div>
                     
@@ -314,8 +314,8 @@
                             <p id="summary-clothes">0</p>
                         </div>
                         <div class="summary-card">
-                            <h4>⏰ Timer Minutes</h4>
-                            <p id="summary-timer">0</p>
+                            <h4>🎲 Dice Rolls</h4>
+                            <p id="summary-dice-rolls">0</p>
                         </div>
                     </div>
                     
@@ -452,13 +452,17 @@
                 cardDiv.dataset.cardId = card.id;
                 
                 const preview = [];
-                if (card.clothes_points !== 0) {
-                    const sign = card.clothes_points > 0 ? '+' : '';
-                    preview.push(`👔 ${sign}${card.clothes_points}`);
+                if (card.clothes_points !== 0 && card.clothes_points !== undefined) {
+                    const pts = parseFloat(card.clothes_points);
+                    const sign = pts > 0 ? '+' : '';
+                    const display = Math.round(pts * 10) / 10;
+                    preview.push(`👔 ${sign}${display % 1 === 0 ? display : display.toFixed(1)}`);
                 }
-                if (card.timer_minutes !== 0) {
-                    const sign = card.timer_minutes > 0 ? '+' : '';
-                    preview.push(`⏰ ${sign}${card.timer_minutes}min`);
+                // Backward compatibility: use timer_minutes if dice_rolls not present
+                const diceRolls = card.dice_rolls !== undefined ? card.dice_rolls : (card.timer_minutes !== undefined ? card.timer_minutes : 0);
+                if (diceRolls !== 0) {
+                    const sign = diceRolls > 0 ? '+' : '';
+                    preview.push(`🎲 ${sign}${diceRolls}`);
                 }
                 // Add user rules to preview
                 if (card.user_rules && typeof card.user_rules === 'object') {
@@ -560,16 +564,16 @@
             
             // Calculate totals from selected cards
             let totalClothes = 1; // Base: 1 clothes point
-            let totalTimer = 20; // Base: 20 minutes
+            let totalDiceRolls = 0; // Sum dice rolls from cards
             let allUserRules = {};
             
             selectedCardIds.forEach(cardId => {
                 const card = allCards.find(c => c.id === cardId);
                 if (card) {
-                    totalClothes += card.clothes_points || 0;
-                    // Deduct 2 minutes per card and add card's timer
-                    totalTimer -= 2;
-                    totalTimer += card.timer_minutes || 0;
+                    totalClothes += parseFloat(card.clothes_points || 0);
+                    // Sum dice rolls from card (backward compatibility: check timer_minutes if dice_rolls not present)
+                    const diceRolls = card.dice_rolls !== undefined ? card.dice_rolls : (card.timer_minutes !== undefined ? card.timer_minutes : 0);
+                    totalDiceRolls += diceRolls;
                     
                     // Aggregate user rules from card
                     if (card.user_rules && typeof card.user_rules === 'object') {
@@ -586,9 +590,9 @@
                 }
             });
             
-            // Update totals (always show base values even with no cards selected)
-            document.getElementById('live-clothes').textContent = totalClothes;
-            document.getElementById('live-timer').textContent = totalTimer;
+            // Update totals (floored, min 1)
+            document.getElementById('live-clothes').textContent = Math.max(1, Math.floor(totalClothes));
+            document.getElementById('live-dice-rolls').textContent = totalDiceRolls;
             
             // Render rules dynamically
             renderRules('live-rules-container', allUserRules);
@@ -597,9 +601,9 @@
         // Update live summary on page load to show defaults
         function updateLiveSummaryOnLoad() {
             const baseClothes = 1;
-            const baseTimer = 20;
+            const baseDiceRolls = 0;
             document.getElementById('live-clothes').textContent = baseClothes;
-            document.getElementById('live-timer').textContent = baseTimer;
+            document.getElementById('live-dice-rolls').textContent = baseDiceRolls;
             renderRules('live-rules-container', {});
         }
         
@@ -674,7 +678,9 @@
             
             // Update summary values (backend already includes base values)
             document.getElementById('summary-clothes').textContent = currentSelection.total_clothes_points || 0;
-            document.getElementById('summary-timer').textContent = currentSelection.total_timer_minutes || 0;
+            // Backward compatibility: use total_timer_minutes if total_dice_rolls not present
+            const totalDiceRolls = currentSelection.total_dice_rolls !== undefined ? currentSelection.total_dice_rolls : (currentSelection.total_timer_minutes !== undefined ? currentSelection.total_timer_minutes : 0);
+            document.getElementById('summary-dice-rolls').textContent = totalDiceRolls;
             
             // Render rules dynamically
             const userRules = currentSelection.user_rules || {};

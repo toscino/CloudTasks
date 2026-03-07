@@ -125,6 +125,7 @@
             <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
             <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
             <button onclick="unlockMorningCards()">Unlock Morning Cards (Testing)</button>
+            <button onclick="addDiceRollCredits()">Add 4 Dice Roll Credits</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
             <button onclick="viewAllTrackerHistory()">View All Tracker History (with test status)</button>
             <button onclick="getTrackerAt2am()">Get Tracker Value at 2am</button>
@@ -548,6 +549,36 @@
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = 'Failed to unlock: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function addDiceRollCredits() {
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Adding 4 dice roll credits...';
+            
+            try {
+                const response = await fetch('/api/dice-rolls/test/add-credits', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        amount: 4
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `Added ${data.credits_added} dice roll credits! Total credits: ${data.total_credits}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = 'Failed to add credits: ' + data.message;
                 }
             } catch (error) {
                 resultDiv.className = 'result error';

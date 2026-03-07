@@ -4,6 +4,7 @@ Morning Card Service - handles morning card templates and daily selections
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
+import math
 import random
 from src.utils.config import get_timezone
 from src.utils.firestore_helpers import prepare_firestore_document
@@ -79,6 +80,10 @@ class MorningCardService:
             for doc in templates_docs:
                 template_data = prepare_firestore_document(doc)
                 
+                # Backward compatibility: convert timer_minutes to dice_rolls if present
+                if 'timer_minutes' in template_data and 'dice_rolls' not in template_data:
+                    template_data['dice_rolls'] = float(template_data.pop('timer_minutes', 0))
+                
                 # Convert generic rules to actual usernames for display
                 card_owner = template_data.get('username')
                 if card_owner and 'user_rules' in template_data:
@@ -104,8 +109,8 @@ class MorningCardService:
             
             # Validate and prepare data
             card_text = data['card_text'].strip()
-            clothes_points = int(data.get('clothes_points', 0))
-            timer_minutes = int(data.get('timer_minutes', 0))
+            clothes_points = float(data.get('clothes_points', 0))
+            dice_rolls = float(data.get('dice_rolls', 0.0))
             user_rules = data.get('user_rules', {}) or {}
             active = data.get('active', True)
             
@@ -132,7 +137,7 @@ class MorningCardService:
                 'username': username,
                 'card_text': card_text,
                 'clothes_points': clothes_points,
-                'timer_minutes': timer_minutes,
+                'dice_rolls': dice_rolls,
                 'user_rules': cleaned_user_rules,
                 'active': active,
                 'created_at': firestore.SERVER_TIMESTAMP,
@@ -152,6 +157,104 @@ class MorningCardService:
             }
         except Exception as e:
             return handle_exception(e, "Failed to create card template")
+    
+    def import_card_templates(self, username: str, templates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Import card templates from JSON. Validate all before any write. Id = update if exists and permission; no id = create. Id present but not found/no permission = error."""
+        try:
+            if not isinstance(templates, list):
+                return {'status': 'error', 'message': 'Import payload must be a JSON array of card objects'}
+            
+            from src.utils.config import get_spouse
+            spouse_username = get_spouse(username)
+            
+            # Phase 1: validate structure and types for every item
+            for idx, item in enumerate(templates):
+                if not isinstance(item, dict):
+                    return {'status': 'error', 'message': f'Item at index {idx}: must be an object'}
+                if not item.get('card_text') or not str(item.get('card_text', '')).strip():
+                    return {'status': 'error', 'message': f'Item at index {idx}: card_text is required and must be non-empty'}
+                try:
+                    float(item.get('clothes_points', 0))
+                except (TypeError, ValueError):
+                    return {'status': 'error', 'message': f'Item at index {idx}: clothes_points must be a number'}
+                try:
+                    float(item.get('dice_rolls', 0.0))
+                except (TypeError, ValueError):
+                    return {'status': 'error', 'message': f'Item at index {idx}: dice_rolls must be a number'}
+                ur = item.get('user_rules')
+                if ur is not None and not isinstance(ur, dict):
+                    return {'status': 'error', 'message': f'Item at index {idx}: user_rules must be an object'}
+            
+            # Phase 2: for items with id, verify doc exists and user has permission (no writes yet)
+            for idx, item in enumerate(templates):
+                card_id = item.get('id')
+                if not card_id:
+                    continue
+                doc_ref = self.db.collection('morning_card_templates').document(str(card_id))
+                doc = doc_ref.get()
+                if not doc.exists:
+                    return {'status': 'error', 'message': f'Item at index {idx}: id "{card_id}" does not exist; cannot update. Remove id to create a new card.'}
+                doc_data = doc.to_dict()
+                card_owner = doc_data.get('username')
+                if card_owner != username and card_owner != spouse_username:
+                    return {'status': 'error', 'message': f'Item at index {idx}: no permission to update card "{card_id}"'}
+            
+            # Phase 3: apply - update or create
+            created = 0
+            updated = 0
+            for item in templates:
+                card_text = str(item.get('card_text', '')).strip()
+                clothes_points = float(item.get('clothes_points', 0))
+                dice_rolls = float(item.get('dice_rolls', 0.0))
+                user_rules = item.get('user_rules') or {}
+                if not isinstance(user_rules, dict):
+                    user_rules = {}
+                cleaned_user_rules = {}
+                for rule_key, rules in user_rules.items():
+                    if isinstance(rules, list):
+                        cleaned_rules = [r.strip() for r in rules if r and str(r).strip()]
+                        if cleaned_rules:
+                            cleaned_user_rules[rule_key] = cleaned_rules
+                active = item.get('active', True)
+                if not isinstance(active, bool):
+                    active = bool(active)
+                
+                card_id = item.get('id')
+                if card_id:
+                    update_data = {
+                        'card_text': card_text,
+                        'clothes_points': clothes_points,
+                        'dice_rolls': dice_rolls,
+                        'user_rules': cleaned_user_rules,
+                        'active': active,
+                        'updated_at': firestore.SERVER_TIMESTAMP
+                    }
+                    doc_ref = self.db.collection('morning_card_templates').document(str(card_id))
+                    doc_ref.update(update_data)
+                    updated += 1
+                else:
+                    template_data = {
+                        'username': username,
+                        'card_text': card_text,
+                        'clothes_points': clothes_points,
+                        'dice_rolls': dice_rolls,
+                        'user_rules': cleaned_user_rules,
+                        'active': active,
+                        'created_at': firestore.SERVER_TIMESTAMP,
+                        'updated_at': firestore.SERVER_TIMESTAMP
+                    }
+                    self.db.collection('morning_card_templates').add(template_data)
+                    created += 1
+            
+            self.logger.info(f"Import cards: created {created}, updated {updated}")
+            return {
+                'status': 'success',
+                'message': f'Imported {created + updated} cards',
+                'created': created,
+                'updated': updated
+            }
+        except Exception as e:
+            return handle_exception(e, "Failed to import card templates")
     
     def update_card_template(self, card_id: str, data: Dict[str, Any], username: str) -> Dict[str, Any]:
         """Update card template"""
@@ -186,9 +289,9 @@ class MorningCardService:
             if 'card_text' in data:
                 update_data['card_text'] = data['card_text'].strip()
             if 'clothes_points' in data:
-                update_data['clothes_points'] = int(data['clothes_points'])
-            if 'timer_minutes' in data:
-                update_data['timer_minutes'] = int(data['timer_minutes'])
+                update_data['clothes_points'] = float(data['clothes_points'])
+            if 'dice_rolls' in data:
+                update_data['dice_rolls'] = float(data['dice_rolls'])
             if 'user_rules' in data:
                 user_rules = data['user_rules'] or {}
                 if not isinstance(user_rules, dict):
@@ -287,7 +390,7 @@ class MorningCardService:
                     'selected_card_ids': [],
                     'collaboration_score': 0,
                     'total_clothes_points': 0,
-                    'total_timer_minutes': 0,
+                    'total_dice_rolls': 0.0,
                     'user_rules': {},
                     'locked': False,
                     'created_at': firestore.SERVER_TIMESTAMP
@@ -367,7 +470,7 @@ class MorningCardService:
             # Fetch all selected cards
             selected_cards = []
             total_clothes = 0
-            total_timer = 0
+            total_dice_rolls = 0.0
             all_user_rules = {}
             
             for card_id in card_ids:
@@ -385,6 +488,10 @@ class MorningCardService:
                         'message': f'Card {card_id} is not active'
                     }
                 
+                # Backward compatibility: convert timer_minutes to dice_rolls if present
+                if 'timer_minutes' in card_data and 'dice_rolls' not in card_data:
+                    card_data['dice_rolls'] = float(card_data.pop('timer_minutes', 0))
+                
                 # Convert generic rules to actual usernames for aggregation
                 card_owner = card_data.get('username')
                 card_user_rules = card_data.get('user_rules', {})
@@ -395,12 +502,12 @@ class MorningCardService:
                     'id': card_id,
                     'card_text': card_data.get('card_text', ''),
                     'clothes_points': card_data.get('clothes_points', 0),
-                    'timer_minutes': card_data.get('timer_minutes', 0),
+                    'dice_rolls': card_data.get('dice_rolls', 0.0),
                     'user_rules': card_user_rules
                 })
                 
                 total_clothes += card_data.get('clothes_points', 0)
-                total_timer += card_data.get('timer_minutes', 0)
+                total_dice_rolls += card_data.get('dice_rolls', 0.0)
                 
                 # Aggregate user_rules from card (now with actual usernames)
                 if isinstance(card_user_rules, dict):
@@ -410,25 +517,36 @@ class MorningCardService:
                         if isinstance(rules, list):
                             all_user_rules[username].extend(rules)
             
-            # Calculate final timer: base (20) - 2 per card + card adjustments
-            base_timer = 20
-            timer_deduction = len(card_ids) * 2
-            final_timer = base_timer - timer_deduction + total_timer
+            # Calculate final dice rolls: simply sum from cards
+            final_dice_rolls = total_dice_rolls
             
-            # Calculate final clothes: base (1) + card adjustments
+            # Calculate final clothes: base (1) + floor(card adjustments)
             base_clothes = 1
-            final_clothes = base_clothes + total_clothes
-            
+            final_clothes = base_clothes + max(0, math.floor(total_clothes))
+
             # Update selection
             selection_doc = self.db.collection('morning_card_selections').document(selection['id'])
             selection_doc.update({
                 'selected_card_ids': card_ids,
                 'collaboration_score': collaboration_score,
                 'total_clothes_points': final_clothes,
-                'total_timer_minutes': final_timer,
+                'total_dice_rolls': final_dice_rolls,
                 'user_rules': all_user_rules,
                 'locked': True
             })
+            
+            # Add earned dice roll credits immediately
+            try:
+                from src.services.dice_roll_service import DiceRollService
+                dice_roll_service = DiceRollService(self.app_manager)
+                credit_result = dice_roll_service.add_credits_from_morning_cards(username)
+                if credit_result.get('status') == 'success':
+                    self.logger.info(f"Added {credit_result.get('credits_added', 0)} dice roll credits for {username}")
+                else:
+                    self.logger.warning(f"Failed to add dice roll credits: {credit_result.get('message')}")
+            except Exception as e:
+                self.logger.error(f"Error adding dice roll credits: {e}")
+                # Don't fail the card selection if credit addition fails
             
             self.logger.info(f"Locked {len(card_ids)} cards for {datetime.now(self.central_tz).date()}")
             
@@ -439,7 +557,7 @@ class MorningCardService:
                     'selected_card_ids': card_ids,
                     'collaboration_score': collaboration_score,
                     'total_clothes_points': final_clothes,
-                    'total_timer_minutes': final_timer,
+                    'total_dice_rolls': final_dice_rolls,
                     'user_rules': all_user_rules,
                     'locked': True
                 }
@@ -496,6 +614,16 @@ class MorningCardService:
             
             self.logger.info(f"Deleted {deleted_count} old morning card selections")
             
+            # Also reset dice roll credits (carry over with cap)
+            try:
+                from src.services.dice_roll_service import DiceRollService
+                dice_roll_service = DiceRollService(self.app_manager)
+                dice_reset_result = dice_roll_service.reset_credits_daily()
+                self.logger.info(f"Dice roll credits reset: {dice_reset_result.get('message')}")
+            except Exception as e:
+                self.logger.error(f"Error resetting dice roll credits: {e}")
+                # Don't fail the morning card reset if dice reset fails
+            
             return {
                 'status': 'success',
                 'message': f'Reset completed, deleted {deleted_count} old selections'
@@ -527,7 +655,7 @@ class MorningCardService:
                 'locked': False,
                 'selected_card_ids': [],
                 'total_clothes_points': 0,
-                'total_timer_minutes': 0,
+                'total_dice_rolls': 0.0,
                 'user_rules': {}
             })
             

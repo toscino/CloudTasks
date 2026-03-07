@@ -378,11 +378,14 @@ class FlaskApp:
         # 2. Log startup message
         self.app.logger.info("Server started and ready for requests")
         
+        base_url = f"http://127.0.0.1:{port}"
         # Print admin link if available
         admin_key = os.environ.get("ADMIN_KEY")
         if admin_key:
-            print(f"Admin: http://127.0.0.1:{port}/admin?key={admin_key}")
-        
-        print(f"\nServer running on http://127.0.0.1:{port}/")
+            print(f"Admin: {base_url}/admin?key={admin_key}")
+        # Print user links (local address with key)
+        for key, (username, _) in sorted(self.auth_service.key_map.items(), key=lambda x: x[1][0]):
+            print(f"{username}: {base_url}/?key={key}")
+        print(f"\nServer running on {base_url}/")
         self.app.run(host=host, port=port, debug=debug)
 

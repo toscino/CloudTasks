@@ -430,6 +430,7 @@
         <div class="nav-menu" id="navMenu">
             <a href="/" class="nav-menu-item {% if request.endpoint == 'index' %}active{% endif %}">📋 Tasks</a>
             <a href="/morning-cards" class="nav-menu-item {% if request.endpoint == 'morning_cards_page' %}active{% endif %}">🌅 Morning Cards</a>
+            <a href="/dice-rolls" class="nav-menu-item {% if request.endpoint == 'dice_rolls_page' %}active{% endif %}">🎲 Dice Rolls</a>
             <a href="/daily-tasks" class="nav-menu-item {% if request.endpoint == 'daily_tasks_page' %}active{% endif %}">📅 Daily Tasks</a>
             <a href="/morning-cards/manage" class="nav-menu-item {% if request.endpoint == 'morning_cards_manage_page' %}active{% endif %}">🃏 Manage Cards</a>
             <a href="/goals" class="nav-menu-item {% if request.endpoint == 'goals_page' %}active{% endif %}">🎯 Goals</a>
@@ -625,9 +626,8 @@
                     window.authState.currentUsername = data.username;
                     window.authState.isAuthenticated = data.authenticated;
                     window.authState.sessionBased = data.session_based || false;
-                    window.authState.initialized = true;
                     
-                    // Fetch user settings if authenticated
+                    // Fetch user settings if authenticated (before marking initialized so waitForAuth implies settings are ready)
                     if (data.authenticated && data.username) {
                         try {
                             const settingsResponse = await fetch('/api/user/settings');
@@ -641,6 +641,7 @@
                         }
                     }
                     
+                    window.authState.initialized = true;
                     return { username: data.username, authenticated: data.authenticated };
                 } else {
                     console.error('Auth status check failed:', data.message);

@@ -150,6 +150,85 @@
             padding: 20px;
         }
         
+        .dice-config-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .dice-config-section h3 {
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .dice-die-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .dice-die-block summary {
+            padding: 12px 15px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .dice-die-block .dice-die-fields {
+            padding: 0 15px 15px 15px;
+        }
+        
+        .dice-die-fields .form-group {
+            margin-bottom: 10px;
+        }
+        
+        .dice-die-fields .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        
+        .dice-die-fields .form-group input,
+        .dice-die-fields .form-group textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .dice-face-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        
+        .dice-face-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .dice-face-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .dice-face-row .dice-face-num {
+            flex: 0 0 24px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6c757d;
+        }
+        
+        .dice-face-row .face-name {
+            flex: 0 0 100px;
+        }
+        
+        .dice-face-row .face-rule {
+            flex: 1;
+        }
+        
         .error-message {
             background-color: #f8d7da;
             color: #721c24;
@@ -200,11 +279,11 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="clothes-points">Clothes Points</label>
-                    <input type="number" id="clothes-points" min="0" max="100" value="0" placeholder="0">
+                    <input type="number" id="clothes-points" step="0.1" min="-10" max="100" value="0" placeholder="0">
                 </div>
                 <div class="form-group">
-                    <label for="timer-minutes">Timer Minutes</label>
-                    <input type="number" id="timer-minutes" min="0" max="120" value="0" placeholder="0">
+                    <label for="dice-rolls">Dice Rolls</label>
+                    <input type="number" id="dice-rolls" step="0.1" min="0" max="10" value="0" placeholder="0">
                 </div>
             </div>
             
@@ -227,6 +306,50 @@
             <ul class="cards-list" id="cards-list">
                 <li class="loading-state">Loading cards...</li>
             </ul>
+            <div class="import-export-cards" style="margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+                <button class="btn btn-secondary" id="export-cards-btn">Export cards</button>
+                <div style="margin-top: 15px;">
+                    <label for="import-cards-textarea" style="display: block; margin-bottom: 5px; font-size: 14px;">Import cards (paste JSON array)</label>
+                    <textarea id="import-cards-textarea" rows="6" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 12px;" placeholder='[{"card_text": "...", "clothes_points": 0, "dice_rolls": 0}, ...]'></textarea>
+                    <button class="btn" id="import-cards-btn" style="margin-top: 8px;">Import cards</button>
+                    <span id="import-cards-status" style="margin-left: 10px; font-size: 14px;"></span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dice Configuration -->
+        <div class="dice-config-section">
+            <h3>🎲 Dice Configuration</h3>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 14px;">Configure rules for each die. Base rule applies when the die is not selected; alternate + face rule when selected.</p>
+            <div class="dice-base-rules" style="background-color: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label for="generic-base-rule">Generic base rule</label>
+                    <input type="text" id="generic-base-rule" placeholder="Applies when rolling 0–2 dice">
+                </div>
+                <div class="form-group">
+                    <label for="full-roll-rule">Full roll bonus (3 dice)</label>
+                    <input type="text" id="full-roll-rule" placeholder="Replaces generic base when you roll all 3 dice">
+                </div>
+            </div>
+            <div id="dice-config-form">
+                <details class="dice-die-block" open><summary>Die 1</summary><div class="dice-die-fields"><div class="form-group"><label for="die-1-title">Title</label><input type="text" id="die-1-title" placeholder="e.g. Chore"></div><div class="form-group"><label for="die-1-base">Base Rule (when not selected)</label><input type="text" id="die-1-base" placeholder="Rule when this die is not rolled"></div><div class="form-group"><label for="die-1-alt">Alternate Rule (when selected)</label><input type="text" id="die-1-alt" placeholder="Rule when this die is rolled"></div><div class="form-group"><label>Face Rules (1–6): Name and Rule</label><div class="dice-face-rows"><div class="dice-face-row"><span class="dice-face-num">1</span><input type="text" id="die-1-face-1-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-1" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">2</span><input type="text" id="die-1-face-2-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-2" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">3</span><input type="text" id="die-1-face-3-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-3" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">4</span><input type="text" id="die-1-face-4-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-4" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">5</span><input type="text" id="die-1-face-5-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-5" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">6</span><input type="text" id="die-1-face-6-name" class="face-name" placeholder="Name"><input type="text" id="die-1-face-6" class="face-rule" placeholder="Rule"></div></div></div></div></details>
+                <details class="dice-die-block" open><summary>Die 2</summary><div class="dice-die-fields"><div class="form-group"><label for="die-2-title">Title</label><input type="text" id="die-2-title" placeholder="e.g. Chore"></div><div class="form-group"><label for="die-2-base">Base Rule (when not selected)</label><input type="text" id="die-2-base" placeholder="Rule when this die is not rolled"></div><div class="form-group"><label for="die-2-alt">Alternate Rule (when selected)</label><input type="text" id="die-2-alt" placeholder="Rule when this die is rolled"></div><div class="form-group"><label>Face Rules (1–6): Name and Rule</label><div class="dice-face-rows"><div class="dice-face-row"><span class="dice-face-num">1</span><input type="text" id="die-2-face-1-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-1" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">2</span><input type="text" id="die-2-face-2-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-2" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">3</span><input type="text" id="die-2-face-3-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-3" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">4</span><input type="text" id="die-2-face-4-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-4" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">5</span><input type="text" id="die-2-face-5-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-5" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">6</span><input type="text" id="die-2-face-6-name" class="face-name" placeholder="Name"><input type="text" id="die-2-face-6" class="face-rule" placeholder="Rule"></div></div></div></div></details>
+                <details class="dice-die-block" open><summary>Die 3</summary><div class="dice-die-fields"><div class="form-group"><label for="die-3-title">Title</label><input type="text" id="die-3-title" placeholder="e.g. Chore"></div><div class="form-group"><label for="die-3-base">Base Rule (when not selected)</label><input type="text" id="die-3-base" placeholder="Rule when this die is not rolled"></div><div class="form-group"><label for="die-3-alt">Alternate Rule (when selected)</label><input type="text" id="die-3-alt" placeholder="Rule when this die is rolled"></div><div class="form-group"><label>Face Rules (1–6): Name and Rule</label><div class="dice-face-rows"><div class="dice-face-row"><span class="dice-face-num">1</span><input type="text" id="die-3-face-1-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-1" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">2</span><input type="text" id="die-3-face-2-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-2" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">3</span><input type="text" id="die-3-face-3-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-3" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">4</span><input type="text" id="die-3-face-4-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-4" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">5</span><input type="text" id="die-3-face-5-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-5" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">6</span><input type="text" id="die-3-face-6-name" class="face-name" placeholder="Name"><input type="text" id="die-3-face-6" class="face-rule" placeholder="Rule"></div></div></div></div></details>
+                <details class="dice-die-block" open><summary>Die 4</summary><div class="dice-die-fields"><div class="form-group"><label for="die-4-title">Title</label><input type="text" id="die-4-title" placeholder="e.g. Chore"></div><div class="form-group"><label for="die-4-base">Base Rule (when not selected)</label><input type="text" id="die-4-base" placeholder="Rule when this die is not rolled"></div><div class="form-group"><label for="die-4-alt">Alternate Rule (when selected)</label><input type="text" id="die-4-alt" placeholder="Rule when this die is rolled"></div><div class="form-group"><label>Face Rules (1–6): Name and Rule</label><div class="dice-face-rows"><div class="dice-face-row"><span class="dice-face-num">1</span><input type="text" id="die-4-face-1-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-1" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">2</span><input type="text" id="die-4-face-2-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-2" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">3</span><input type="text" id="die-4-face-3-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-3" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">4</span><input type="text" id="die-4-face-4-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-4" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">5</span><input type="text" id="die-4-face-5-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-5" class="face-rule" placeholder="Rule"></div><div class="dice-face-row"><span class="dice-face-num">6</span><input type="text" id="die-4-face-6-name" class="face-name" placeholder="Name"><input type="text" id="die-4-face-6" class="face-rule" placeholder="Rule"></div></div></div></div></details>
+            </div>
+            <div style="margin-top: 15px;">
+                <button class="btn" id="save-dice-config-btn">Save Dice Configuration</button>
+                <span id="dice-config-status" style="margin-left: 10px; font-size: 14px;"></span>
+            </div>
+            <div class="import-export-dice" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+                <button class="btn btn-secondary" id="export-dice-btn">Export dice</button>
+                <div style="margin-top: 15px;">
+                    <label for="import-dice-textarea" style="display: block; margin-bottom: 5px; font-size: 14px;">Import dice (paste JSON; partial ok — each die present is full-replaced)</label>
+                    <textarea id="import-dice-textarea" rows="6" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 12px;" placeholder='{"dice_configs": {"die_1": {...}}, "generic_base_rule": "...", "full_roll_rule": "..."}'></textarea>
+                    <button class="btn" id="import-dice-btn" style="margin-top: 8px;">Import dice</button>
+                    <span id="import-dice-status" style="margin-left: 10px; font-size: 14px;"></span>
+                </div>
+            </div>
         </div>
     </div>
 {% endblock %}
@@ -325,10 +448,179 @@
             
             await loadCards();
             renderCards();
+            await loadDiceConfig();
             
             // Set up event listeners
             setupEventListeners();
         });
+        
+        // Load dice configuration and populate form
+        async function loadDiceConfig() {
+            try {
+                const response = await fetch('/api/dice-rolls/config');
+                const data = await response.json();
+                const dice_configs = (data.status === 'success' && data.dice_configs) ? data.dice_configs : {};
+                const gEl = document.getElementById('generic-base-rule');
+                const fEl = document.getElementById('full-roll-rule');
+                if (gEl) gEl.value = (data.generic_base_rule || '').trim();
+                if (fEl) fEl.value = (data.full_roll_rule || '').trim();
+                for (let i = 1; i <= 4; i++) {
+                    const key = 'die_' + i;
+                    const d = dice_configs[key] || {};
+                    const titleEl = document.getElementById('die-' + i + '-title');
+                    const base = document.getElementById('die-' + i + '-base');
+                    const alt = document.getElementById('die-' + i + '-alt');
+                    if (titleEl) titleEl.value = (d.title || '').trim();
+                    if (base) base.value = (d.base_rule || '').trim();
+                    if (alt) alt.value = (d.alternate_rule || '').trim();
+                    const fr = d.face_rules || {};
+                    const fn = d.face_names || {};
+                    for (let f = 1; f <= 6; f++) {
+                        const ruleEl = document.getElementById('die-' + i + '-face-' + f);
+                        const nameEl = document.getElementById('die-' + i + '-face-' + f + '-name');
+                        if (ruleEl) ruleEl.value = (fr[String(f)] || '').trim();
+                        if (nameEl) nameEl.value = (fn[String(f)] || '').trim();
+                    }
+                    const block = document.querySelectorAll('.dice-die-block')[i - 1];
+                    if (block) {
+                        const sum = block.querySelector('summary');
+                        if (sum) sum.textContent = (d.title || '').trim() || 'Die ' + i;
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading dice config:', e);
+            }
+        }
+        
+        // Collect dice_configs from form and POST to /api/dice-rolls/config
+        function collectDiceConfigs() {
+            const dice_configs = {};
+            for (let i = 1; i <= 4; i++) {
+                const key = 'die_' + i;
+                const base = document.getElementById('die-' + i + '-base');
+                const alt = document.getElementById('die-' + i + '-alt');
+                const face_rules = {};
+                for (let f = 1; f <= 6; f++) {
+                    const el = document.getElementById('die-' + i + '-face-' + f);
+                    face_rules[String(f)] = el ? (el.value || '').trim() : '';
+                }
+                const titleEl = document.getElementById('die-' + i + '-title');
+                const face_names = {};
+                for (let f = 1; f <= 6; f++) {
+                    const nameEl = document.getElementById('die-' + i + '-face-' + f + '-name');
+                    face_names[String(f)] = nameEl ? (nameEl.value || '').trim() : '';
+                }
+                dice_configs[key] = {
+                    title: titleEl ? (titleEl.value || '').trim() : '',
+                    base_rule: base ? (base.value || '').trim() : '',
+                    alternate_rule: alt ? (alt.value || '').trim() : '',
+                    face_rules: face_rules,
+                    face_names: face_names
+                };
+            }
+            return dice_configs;
+        }
+        
+        // Save dice configuration
+        async function saveDiceConfig() {
+            const btn = document.getElementById('save-dice-config-btn');
+            const status = document.getElementById('dice-config-status');
+            if (btn) btn.disabled = true;
+            if (status) status.textContent = 'Saving...';
+            try {
+                const response = await fetch('/api/dice-rolls/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dice_configs: collectDiceConfigs(),
+                        generic_base_rule: (document.getElementById('generic-base-rule')?.value || '').trim(),
+                        full_roll_rule: (document.getElementById('full-roll-rule')?.value || '').trim()
+                    })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    if (status) status.textContent = 'Saved.';
+                    if (status) status.style.color = '#155724';
+                } else {
+                    if (status) status.textContent = 'Error: ' + (data.message || 'Failed to save');
+                    if (status) status.style.color = '#721c24';
+                }
+            } catch (e) {
+                console.error('Error saving dice config:', e);
+                if (status) status.textContent = 'Error saving.';
+                if (status) status.style.color = '#721c24';
+            }
+            if (btn) btn.disabled = false;
+        }
+        
+        // Export dice config: put JSON into import textarea
+        async function exportDice() {
+            try {
+                const response = await fetch('/api/dice-rolls/config');
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    alert('Failed to load dice config for export');
+                    return;
+                }
+                const payload = {
+                    dice_configs: data.dice_configs || {},
+                    generic_base_rule: data.generic_base_rule || '',
+                    full_roll_rule: data.full_roll_rule || ''
+                };
+                const textarea = document.getElementById('import-dice-textarea');
+                if (textarea) textarea.value = JSON.stringify(payload, null, 2);
+            } catch (e) {
+                console.error('Export dice error:', e);
+                alert('Export failed');
+            }
+        }
+        
+        // Import dice config from pasted JSON (partial ok)
+        async function importDice() {
+            const textarea = document.getElementById('import-dice-textarea');
+            const statusEl = document.getElementById('import-dice-status');
+            const raw = (textarea && textarea.value || '').trim();
+            if (!raw) {
+                statusEl.textContent = 'Paste JSON first';
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                statusEl.textContent = 'Invalid JSON: ' + e.message;
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            if (typeof parsed !== 'object' || parsed === null) {
+                statusEl.textContent = 'JSON must be an object';
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            statusEl.textContent = 'Importing...';
+            statusEl.style.color = '#6c757d';
+            try {
+                const response = await fetch('/api/dice-rolls/config/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parsed)
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    statusEl.textContent = 'Imported.';
+                    statusEl.style.color = '#155724';
+                    await loadDiceConfig();
+                } else {
+                    statusEl.textContent = data.message || 'Import failed';
+                    statusEl.style.color = '#721c24';
+                }
+            } catch (e) {
+                console.error('Import dice error:', e);
+                statusEl.textContent = 'Import failed';
+                statusEl.style.color = '#721c24';
+            }
+        }
         
         // Load all card templates
         async function loadCards() {
@@ -343,6 +635,80 @@
                 }
             } catch (error) {
                 console.error('Error loading cards:', error);
+            }
+        }
+        
+        // Export cards: put JSON into import textarea
+        async function exportCards() {
+            try {
+                const response = await fetch('/api/morning-cards');
+                const data = await response.json();
+                if (data.status !== 'success' || !Array.isArray(data.templates)) {
+                    alert('Failed to load cards for export');
+                    return;
+                }
+                const exportList = data.templates.map(t => ({
+                    id: t.id,
+                    username: t.username,
+                    card_text: t.card_text,
+                    clothes_points: t.clothes_points ?? 0,
+                    dice_rolls: t.dice_rolls ?? 0,
+                    user_rules: t.user_rules ?? {},
+                    active: t.active !== false
+                }));
+                const textarea = document.getElementById('import-cards-textarea');
+                if (textarea) textarea.value = JSON.stringify(exportList, null, 2);
+            } catch (e) {
+                console.error('Export cards error:', e);
+                alert('Export failed');
+            }
+        }
+        
+        // Import cards from pasted JSON
+        async function importCards() {
+            const textarea = document.getElementById('import-cards-textarea');
+            const statusEl = document.getElementById('import-cards-status');
+            const raw = (textarea && textarea.value || '').trim();
+            if (!raw) {
+                statusEl.textContent = 'Paste JSON array first';
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                statusEl.textContent = 'Invalid JSON: ' + e.message;
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            if (!Array.isArray(parsed)) {
+                statusEl.textContent = 'JSON must be an array of card objects';
+                statusEl.style.color = '#721c24';
+                return;
+            }
+            statusEl.textContent = 'Importing...';
+            statusEl.style.color = '#6c757d';
+            try {
+                const response = await fetch('/api/morning-cards/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ templates: parsed })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    statusEl.textContent = data.message || 'Imported.';
+                    statusEl.style.color = '#155724';
+                    await loadCards();
+                    renderCards();
+                } else {
+                    statusEl.textContent = data.message || 'Import failed';
+                    statusEl.style.color = '#721c24';
+                }
+            } catch (e) {
+                console.error('Import cards error:', e);
+                statusEl.textContent = 'Import failed';
+                statusEl.style.color = '#721c24';
             }
         }
         
@@ -368,13 +734,15 @@
                 li.dataset.cardId = card.id;
                 
                 const cardTags = [];
-                if (card.clothes_points !== 0) {
-                    const sign = card.clothes_points > 0 ? '+' : '';
-                    cardTags.push(`👔 ${sign}${card.clothes_points}`);
+                if (card.clothes_points !== 0 && card.clothes_points !== undefined) {
+                    const pts = parseFloat(card.clothes_points);
+                    const sign = pts > 0 ? '+' : '';
+                    const display = Math.round(pts * 10) / 10;
+                    cardTags.push(`👔 ${sign}${display % 1 === 0 ? display : display.toFixed(1)}`);
                 }
-                if (card.timer_minutes !== 0) {
-                    const sign = card.timer_minutes > 0 ? '+' : '';
-                    cardTags.push(`⏰ ${sign}${card.timer_minutes}`);
+                if (card.dice_rolls !== 0 && card.dice_rolls !== undefined) {
+                    const sign = card.dice_rolls > 0 ? '+' : '';
+                    cardTags.push(`🎲 ${sign}${card.dice_rolls}`);
                 }
                 // Add user rules to tags
                 if (card.user_rules && typeof card.user_rules === 'object') {
@@ -406,8 +774,8 @@
         // Add a new card
         async function addCard() {
             const cardText = document.getElementById('card-text').value.trim();
-            const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
-            const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
+            const clothesPoints = parseFloat(document.getElementById('clothes-points').value) || 0;
+            const diceRolls = parseFloat(document.getElementById('dice-rolls').value) || 0;
             
             // Collect user rules dynamically
             const userRules = {};
@@ -448,7 +816,7 @@
                     body: JSON.stringify({
                         card_text: cardText,
                         clothes_points: clothesPoints,
-                        timer_minutes: timerMinutes,
+                        dice_rolls: diceRolls,
                         user_rules: userRules,
                         active: true
                     })
@@ -460,7 +828,7 @@
                     // Clear form
                     document.getElementById('card-text').value = '';
                     document.getElementById('clothes-points').value = '0';
-                    document.getElementById('timer-minutes').value = '0';
+                    document.getElementById('dice-rolls').value = '0';
                     initializeUserRuleSections();
                     
                     // Reload cards
@@ -530,7 +898,9 @@
             // Pre-fill form
             document.getElementById('card-text').value = card.card_text;
             document.getElementById('clothes-points').value = card.clothes_points || 0;
-            document.getElementById('timer-minutes').value = card.timer_minutes || 0;
+            // Backward compatibility: use timer_minutes if dice_rolls not present
+            const diceRolls = card.dice_rolls !== undefined ? card.dice_rolls : (card.timer_minutes !== undefined ? card.timer_minutes : 0);
+            document.getElementById('dice-rolls').value = diceRolls;
             
             // Initialize sections and populate rules dynamically
             initializeUserRuleSections();
@@ -564,8 +934,8 @@
         // Update a card
         async function updateCard(cardId) {
             const cardText = document.getElementById('card-text').value.trim();
-            const clothesPoints = parseInt(document.getElementById('clothes-points').value) || 0;
-            const timerMinutes = parseInt(document.getElementById('timer-minutes').value) || 0;
+            const clothesPoints = parseFloat(document.getElementById('clothes-points').value) || 0;
+            const diceRolls = parseFloat(document.getElementById('dice-rolls').value) || 0;
             
             // Collect user rules dynamically
             const userRules = {};
@@ -606,7 +976,7 @@
                     body: JSON.stringify({
                         card_text: cardText,
                         clothes_points: clothesPoints,
-                        timer_minutes: timerMinutes,
+                        dice_rolls: diceRolls,
                         user_rules: userRules
                     })
                 });
@@ -617,7 +987,7 @@
                     // Reset form
                     document.getElementById('card-text').value = '';
                     document.getElementById('clothes-points').value = '0';
-                    document.getElementById('timer-minutes').value = '0';
+                    document.getElementById('dice-rolls').value = '0';
                     initializeUserRuleSections();
                     
                     // Reset button - clear onclick and re-attach event listener
@@ -671,6 +1041,26 @@
             const addCardBtn = document.getElementById('add-card-btn');
             if (addCardBtn) {
                 addCardBtn.addEventListener('click', addCard);
+            }
+            const saveDiceConfigBtn = document.getElementById('save-dice-config-btn');
+            if (saveDiceConfigBtn) {
+                saveDiceConfigBtn.addEventListener('click', saveDiceConfig);
+            }
+            const exportCardsBtn = document.getElementById('export-cards-btn');
+            if (exportCardsBtn) {
+                exportCardsBtn.addEventListener('click', exportCards);
+            }
+            const importCardsBtn = document.getElementById('import-cards-btn');
+            if (importCardsBtn) {
+                importCardsBtn.addEventListener('click', importCards);
+            }
+            const exportDiceBtn = document.getElementById('export-dice-btn');
+            if (exportDiceBtn) {
+                exportDiceBtn.addEventListener('click', exportDice);
+            }
+            const importDiceBtn = document.getElementById('import-dice-btn');
+            if (importDiceBtn) {
+                importDiceBtn.addEventListener('click', importDice);
             }
             
             // Use event delegation for dynamically created buttons
