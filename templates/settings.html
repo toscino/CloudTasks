@@ -143,6 +143,14 @@
 </div>
 
 <div class="settings-section">
+    <h3>Task Points</h3>
+    <p>Points threshold (tier unlock and streak):</p>
+    <input type="number" id="points-threshold" min="0" placeholder="200" style="width: 80px; padding: 8px; margin-right: 10px;">
+    <button class="btn btn-sm" id="save-task-points-config-btn" style="margin-top: 10px;">Save</button>
+    <div id="task-points-config-status" class="status-message" style="display: none; margin-top: 10px;"></div>
+</div>
+
+<div class="settings-section">
     <h3>Collaboration Tracker Status</h3>
     <p><strong>Your Status:</strong> <span id="inverted-status">Loading...</span></p>
     <div id="spouse-inverted-status" style="display: none;">
@@ -375,8 +383,50 @@ function showStatus(message, type) {
     }, 5000);
 }
 
+async function loadTaskPointsConfig() {
+    try {
+        const response = await fetch('/api/task-points/config');
+        const data = await response.json();
+        if (data.status === 'success' && data.config) {
+            const c = data.config;
+            const el = document.getElementById('points-threshold');
+            if (el) el.value = c.points_threshold ?? 200;
+        }
+    } catch (e) {
+        console.error('Error loading task points config:', e);
+    }
+}
+
+async function saveTaskPointsConfig() {
+    const el = document.getElementById('points-threshold');
+    const statusEl = document.getElementById('task-points-config-status');
+    const val = el ? parseInt(el.value, 10) : null;
+    try {
+        const response = await fetch('/api/task-points/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                points_threshold: isNaN(val) ? undefined : val
+            })
+        });
+        const data = await response.json();
+        if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.className = 'status-message ' + (data.status === 'success' ? 'success' : 'error');
+            statusEl.textContent = data.status === 'success' ? 'Saved' : (data.message || 'Failed');
+        }
+    } catch (e) {
+        if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.className = 'status-message error';
+            statusEl.textContent = 'Error saving';
+        }
+    }
+}
+
 // Load settings on page load
 loadSettings();
+loadTaskPointsConfig();
 
 // Set up event listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -399,6 +449,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (linkBtn) {
         linkBtn.addEventListener('click', linkWithCode);
+    }
+
+    const saveTaskPointsBtn = document.getElementById('save-task-points-config-btn');
+    if (saveTaskPointsBtn) {
+        saveTaskPointsBtn.addEventListener('click', saveTaskPointsConfig);
     }
 });
 </script>

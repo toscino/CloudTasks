@@ -11,43 +11,52 @@
             font-weight: 600;
         }
         
-        .credits-display {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
+        .roll-info {
+            background-color: #f8f9fa;
+            color: #495057;
+            padding: 15px 20px;
             border-radius: 8px;
             margin-bottom: 20px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
+            font-size: 14px;
         }
         
-        .credits-display h3 {
-            margin: 0 0 10px 0;
+        .roll-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
             font-size: 16px;
             font-weight: 600;
+            display: block;
+            margin: 0 auto 20px;
+            transition: background-color 0.2s ease;
         }
         
-        .credits-value {
-            font-size: 36px;
-            font-weight: 700;
-            margin: 0;
+        .roll-button:hover:not(:disabled) {
+            background-color: #218838;
         }
         
-        .permission-indicator {
-            background-color: #fff3cd;
-            color: #856404;
-            padding: 10px 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            border: 1px solid #ffeaa7;
+        .roll-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
         }
         
-        .dice-selection {
+        .dice-pool {
             background-color: #ffffff;
             border: 1px solid #e0e0e0;
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
+        }
+        
+        .dice-pool h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            font-weight: 600;
         }
         
         .dice-checkbox-group {
@@ -73,47 +82,6 @@
             font-size: 16px;
             cursor: pointer;
             user-select: none;
-        }
-        
-        .dice-checkbox.disabled-die {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-        
-        .dice-checkbox.disabled-die label {
-            cursor: not-allowed;
-            color: #6c757d;
-        }
-        
-        #save-selection-btn {
-            background-color: #007bff;
-            color: white;
-        }
-        #save-selection-btn:hover {
-            background-color: #0056b3;
-        }
-        
-        .roll-button {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            display: block;
-            margin: 0 auto 20px;
-            transition: background-color 0.2s ease;
-        }
-        
-        .roll-button:hover:not(:disabled) {
-            background-color: #218838;
-        }
-        
-        .roll-button:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
         }
         
         .results-section {
@@ -189,39 +157,6 @@
             font-size: 14px;
         }
         
-        .history-section {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-        }
-        
-        .history-section h3 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        
-        .history-item {
-            padding: 15px;
-            margin: 10px 0;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-            border-left: 3px solid #6c757d;
-        }
-        
-        .history-item .history-date {
-            font-size: 12px;
-            color: #6c757d;
-            margin-bottom: 5px;
-        }
-        
-        .history-item .history-dice {
-            font-size: 14px;
-            margin: 5px 0;
-        }
-        
         .loading-state {
             text-align: center;
             color: #6c757d;
@@ -237,11 +172,6 @@
             border: 1px solid #f5c6cb;
         }
         
-        @media (max-width: 768px) {
-            .dice-checkbox-group {
-                flex-direction: column;
-            }
-        }
 {% endblock %}
 
 {% block content %}
@@ -250,53 +180,26 @@
         
         <div id="loading-state" class="loading-state">Loading...</div>
         <div id="main-content" style="display: none;">
-            <!-- Credits Display -->
-            <div class="credits-display">
-                <h3>Available Dice Roll Credits</h3>
-                <p class="credits-value" id="credits-display">-</p>
-                <p style="font-size: 14px; margin: 5px 0 0 0; opacity: 0.9;">Cap: <span id="credit-cap">-</span></p>
+            <!-- Roll Info -->
+            <div class="roll-info">
+                Either partner can roll. 1) Check which dice are available. 2) Pick number of dice to roll. 3) Roll that many random dice from the pool.
             </div>
-            
-            <!-- Permission Indicator -->
-            <div class="permission-indicator" id="permission-indicator" style="display: none;">
-                <strong>Note:</strong> <span id="permission-text"></span>
-            </div>
-            
-            <!-- Dice Selection -->
-            <div class="dice-selection">
-                <h3>Select Dice to Roll</h3>
-                <p style="color: #6c757d; font-size: 14px; margin-bottom: 15px;">
-                    Choose 0-3 dice to roll. Base cost: 1 credit. Each die: +1 credit.
-                </p>
+            <div class="dice-pool">
+                <h3>Available dice (include in pool)</h3>
                 <div class="dice-checkbox-group" id="dice-checkboxes">
-                    <div class="dice-checkbox">
-                        <input type="checkbox" id="die-0" value="0">
-                        <label for="die-0">Die 1</label>
-                    </div>
-                    <div class="dice-checkbox">
-                        <input type="checkbox" id="die-1" value="1">
-                        <label for="die-1">Die 2</label>
-                    </div>
-                    <div class="dice-checkbox">
-                        <input type="checkbox" id="die-2" value="2">
-                        <label for="die-2">Die 3</label>
-                    </div>
-                    <div class="dice-checkbox">
-                        <input type="checkbox" id="die-3" value="3">
-                        <label for="die-3">Die 4</label>
-                    </div>
+                    <!-- Checkboxes rendered dynamically from config -->
                 </div>
-                <p id="cost-display" style="color: #6c757d; font-size: 14px; margin-top: 10px;">
-                    Cost: <span id="cost-value">1</span> credit
-                </p>
-                <div id="save-selection-area" style="margin-top: 12px; display: none;">
-                    <button class="btn btn-secondary" id="save-selection-btn">Save selection</button>
-                    <span id="save-selection-status" style="margin-left: 10px; font-size: 14px;"></span>
+                <div style="margin-top: 15px;">
+                    <label for="num-dice" style="font-weight: 600; margin-right: 10px;">Number of dice:</label>
+                    <select id="num-dice" style="padding: 8px 12px; border-radius: 6px; font-size: 16px;">
+                        <!-- Options populated dynamically -->
+                    </select>
+                    <span id="roll-range-hint" style="margin-left: 10px; color: #6c757d; font-size: 14px;"></span>
                 </div>
             </div>
             
             <!-- Roll Button -->
-            <button class="roll-button" id="roll-button" disabled>Roll Dice</button>
+            <button class="roll-button" id="roll-button">Roll Dice</button>
             
             <!-- Results Section -->
             <div class="results-section" id="results-section">
@@ -310,18 +213,8 @@
                         <!-- Final rules will be displayed here -->
                     </div>
                 </div>
-                <p style="color: #6c757d; font-size: 14px; margin-top: 15px;">
-                    Credits used: <span id="credits-used">-</span> | Remaining: <span id="remaining-credits">-</span>
-                </p>
             </div>
             
-            <!-- History Section -->
-            <div class="history-section">
-                <h3>Recent Dice Games</h3>
-                <div id="history-container">
-                    <div class="loading-state">Loading history...</div>
-                </div>
-            </div>
         </div>
         
         <div id="error-message" class="error-message" style="display: none;"></div>
@@ -333,207 +226,98 @@
     import { waitForAuth, apiCall, alert } from '/static/js/utils.js';
     
     // Dice Roll page JavaScript
-    let currentCredits = 0;
-    let creditCap = 10;
-    let canRoll = false;
-    let canSaveSelection = false;
-    let savedDiceSelection = [];
     
     // Wait for authentication to be ready
     document.addEventListener('DOMContentLoaded', async function() {
         await waitForAuth();
         
-        await loadCredits();
         await loadDiceConfig();
         setupEventListeners();
-        applyRoleUI();
-        updateDiceCheckboxLimits();
-        updateCostDisplay();
+        updateRollHint();
         updateRollButton();
-        await loadHistory();
         
         document.getElementById('loading-state').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
     });
     
-    // Load dice config: die labels, saved_dice_selection, can_roll, can_save_selection
+    // Load dice config and render checkboxes + num-dice options
     async function loadDiceConfig() {
         try {
             const data = await apiCall('/api/dice-rolls/config');
             const cfg = (data.status === 'success' && data.dice_configs) ? data.dice_configs : {};
             window.diceConfig = cfg;
-            canRoll = data.can_roll === true;
-            canSaveSelection = data.can_save_selection === true;
-            savedDiceSelection = Array.isArray(data.saved_dice_selection) ? data.saved_dice_selection.slice() : [];
-            for (let i = 1; i <= 4; i++) {
-                const d = cfg['die_' + i] || {};
-                const t = (d.title || '').trim();
-                const lbl = document.querySelector('label[for="die-' + (i - 1) + '"]');
-                if (lbl) lbl.textContent = t || 'Die ' + i;
-            }
-            // Sync checkboxes to saved selection
-            const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]');
-            checkboxes.forEach((cb, idx) => {
-                cb.checked = savedDiceSelection.indexOf(idx) !== -1;
+            const keys = Object.keys(cfg).filter(k => /^die_\d+$/.test(k) && k !== 'die_0')
+                .sort((a, b) => parseInt(a.replace('die_', ''), 10) - parseInt(b.replace('die_', ''), 10));
+            const container = document.getElementById('dice-checkboxes');
+            container.innerHTML = '';
+            keys.forEach((key, idx) => {
+                const d = cfg[key] || {};
+                const t = (d.title || '').trim() || ('Die ' + (idx + 1));
+                const div = document.createElement('div');
+                div.className = 'dice-checkbox';
+                div.innerHTML = `<input type="checkbox" id="die-${idx}" value="${idx}" checked><label for="die-${idx}">${t}</label>`;
+                container.appendChild(div);
             });
+            updateNumDiceOptions();
+            updateRollHint();
         } catch (e) {
             console.error('Error loading dice config:', e);
             window.diceConfig = {};
         }
     }
-    
-    // Apply role-based UI: roller sees read-only selection; saver sees editable + Save button
-    function applyRoleUI() {
-        const saveArea = document.getElementById('save-selection-area');
-        const rollBtn = document.getElementById('roll-button');
-        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]');
-        if (canSaveSelection) {
-            if (saveArea) saveArea.style.display = 'block';
-            checkboxes.forEach(cb => { cb.disabled = false; cb.closest('.dice-checkbox')?.classList.remove('disabled-die'); });
-            if (rollBtn) { rollBtn.disabled = true; rollBtn.textContent = 'Only the morning card person can roll'; }
-        } else if (canRoll) {
-            if (saveArea) saveArea.style.display = 'none';
-            checkboxes.forEach(cb => {
-                cb.disabled = true;
-                cb.closest('.dice-checkbox')?.classList.add('disabled-die');
-            });
+
+    function updateNumDiceOptions() {
+        const available = getAvailableDice();
+        const numSelect = document.getElementById('num-dice');
+        numSelect.innerHTML = '';
+        for (let i = 0; i <= available.length; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = i;
+            if (i === available.length) opt.selected = true;
+            numSelect.appendChild(opt);
         }
-        updatePermissionIndicator();
-    }
-    
-    // Load current credits
-    async function loadCredits() {
-        try {
-            const data = await apiCall('/api/dice-rolls/credits');
-            if (data.status === 'success') {
-                currentCredits = data.total_credits || 0;
-                creditCap = data.credit_cap || 10;
-                updateCreditsDisplay();
-                updatePermissionIndicator();
-                updateRollButton();
-            }
-        } catch (error) {
-            console.error('Error loading credits:', error);
-            showError('Failed to load credits');
-        }
-    }
-    
-    // Update credits display
-    function updateCreditsDisplay() {
-        document.getElementById('credits-display').textContent = currentCredits;
-        document.getElementById('credit-cap').textContent = creditCap;
-    }
-    
-    // Update permission indicator (hidden for roller and for saver — saver sees disabled Roll button only)
-    function updatePermissionIndicator() {
-        const indicator = document.getElementById('permission-indicator');
-        const text = document.getElementById('permission-text');
-        
-        if (canRoll || canSaveSelection) {
-            indicator.style.display = 'none';
-        } else {
-            indicator.style.display = 'block';
-            text.textContent = 'You can view dice rolls, but only the morning card selector can roll dice.';
-        }
-    }
-    
-    // When 3 dice are selected, disable the 4th checkbox (gray out); when < 3, enable all. Skip when user is roller (read-only).
-    function updateDiceCheckboxLimits() {
-        if (canRoll) return;
-        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]');
-        const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-        checkboxes.forEach(checkbox => {
-            const wrapper = checkbox.closest('.dice-checkbox');
-            if (checkedCount === 3 && !checkbox.checked) {
-                checkbox.disabled = true;
-                if (wrapper) wrapper.classList.add('disabled-die');
-            } else {
-                checkbox.disabled = false;
-                if (wrapper) wrapper.classList.remove('disabled-die');
-            }
-        });
     }
     
     // Setup event listeners
     function setupEventListeners() {
-        // Dice checkbox change handlers
-        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]');
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateDiceCheckboxLimits();
-                updateCostDisplay();
-                updateRollButton();
-            });
-        });
-        
-        // Roll button
         document.getElementById('roll-button').addEventListener('click', rollDice);
-        // Save selection button
-        const saveSelBtn = document.getElementById('save-selection-btn');
-        if (saveSelBtn) saveSelBtn.addEventListener('click', saveSelection);
+        document.getElementById('dice-checkboxes').addEventListener('change', () => {
+            updateNumDiceOptions();
+            updateRollHint();
+        });
+        document.getElementById('num-dice').addEventListener('change', updateRollHint);
     }
     
-    // Update cost display (roller: use saved selection; saver: use current checkboxes)
-    function updateCostDisplay() {
-        const cost = canRoll ? (1 + savedDiceSelection.length) : (1 + Array.from(document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked')).length);
-        document.getElementById('cost-value').textContent = cost;
+    function getAvailableDice() {
+        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked');
+        return Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
     }
     
-    // Update roll button state (roller: cost from saved selection)
+    function getNumDice() {
+        return parseInt(document.getElementById('num-dice').value, 10) || 0;
+    }
+    
+    function updateRollHint() {
+        const available = getAvailableDice();
+        const numDice = getNumDice();
+        const n = Math.min(numDice, available.length);
+        const hint = document.getElementById('roll-range-hint');
+        if (hint) hint.textContent = n === available.length && available.length > 0
+            ? '→ roll all ' + n + ' dice'
+            : '→ roll ' + n + ' dice from ' + available.length + ' available';
+    }
+    
     function updateRollButton() {
         const button = document.getElementById('roll-button');
-        const cost = canRoll ? (1 + savedDiceSelection.length) : (1 + Array.from(document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked')).length);
-        
-        if (!canRoll) {
-            button.disabled = true;
-            button.textContent = canSaveSelection ? 'Only the morning card person can roll' : 'Roll Dice (Permission Required)';
-        } else if (currentCredits < cost) {
-            button.disabled = true;
-            button.textContent = `Roll Dice (Need ${cost} credits)`;
-        } else {
-            button.disabled = false;
-            button.textContent = 'Roll Dice';
-        }
+        button.disabled = false;
+        button.textContent = 'Roll Dice';
     }
     
-    // Save selection (non–morning-card person only)
-    async function saveSelection() {
-        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked');
-        const selection = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
-        const statusEl = document.getElementById('save-selection-status');
-        if (statusEl) statusEl.textContent = 'Saving...';
-        try {
-            const data = await apiCall('/api/dice-rolls/selection', {
-                method: 'POST',
-                body: JSON.stringify({ saved_dice_selection: selection })
-            });
-            if (data.status === 'success') {
-                savedDiceSelection = (data.saved_dice_selection || selection).slice();
-                if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = '#155724'; }
-            } else {
-                if (statusEl) { statusEl.textContent = data.message || 'Failed'; statusEl.style.color = '#721c24'; }
-            }
-        } catch (e) {
-            console.error('Save selection error:', e);
-            if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = '#721c24'; }
-        }
-    }
-    
-    // Roll dice (backend uses saved_dice_selection when can_roll)
+    // Roll dice (exact number of random dice from available pool)
     async function rollDice() {
-        const diceSelected = canRoll ? savedDiceSelection : Array.from(document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked')).map(cb => parseInt(cb.value, 10));
-        const cost = 1 + diceSelected.length;
-        
-        if (!canRoll) {
-            alert('You do not have permission to roll dice');
-            return;
-        }
-        
-        if (currentCredits < cost) {
-            alert(`Insufficient credits. Need ${cost}, have ${currentCredits}`);
-            return;
-        }
-        
+        const availableDice = getAvailableDice();
+        const numDice = getNumDice();
         try {
             const button = document.getElementById('roll-button');
             button.disabled = true;
@@ -541,20 +325,11 @@
             
             const data = await apiCall('/api/dice-rolls/roll', {
                 method: 'POST',
-                body: JSON.stringify({ dice_selected: diceSelected })
+                body: JSON.stringify({ available_dice: availableDice, num_dice: numDice })
             });
             
             if (data.status === 'success') {
-                // Update credits
-                currentCredits = data.remaining_credits || 0;
-                updateCreditsDisplay();
-                updateRollButton();
-                
-                // Display results
                 displayResults(data);
-                
-                // Reload history
-                await loadHistory();
             } else {
                 alert('Failed to roll dice: ' + data.message);
             }
@@ -598,16 +373,10 @@
             diceResultsDiv.innerHTML = '<p style="color: #6c757d;">No dice rolled (base event)</p>';
         }
         
-        // Display final rules: one per line. Base first, then per-die: alternate and face on separate lines.
-        const baseVal = (data.base_rule || '').trim();
-        if (baseVal) {
-            const baseDiv = document.createElement('div');
-            baseDiv.className = 'rule-item';
-            baseDiv.textContent = baseVal;
-            finalRulesDiv.appendChild(baseDiv);
-        }
+        // Display final rules: per-die alternate and face on separate lines.
         const rd = data.rules_detail || {};
-        [1, 2, 3, 4].forEach(ruleIdx => {
+        const ruleIndices = Object.keys(rd).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a, b) => a - b);
+        ruleIndices.forEach(ruleIdx => {
             const key = String(ruleIdx);
             const d = rd[key];
             if (d && typeof d === 'object') {
@@ -636,69 +405,11 @@
             }
         });
         
-        // Display credits info
-        document.getElementById('credits-used').textContent = data.credits_used || 0;
-        document.getElementById('remaining-credits').textContent = data.remaining_credits || 0;
-        
         // Show results section
         resultsSection.classList.add('show');
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-    
-    // Load history
-    async function loadHistory() {
-        try {
-            const data = await apiCall('/api/dice-rolls/history?limit=10');
-            const container = document.getElementById('history-container');
-            
-            if (data.status === 'success' && data.events && data.events.length > 0) {
-                const cfg = window.diceConfig || {};
-                container.innerHTML = '';
-                data.events.forEach(event => {
-                    const historyItem = document.createElement('div');
-                    historyItem.className = 'history-item';
-                    
-                    const diceLabels = event.dice_selected && event.dice_selected.length > 0
-                        ? event.dice_selected.map(d => {
-                            const ruleIdx = d + 1;
-                            const t = (cfg['die_' + ruleIdx]?.title || '').trim();
-                            return t || ('Die ' + ruleIdx);
-                        })
-                        : [];
-                    const diceInfo = diceLabels.length > 0
-                        ? 'Rolled dice: ' + diceLabels.join(', ')
-                        : 'Base event (no dice)';
-                    
-                    const resultsParts = event.dice_results && Object.keys(event.dice_results).length > 0
-                        ? Object.keys(event.dice_results).map(d => {
-                            const ruleIdx = parseInt(d, 10) + 1;
-                            const fv = event.dice_results[d];
-                            const t = (cfg['die_' + ruleIdx]?.title || '').trim() || ('Die ' + ruleIdx);
-                            const fn = (cfg['die_' + ruleIdx]?.face_names?.[String(fv)] || '').trim() || String(fv);
-                            return t + '=' + fn;
-                        })
-                        : [];
-                    const resultsInfo = resultsParts.length > 0 ? 'Results: ' + resultsParts.join(', ') : '';
-                    
-                    historyItem.innerHTML = `
-                        <div class="history-date">${event.date || 'Unknown date'}</div>
-                        <div class="history-dice">${diceInfo}</div>
-                        ${resultsInfo ? `<div class="history-dice">${resultsInfo}</div>` : ''}
-                        <div style="font-size: 12px; color: #6c757d; margin-top: 5px;">
-                            Credits used: ${event.credits_used || 0}
-                        </div>
-                    `;
-                    container.appendChild(historyItem);
-                });
-            } else {
-                container.innerHTML = '<p style="color: #6c757d; text-align: center;">No dice games yet. Roll some dice to get started!</p>';
-            }
-        } catch (error) {
-            console.error('Error loading history:', error);
-            document.getElementById('history-container').innerHTML = '<p style="color: #dc3545;">Failed to load history</p>';
-        }
     }
     
     // Show error message

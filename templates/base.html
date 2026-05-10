@@ -141,6 +141,36 @@
             25% { transform: rotate(-10deg); }
             75% { transform: rotate(10deg); }
         }
+        
+        /* Minimum streak indicator: show when you or spouse below daily points threshold */
+        .streak-indicator {
+            font-size: 1.35rem;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: transform 0.2s, opacity 0.2s, filter 0.2s;
+        }
+        .streak-indicator:hover {
+            transform: scale(1.1);
+        }
+        .streak-indicator.below-minimum {
+            animation: streak-pulse 2s ease-in-out infinite;
+        }
+        /* You below: strong orange – clearly "you" need to hit minimum */
+        .streak-indicator.below-you {
+            filter: hue-rotate(10deg) saturate(1.5) brightness(1.1);
+        }
+        /* Spouse below: shift to blue/teal – unmistakably "other person" */
+        .streak-indicator.below-spouse {
+            filter: hue-rotate(200deg) saturate(1.3);
+        }
+        /* Both below: deep red – both in danger */
+        .streak-indicator.below-both {
+            filter: hue-rotate(-40deg) saturate(1.6) brightness(1.05);
+        }
+        @keyframes streak-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.75; }
+        }
         .nav-overlay {
             position: fixed;
             top: 0;
@@ -421,6 +451,9 @@
                 <div id="morning-cards-indicator" class="morning-cards-indicator" style="display: none;" data-action="navigate" data-url="/morning-cards">
                     🃏
                 </div>
+                <div id="streak-indicator" class="streak-indicator" style="display: none;" data-action="navigate" data-url="/stats" title="">
+                    🔥
+                </div>
                 <button class="hamburger" id="hamburger-btn">
                     <span class="hamburger-line"></span>
                     <span class="hamburger-line"></span>
@@ -429,6 +462,7 @@
             </div>
         <div class="nav-menu" id="navMenu">
             <a href="/" class="nav-menu-item {% if request.endpoint == 'index' %}active{% endif %}">📋 Tasks</a>
+            <a href="/stats" class="nav-menu-item {% if request.endpoint == 'page_stats' %}active{% endif %}">📊 Stats</a>
             <a href="/morning-cards" class="nav-menu-item {% if request.endpoint == 'morning_cards_page' %}active{% endif %}">🌅 Morning Cards</a>
             <a href="/dice-rolls" class="nav-menu-item {% if request.endpoint == 'dice_rolls_page' %}active{% endif %}">🎲 Dice Rolls</a>
             <a href="/daily-tasks" class="nav-menu-item {% if request.endpoint == 'daily_tasks_page' %}active{% endif %}">📅 Daily Tasks</a>
@@ -676,33 +710,71 @@
             
             // Check for pending morning cards notification
             checkPendingMorningCards();
+            // Check if you or spouse are below daily minimum (streak threshold)
+            checkPendingStreakMinimum();
             
             // Then check for URL login parameters
             checkForInitialLogin();
         });
         
-        // Check for pending morning cards that need to be locked in
+        // Check for pending morning cards that need to be locked in (disabled when not using morning cards)
         async function checkPendingMorningCards() {
+            const indicator = document.getElementById('morning-cards-indicator');
+            if (indicator) indicator.style.display = 'none';
+        }
+        
+        // Show streak indicator when you or spouse have not met today's points minimum
+        async function checkPendingStreakMinimum() {
+            const indicator = document.getElementById('streak-indicator');
+            if (!indicator) return;
+            if (!window.authState || !window.authState.isAuthenticated) {
+                indicator.style.display = 'none';
+                return;
+            }
             try {
-                const response = await fetch('/api/morning-cards/today');
+                const response = await fetch('/api/task-points/balance');
                 const data = await response.json();
-                
-                const indicator = document.getElementById('morning-cards-indicator');
-                
-                // Show indicator if user has permission to select morning cards and selection is not locked
-                if (data.status === 'success' && data.selection && window.authState.canSelectMorningCards) {
-                    // Check if the card selection is NOT locked yet
-                    if (!data.selection.locked) {
-                        indicator.style.display = 'block';
-                        indicator.title = 'Lock in your morning card!';
-                    } else {
-                        indicator.style.display = 'none';
+                if (data.status !== 'success' || !data.today_points || !data.streaks) {
+                    indicator.style.display = 'none';
+                    return;
+                }
+                const todayPoints = data.today_points;
+                const streaks = data.streaks;
+                const currentUser = window.authState.currentUsername;
+                let anyBelow = false;
+                let youBelow = false;
+                let spouseBelow = false;
+                const parts = [];
+                const belowNames = [];
+                for (const [user, pts] of Object.entries(todayPoints)) {
+                    const s = streaks[user];
+                    const thresh = (s && typeof s === 'object' && s.streak_threshold != null) ? s.streak_threshold : 10;
+                    const below = (pts == null ? 0 : pts) < thresh;
+                    if (below) {
+                        anyBelow = true;
+                        belowNames.push(user);
+                        if (user === currentUser) youBelow = true;
+                        else spouseBelow = true;
                     }
+                    parts.push(`${user}: ${pts == null ? 0 : pts}/${thresh} pts`);
+                }
+                if (anyBelow) {
+                    indicator.style.display = 'block';
+                    indicator.classList.remove('below-you', 'below-spouse', 'below-both');
+                    indicator.classList.add('below-minimum');
+                    if (youBelow && spouseBelow) indicator.classList.add('below-both');
+                    else if (youBelow) indicator.classList.add('below-you');
+                    else indicator.classList.add('below-spouse');
+                    let title = parts.join(' • ');
+                    if (belowNames.length) title += ' — Below minimum: ' + belowNames.join(', ');
+                    indicator.title = title;
                 } else {
                     indicator.style.display = 'none';
+                    indicator.classList.remove('below-minimum', 'below-you', 'below-spouse', 'below-both');
                 }
             } catch (error) {
-                console.error('Error checking morning cards:', error);
+                console.error('Error checking streak minimum:', error);
+                indicator.style.display = 'none';
             }
         }
 

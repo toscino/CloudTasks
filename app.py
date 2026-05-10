@@ -18,6 +18,7 @@ from src.services.collaboration_service import CollaborationService
 from src.services.morning_card_service import MorningCardService
 from src.services.user_service import UserService
 from src.services.dice_roll_service import DiceRollService
+from src.services.task_points_service import TaskPointsService
 from src.utils.config import get_timezone
 
 # Load environment variables
@@ -39,7 +40,8 @@ CORS(app)
 
 # Initialize Services
 db = app_manager.db
-task_master = TaskMaster(db)
+task_points_service = TaskPointsService(app_manager)
+task_master = TaskMaster(db, task_points_service)
 task_service = TaskService(app_manager, task_master)
 goal_service = GoalService(app_manager)
 statistics_service = StatisticsService(app_manager, task_master)
@@ -52,6 +54,7 @@ dice_roll_service = DiceRollService(app_manager)
 # Store services on app_manager for easy access
 app_manager.collaboration_service = collaboration_service
 app_manager.user_service = user_service
+app_manager.task_points_service = task_points_service
 
 # Error handler for rate limit exceeded
 @app.errorhandler(429)
@@ -60,6 +63,7 @@ def handle_ratelimit(e):
 
 # Page routes
 app_manager.page("tasks.html", root=True)
+app_manager.page("stats.html")
 app_manager.page("test.html")
 app_manager.page("settings.html")
 app_manager.page("goals.html")
@@ -286,6 +290,74 @@ def reset_daily_tasks():
         'message': f'Daily tasks reset successfully - deleted {deleted_count} instances',
         'result': result
     })
+
+
+# Task Points Routes (standalone tracker)
+@app_manager.route('/api/task-points/balance', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_task_points_balance():
+    """Get joint balance, today's points per person, streaks"""
+    username = get_user_info(app_manager)
+    return task_points_service.get_balance_summary(username)
+
+
+@app_manager.route('/api/task-points/spend', ['POST'], limit="20 per minute")
+@with_error_handling
+def spend_task_points():
+    """Subtract points from joint balance (manual spending)"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json() or {}
+    amount = data.get('amount')
+    description = data.get('description', '')
+    if amount is None:
+        return app_manager.jsonify({'status': 'error', 'message': 'amount is required'}), 400
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return app_manager.jsonify({'status': 'error', 'message': 'amount must be an integer'}), 400
+    return task_points_service.spend_points(username, amount, description)
+
+
+@app_manager.route('/api/task-points/config', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_task_points_config():
+    """Get tier_unlock_points and streak_threshold"""
+    username = get_user_info(app_manager)
+    return app_manager.jsonify({
+        'status': 'success',
+        'config': task_points_service.get_config(username)
+    })
+
+
+@app_manager.route('/api/task-points/config', ['PUT'], limit="20 per minute")
+@with_error_handling
+def update_task_points_config():
+    """Update points_threshold (used for tier unlock and streak)"""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json() or {}
+    points_threshold = data.get('points_threshold')
+    return task_points_service.update_config(username, points_threshold)
+
+
+@app_manager.route('/api/task-points/spending-history', ['GET'], limit="20 per minute")
+@with_error_handling
+def get_task_points_spending_history():
+    """Get recent spending records"""
+    username = get_user_info(app_manager)
+    limit_param = request.args.get('limit', 20, type=int)
+    limit_param = min(max(limit_param, 1), 100)
+    return task_points_service.get_spending_history(username, limit_param)
+
+
+@app_manager.route('/api/task-points/daily-history', ['GET'], limit="30 per minute")
+@with_error_handling
+def get_task_points_daily_history():
+    """Get per-day points and streak status for calendar (last N days)"""
+    username = get_user_info(app_manager)
+    num_days = request.args.get('days', 365, type=int)
+    num_days = min(max(num_days, 1), 365)
+    return task_points_service.get_daily_history(username, num_days)
+
 
 # Collaboration Routes
 @app_manager.route('/api/collaboration/tracker', ['GET'], limit="50 per minute")
@@ -544,16 +616,9 @@ def roll_dice():
             'message': 'Request body required'
         }), 400
     
-    dice_selected = data.get('dice_selected', [])
-    return dice_roll_service.roll_dice(username, dice_selected)
-
-@app_manager.route('/api/dice-rolls/history', ['GET'], limit="50 per minute")
-@with_error_handling
-def get_dice_roll_history():
-    """Get recent dice game events (for couple)"""
-    username = get_user_info(app_manager)
-    limit = int(request.args.get('limit', 10))
-    return dice_roll_service.get_recent_games(username, limit)
+    available_dice = data.get('available_dice', [])
+    num_dice = data.get('num_dice')
+    return dice_roll_service.roll_dice(username, available_dice, num_dice)
 
 @app_manager.route('/api/dice-rolls/test/add-credits', ['POST'], limit="10 per minute")
 @with_error_handling

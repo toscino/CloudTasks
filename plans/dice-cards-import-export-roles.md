@@ -4,7 +4,7 @@
 
 **Do not merge a single die on import.** If anything is given for a die (e.g. die_1), treat that as the **entire** definition for that die. Replace that die fully with the imported object. If face 4 (or any face) is empty in the import, it is meant to be empty — we do not fill in missing keys from the current config. So:
 
-- Payload can contain one or more of `die_1`..`die_4` (and optionally `generic_base_rule`, `full_roll_rule`).
+- Payload can contain one or more of `die_1`..`die_4`.
 - For each die key present: **full replace** that die with the payload for that die. Empty fields in the payload (e.g. empty face_4) are stored as empty.
 - Only dice (and optional top-level rules) present in the payload are updated; other dice are left unchanged.
 - No per-die merging: the payload for a die is the complete definition of that die.
@@ -24,7 +24,7 @@
 - **Cards export**: Button on manage page; GET `/api/morning-cards`, serialize templates to JSON, download.
 - **Cards import**: Textarea + button; validate array (id = update if exists + permission, else error; no id = create). Backend: `POST /api/morning-cards/import`.
 - **Dice export**: Button; GET `/api/dice-rolls/config`, download JSON.
-- **Dice import**: Textarea + button; validate shape. For each die present in payload: **full replace** that die (no merging; empty = empty). Optional `generic_base_rule`/`full_roll_rule` replace if provided. Backend: extend POST config or add import endpoint that loads current config, replaces only the die objects (and optional rules) present in payload, normalizes and saves.
+- **Dice import**: Textarea + button; validate shape. For each die present in payload: **full replace** that die (no merging; empty = empty). Backend: extend POST config or add import endpoint that loads current config, replaces only the die objects present in payload, normalizes and saves.
 
 ---
 

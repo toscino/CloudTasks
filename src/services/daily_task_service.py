@@ -70,6 +70,8 @@ class DailyTaskService:
                     user_message="At least one day of week must be selected"
                 )
             
+            is_backup = bool(data.get('is_backup', False))
+
             # Validate days_of_week (0=Monday, 6=Sunday)
             days_of_week = data.get('days_of_week', [])
             if not all(0 <= day <= 6 for day in days_of_week):
@@ -84,6 +86,7 @@ class DailyTaskService:
                 'description': data['description'].strip(),
                 'points': int(data['points']),
                 'days_of_week': days_of_week,
+                'is_backup': is_backup,
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP
             }
@@ -102,6 +105,7 @@ class DailyTaskService:
                     'template_id': template_id,
                     'description': data['description'].strip(),
                     'points': int(data['points']),
+                    'is_backup': is_backup,
                     'date': today_central.isoformat(),
                     'completed': False,
                     'created_at': firestore.SERVER_TIMESTAMP
@@ -160,6 +164,8 @@ class DailyTaskService:
                 update_data['points'] = int(data['points'])
             if 'days_of_week' in data:
                 update_data['days_of_week'] = data['days_of_week']
+            if 'is_backup' in data:
+                update_data['is_backup'] = bool(data['is_backup'])
             
             doc_ref.update(update_data)
             
@@ -179,6 +185,8 @@ class DailyTaskService:
                     update_instance_data['description'] = update_data['description']
                 if 'points' in update_data:
                     update_instance_data['points'] = update_data['points']
+                if 'is_backup' in update_data:
+                    update_instance_data['is_backup'] = update_data['is_backup']
                 
                 if update_instance_data:
                     instance_doc.reference.update(update_instance_data)
@@ -313,16 +321,17 @@ class DailyTaskService:
                 'completed': True,
                 'completed_at': firestore.SERVER_TIMESTAMP
             })
-            
-            # Check and update tracker on 100-point threshold
-            from src.services.collaboration_service import CollaborationService
-            collab_service = CollaborationService(self.app_manager)
-            collab_service.check_and_update_tracker_on_threshold(username)
+
+            # Update task points (standalone tracker)
+            points_earned = instance_data.get('points', 0)
+            task_points_service = getattr(self.app_manager, 'task_points_service', None)
+            if task_points_service:
+                task_points_service.add_points_on_completion(username, points_earned)
             
             return {
                 'status': 'success',
                 'message': 'Daily task completed successfully',
-                'points_earned': instance_data.get('points', 0)
+                'points_earned': points_earned
             }
         except Exception as e:
             self.logger.error(f"Failed to complete daily task {instance_id} for {username}: {e}")
@@ -586,6 +595,11 @@ class DailyTaskService:
             else:
                 self.logger.info(f"Deleted {deleted_count} instances for {username} on {today_central}")
             
+            # Clear task points daily tally for today (standalone task points; e.g. backup pool / streak)
+            task_points_service = getattr(self.app_manager, 'task_points_service', None)
+            if task_points_service:
+                task_points_service.clear_daily_points_for_reset(username, today_central)
+
             # Clear threshold tracking for this user for today (reset collaboration scoring)
             # This ensures future threshold calculations start from 0
             threshold_key = f"threshold_{today_central.isoformat()}_{username}"
@@ -628,6 +642,7 @@ class DailyTaskService:
                         'template_id': template_id,
                         'description': template_data['description'],
                         'points': template_data['points'],
+                        'is_backup': bool(template_data.get('is_backup', False)),
                         'date': today_central.isoformat(),
                         'completed': False,
                         'abandoned': False,  # Explicitly set to False

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}CloudTasks - Stats{% endblock %}
+
+{% block styles %}
+<style>
+    .stats-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    .stats-section h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        color: #1c1e21;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    .task-points-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+        margin-bottom: 15px;
+    }
+    .task-points-item {
+        background: white;
+        padding: 10px 12px;
+        border-radius: 6px;
+        border: 1px solid #e0e0e0;
+    }
+    .task-points-item .label {
+        font-size: 11px;
+        color: #666;
+        text-transform: uppercase;
+    }
+    .task-points-item .value {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1c1e21;
+    }
+    .spend-form {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e0e0e0;
+    }
+    .form-row-inline {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    .spend-form input {
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .spend-form input[type="number"] {
+        width: 80px;
+    }
+    .spend-form input[type="text"] {
+        flex: 1;
+        min-width: 120px;
+    }
+    .below-minimum-message {
+        margin-top: 10px;
+        padding: 8px 12px;
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        font-size: 14px;
+        color: #856404;
+    }
+    .streak-calendar-section { margin-bottom: 30px; }
+    .streak-calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(20, 16px);
+        gap: 3px;
+        margin-bottom: 10px;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .streak-calendar-cell {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        cursor: default;
+    }
+    .streak-calendar-cell .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .streak-calendar-cell .dot.you-only { background-color: #ffc107; }
+    .streak-calendar-cell .dot.spouse-only { background-color: #fd7e14; }
+    .streak-calendar-cell .dot.both { background-color: #28a745; }
+    .streak-calendar-cell .dot.neither { background-color: #adb5bd; }
+    .streak-calendar-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+    }
+    .streak-calendar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .streak-calendar-legend .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .streak-calendar-legend .dot.you-only { background-color: #ffc107; }
+    .streak-calendar-legend .dot.spouse-only { background-color: #fd7e14; }
+    .streak-calendar-legend .dot.both { background-color: #28a745; }
+    .streak-calendar-legend .dot.neither { background-color: #adb5bd; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stats-section">
+    <h3>Points</h3>
+    <div class="task-points-grid" id="task-points-grid">
+        <div class="task-points-item">
+            <div class="label">Joint Balance</div>
+            <div class="value" id="task-points-balance">—</div>
+        </div>
+    </div>
+    <div id="below-minimum-message" class="below-minimum-message" style="display: none;"></div>
+    <div class="spend-form">
+        <div class="form-row-inline">
+            <input type="number" id="spend-amount" placeholder="Amount" min="1">
+            <input type="text" id="spend-description" placeholder="What did you spend on?">
+            <button class="btn btn-sm btn-secondary" id="spend-points-btn">Spend Points</button>
+        </div>
+        <div id="spend-result" class="success-message" style="display: none; margin-top: 8px;"></div>
+        <div id="spend-error" class="error-message" style="display: none; margin-top: 8px;"></div>
+    </div>
+</div>
+
+<div class="stats-section streak-calendar-section">
+    <h3>Streak calendar</h3>
+    <p style="font-size: 13px; color: #666; margin: 0 0 10px 0;">Last 365 days: who hit the daily points minimum (streak).</p>
+    <div id="streak-calendar-grid" class="streak-calendar-grid"></div>
+    <div id="streak-calendar-legend" class="streak-calendar-legend"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { waitForAuth, apiCall } from '/static/js/utils.js';
+
+    document.addEventListener('DOMContentLoaded', async function() {
+        await waitForAuth();
+        loadTaskPointsBalance();
+        loadStreakCalendar();
+        document.getElementById('spend-points-btn')?.addEventListener('click', handleSpendPoints);
+    });
+
+    async function loadTaskPointsBalance() {
+        try {
+            const data = await apiCall('/api/task-points/balance');
+            const grid = document.getElementById('task-points-grid');
+            const balanceEl = document.getElementById('task-points-balance');
+            if (!grid || !balanceEl) return;
+
+            if (data.status === 'success') {
+                balanceEl.textContent = data.balance ?? 0;
+                let html = `
+                    <div class="task-points-item">
+                        <div class="label">Joint Balance</div>
+                        <div class="value">${data.balance ?? 0}</div>
+                    </div>
+                `;
+                if (data.today_points) {
+                    for (const [user, pts] of Object.entries(data.today_points)) {
+                        html += `
+                            <div class="task-points-item">
+                                <div class="label">${user} today</div>
+                                <div class="value">${pts}</div>
+                            </div>
+                        `;
+                    }
+                }
+                if (data.streaks) {
+                    for (const [user, s] of Object.entries(data.streaks)) {
+                        const streak = (s && typeof s === 'object') ? s.current_streak : 0;
+                        const thresh = (s && typeof s === 'object') ? s.streak_threshold : 0;
+                        html += `
+                            <div class="task-points-item">
+                                <div class="label">${user} streak</div>
+                                <div class="value">${streak} days (≥${thresh} pts)</div>
+                            </div>
+                        `;
+                    }
+                }
+                grid.innerHTML = html;
+                const belowEl = document.getElementById('below-minimum-message');
+                if (belowEl && data.today_points && data.streaks) {
+                    const belowNames = [];
+                    for (const [user, pts] of Object.entries(data.today_points)) {
+                        const s = data.streaks[user];
+                        const thresh = (s && typeof s === 'object' && s.streak_threshold != null) ? s.streak_threshold : 10;
+                        if ((pts == null ? 0 : pts) < thresh) belowNames.push(user);
+                    }
+                    if (belowNames.length) {
+                        belowEl.textContent = 'Below minimum today: ' + belowNames.join(', ');
+                        belowEl.style.display = 'block';
+                    } else {
+                        belowEl.style.display = 'none';
+                    }
+                }
+            } else {
+                balanceEl.textContent = '—';
+                const belowEl = document.getElementById('below-minimum-message');
+                if (belowEl) belowEl.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error loading task points balance:', error);
+            const balanceEl = document.getElementById('task-points-balance');
+            if (balanceEl) balanceEl.textContent = '—';
+            const belowEl = document.getElementById('below-minimum-message');
+            if (belowEl) belowEl.style.display = 'none';
+        }
+    }
+
+    async function handleSpendPoints() {
+        const amountEl = document.getElementById('spend-amount');
+        const descEl = document.getElementById('spend-description');
+        const resultEl = document.getElementById('spend-result');
+        const errorEl = document.getElementById('spend-error');
+        if (!amountEl || !descEl) return;
+        const amount = parseInt(amountEl.value, 10);
+        if (isNaN(amount) || amount < 1) {
+            errorEl.textContent = 'Enter a valid amount';
+            errorEl.style.display = 'block';
+            resultEl.style.display = 'none';
+            return;
+        }
+        errorEl.style.display = 'none';
+        resultEl.style.display = 'none';
+        try {
+            const data = await apiCall('/api/task-points/spend', {
+                method: 'POST',
+                body: JSON.stringify({ amount, description: descEl.value || '' })
+            });
+            if (data.status === 'success') {
+                amountEl.value = '';
+                descEl.value = '';
+                resultEl.textContent = `Spent ${amount} points. New balance: ${data.new_balance}`;
+                resultEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                loadTaskPointsBalance();
+            } else {
+                errorEl.textContent = data.message || 'Failed to spend points';
+                errorEl.style.display = 'block';
+            }
+        } catch (e) {
+            errorEl.textContent = 'Error spending points';
+            errorEl.style.display = 'block';
+        }
+    }
+
+    async function loadStreakCalendar() {
+        const gridEl = document.getElementById('streak-calendar-grid');
+        const legendEl = document.getElementById('streak-calendar-legend');
+        if (!gridEl || !legendEl) return;
+        try {
+            const data = await apiCall('/api/task-points/daily-history?days=365');
+            if (data.status !== 'success' || !data.days) {
+                gridEl.innerHTML = '<p style="color:#666;font-size:13px;">No calendar data.</p>';
+                return;
+            }
+            const days = data.days;
+            const threshold = data.threshold ?? 10;
+            const sortedDates = Object.keys(days).sort();
+            const users = sortedDates.length ? Object.keys(days[sortedDates[0]]) : [];
+            const currentUser = window.authState?.currentUsername || (users[0] || '');
+            const spouseUser = users.length === 2 ? users.find(u => u !== currentUser) : null;
+            gridEl.innerHTML = '';
+            for (let i = 0; i < sortedDates.length; i++) {
+                const dateStr = sortedDates[i];
+                const day = days[dateStr];
+                const d = new Date(dateStr + 'T12:00:00');
+                const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const youMet = currentUser && (day[currentUser] || {}).made_streak;
+                const spouseMet = spouseUser && (day[spouseUser] || {}).made_streak;
+                let state = 'neither';
+                if (youMet && spouseMet) state = 'both';
+                else if (youMet) state = 'you-only';
+                else if (spouseMet) state = 'spouse-only';
+                const parts = [];
+                if (currentUser) parts.push(`${currentUser}: ${(day[currentUser] || {}).points ?? 0} pts`);
+                if (spouseUser) parts.push(`${spouseUser}: ${(day[spouseUser] || {}).points ?? 0} pts`);
+                const cell = document.createElement('div');
+                cell.className = 'streak-calendar-cell';
+                cell.title = `${label}: ${parts.join('; ')}`;
+                cell.innerHTML = `<span class="dot ${state}"></span>`;
+                gridEl.appendChild(cell);
+            }
+            const youLabel = currentUser || 'You';
+            const spouseLabel = spouseUser || 'Spouse';
+            legendEl.innerHTML = `
+                <span><span class="dot both"></span> Both</span>
+                <span><span class="dot you-only"></span> ${youLabel} only</span>
+                <span><span class="dot spouse-only"></span> ${spouseLabel} only</span>
+                <span><span class="dot neither"></span> Neither</span>
+                <span style="margin-left:8px;">(Streak = ≥${threshold} pts that day. 2 columns of 10 per row.)</span>
+            `;
+        } catch (e) {
+            console.error('Error loading streak calendar:', e);
+            gridEl.innerHTML = '<p style="color:#999;font-size:13px;">Could not load calendar.</p>';
+        }
+    }
+</script>
+{% endblock %}

@@ -143,6 +143,14 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+
+        .template-backup {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 600;
+            background-color: #fff3cd;
+            color: #856404;
+        }
         
         .template-actions {
             display: flex;
@@ -343,6 +351,10 @@
                     <label for="task-points">Points</label>
                     <input type="number" id="task-points" min="-100" max="100" value="1" placeholder="Points">
                 </div>
+                <div class="form-group" style="display:flex; align-items:flex-end; gap:8px; padding-bottom: 2px;">
+                    <input type="checkbox" id="task-is-backup" style="width: 18px; height: 18px; margin: 0;">
+                    <label for="task-is-backup" style="margin: 0; cursor: pointer;">Backup</label>
+                </div>
                 <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
                     <button class="btn" id="add-task-btn">Add Task</button>
                     <button class="btn btn-secondary" id="cancel-task-btn" style="display: none;">Cancel</button>
@@ -487,6 +499,7 @@
                 <div class="template-meta">
                     <span class="template-points">${template.points} points</span>
                     <span class="template-days">${selectedDays}</span>
+                    ${template.is_backup ? `<span class="template-backup">Backup</span>` : ''}
                 </div>
             `;
             
@@ -498,6 +511,7 @@
     async function addDailyTask() {
         const description = document.getElementById('task-description').value.trim();
         const points = parseInt(document.getElementById('task-points').value);
+        const isBackup = document.getElementById('task-is-backup').checked;
         
         // Get selected days
         const selectedDays = [];
@@ -531,7 +545,8 @@
                 body: JSON.stringify({
                     description: description,
                     points: points,
-                    days_of_week: selectedDays
+                    days_of_week: selectedDays,
+                    is_backup: isBackup
                 })
             });
             
@@ -568,6 +583,7 @@
         // Pre-fill form
         document.getElementById('task-description').value = template.description;
         document.getElementById('task-points').value = template.points;
+        document.getElementById('task-is-backup').checked = !!template.is_backup;
         
         // First, clear all checkboxes
         document.querySelectorAll('.day-checkbox').forEach(checkbox => {
@@ -598,6 +614,7 @@
     async function updateDailyTask() {
         const description = document.getElementById('task-description').value.trim();
         const points = parseInt(document.getElementById('task-points').value);
+        const isBackup = document.getElementById('task-is-backup').checked;
         
         if (!description) {
             alert('Please enter a task description');
@@ -629,7 +646,8 @@
                 body: JSON.stringify({
                     description: description,
                     points: points,
-                    days_of_week: selectedDays
+                    days_of_week: selectedDays,
+                    is_backup: isBackup
                 })
             });
             
@@ -654,6 +672,7 @@
     function resetTaskForm() {
         document.getElementById('task-description').value = '';
         document.getElementById('task-points').value = '1';
+        document.getElementById('task-is-backup').checked = false;
         
         // Reset days to weekdays
         document.querySelectorAll('.day-checkbox').forEach(cb => {

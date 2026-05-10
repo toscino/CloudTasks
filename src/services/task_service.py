@@ -164,13 +164,14 @@ class TaskService:
             
             # Use TaskMaster to complete task and refresh session
             result = self.task_master.complete_task_and_refresh_session(username, task_id)
+
+            # Update task points (standalone tracker)
+            points_earned = instance_data.get('points', 0)
+            task_points_service = getattr(self.app_manager, 'task_points_service', None)
+            if task_points_service:
+                task_points_service.add_points_on_completion(username, points_earned)
             
             self.logger.debug(f"TaskMaster returned {len(result['tasks'])} new tasks")
-            
-            # Check and update collaboration tracker on 100-point threshold
-            # Use existing collaboration_service from app_manager
-            collab_service = self.app_manager.collaboration_service
-            collab_service.check_and_update_tracker_on_threshold(username)
             
             return {
                 'status': 'success',

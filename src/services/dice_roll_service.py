@@ -1,6 +1,7 @@
 """
-Dice Roll Service - manages dice roll credits and game events
+Dice Roll Service - manages dice roll credits and dice configuration
 """
+import re
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
@@ -79,6 +80,16 @@ class DiceRollService:
                 'credit_cap': self.DEFAULT_CREDIT_CAP
             }
     
+    def _sorted_die_keys(self, dice_configs: Dict[str, Any]) -> List[str]:
+        """Return die keys sorted by die number (e.g. die_1, die_3, die_5)."""
+        def key_sort(k):
+            m = re.match(r'die_(\d+)', k)
+            return int(m.group(1)) if m else 0
+        return sorted(
+            (k for k in dice_configs if re.match(r'die_\d+', k)),
+            key=key_sort
+        )
+    
     def _default_dice_configs(self) -> Dict[str, Any]:
         """Default dice config (die_1-die_4: title, base_rule, alternate_rule, face_rules, face_names)"""
         return {
@@ -98,73 +109,68 @@ class DiceRollService:
             config_ref = self.db.collection('dice_configurations').document(couple_id)
             config_doc = config_ref.get()
             
-            # Normalize saved_dice_selection: list of ints 0-3, length 0-3, no duplicates
-            def normalize_saved_selection(raw):
-                if not isinstance(raw, list):
-                    return []
-                out = []
-                seen = set()
-                for x in raw:
-                    try:
-                        i = int(x)
-                        if 0 <= i <= 3 and i not in seen:
-                            out.append(i)
-                            seen.add(i)
-                    except (TypeError, ValueError):
-                        continue
-                    if len(out) >= 3:
-                        break
-                return out
-
             if config_doc.exists:
                 data = prepare_firestore_document(config_doc)
-                dice_configs = data.get('dice_configs') or {}
-                # Ensure full shape: die_1-die_4 with title, base_rule, alternate_rule, face_rules, face_names
-                defaults = self._default_dice_configs()
-                for key in defaults:
-                    d = dice_configs.get(key) or {}
-                    title = (d.get('title') or '').strip() if d.get('title') is not None else ''
-                    base = (d.get('base_rule') or '').strip() if d.get('base_rule') is not None else ''
-                    alt = (d.get('alternate_rule') or '').strip() if d.get('alternate_rule') is not None else ''
-                    fr = d.get('face_rules')
-                    if not isinstance(fr, dict):
-                        fr = {str(f): '' for f in range(1, 7)}
-                    else:
-                        fr = {str(f): (fr.get(str(f)) or '').strip() if fr.get(str(f)) is not None else '' for f in range(1, 7)}
-                    fn = d.get('face_names')
-                    if not isinstance(fn, dict):
-                        fn = {str(f): '' for f in range(1, 7)}
-                    else:
-                        fn = {str(f): (fn.get(str(f)) or '').strip() if fn.get(str(f)) is not None else '' for f in range(1, 7)}
-                    dice_configs[key] = {'title': title, 'base_rule': base, 'alternate_rule': alt, 'face_rules': fr, 'face_names': fn}
-                generic = (data.get('generic_base_rule') or '').strip() if data.get('generic_base_rule') is not None else ''
-                full_roll = (data.get('full_roll_rule') or '').strip() if data.get('full_roll_rule') is not None else ''
-                saved = normalize_saved_selection(data.get('saved_dice_selection'))
-                result = {'status': 'success', 'dice_configs': dice_configs, 'generic_base_rule': generic, 'full_roll_rule': full_roll, 'updated_at': data.get('updated_at'), 'saved_dice_selection': saved}
+                dice_configs_raw = data.get('dice_configs') or {}
+                # Use all keys matching die_{N} in stored config; if empty, use defaults
+                die_keys = self._sorted_die_keys(dice_configs_raw)
+                if not die_keys:
+                    dice_configs = self._default_dice_configs()
+                    die_keys = self._sorted_die_keys(dice_configs)
+                else:
+                    dice_configs = {}
+                    for key in die_keys:
+                        d = dice_configs_raw.get(key) or {}
+                        title = (d.get('title') or '').strip() if d.get('title') is not None else ''
+                        base = (d.get('base_rule') or '').strip() if d.get('base_rule') is not None else ''
+                        alt = (d.get('alternate_rule') or '').strip() if d.get('alternate_rule') is not None else ''
+                        fr = d.get('face_rules')
+                        if not isinstance(fr, dict):
+                            fr = {str(f): '' for f in range(1, 7)}
+                        else:
+                            fr = {str(f): (fr.get(str(f)) or '').strip() if fr.get(str(f)) is not None else '' for f in range(1, 7)}
+                        fn = d.get('face_names')
+                        if not isinstance(fn, dict):
+                            fn = {str(f): '' for f in range(1, 7)}
+                        else:
+                            fn = {str(f): (fn.get(str(f)) or '').strip() if fn.get(str(f)) is not None else '' for f in range(1, 7)}
+                        dice_configs[key] = {'title': title, 'base_rule': base, 'alternate_rule': alt, 'face_rules': fr, 'face_names': fn}
+                # Normalize saved_dice_selection: valid indices 0..N-1, filter invalid
+                max_idx = len(die_keys) - 1
+                raw_saved = data.get('saved_dice_selection') if config_doc.exists else []
+                saved = []
+                if isinstance(raw_saved, list):
+                    seen = set()
+                    for x in raw_saved:
+                        try:
+                            i = int(x)
+                            if 0 <= i <= max_idx and i not in seen:
+                                saved.append(i)
+                                seen.add(i)
+                        except (TypeError, ValueError):
+                            continue
+                saved = sorted(saved)
+                result = {'status': 'success', 'dice_configs': dice_configs, 'updated_at': data.get('updated_at'), 'saved_dice_selection': saved}
             else:
-                result = {'status': 'success', 'dice_configs': self._default_dice_configs(), 'generic_base_rule': '', 'full_roll_rule': '', 'updated_at': None, 'saved_dice_selection': []}
+                result = {'status': 'success', 'dice_configs': self._default_dice_configs(), 'updated_at': None, 'saved_dice_selection': []}
 
-            if username:
-                user_ref = self.db.collection('users').document(username)
-                user_doc = user_ref.get()
-                can_roll = user_doc.to_dict().get('can_select_morning_cards', False) if user_doc.exists else False
-                result['can_roll'] = can_roll
-                result['can_save_selection'] = not can_roll
+            # Either partner can roll; no dice selection UI (backend picks 0-4 dice at random)
+            result['can_roll'] = True
+            result['can_save_selection'] = False
             return result
         except Exception as e:
             self.logger.error(f"Failed to get dice config for {couple_id}: {e}")
             return {'status': 'error', 'message': str(e), 'dice_configs': self._default_dice_configs()}
     
     def save_dice_configuration(self, couple_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Save dice configuration for couple (dice_configs, generic_base_rule, full_roll_rule)"""
+        """Save dice configuration for couple (dice_configs)"""
         try:
             dice_configs = body.get('dice_configs') or {}
-            generic_base = str(body.get('generic_base_rule') or '').strip()
-            full_roll = str(body.get('full_roll_rule') or '').strip()
-            # Normalize: die_1-die_4 with title, base_rule, alternate_rule, face_rules, face_names
+            # Accept any keys matching die_{positive_int}; validate and normalize
             normalized = {}
-            for i in range(1, 5):
-                key = f'die_{i}'
+            for key in dice_configs:
+                if not re.match(r'^die_\d+$', key) or key == 'die_0':
+                    return {'status': 'error', 'message': f'Invalid die key "{key}": must be die_1, die_2, ...'}
                 d = dice_configs.get(key) or {}
                 title = str(d.get('title') or '').strip()
                 base = str(d.get('base_rule') or '').strip()
@@ -185,11 +191,9 @@ class DiceRollService:
             config_ref.set({
                 'couple_id': couple_id,
                 'dice_configs': normalized,
-                'generic_base_rule': generic_base,
-                'full_roll_rule': full_roll,
                 'updated_at': firestore.SERVER_TIMESTAMP
             }, merge=True)
-            return {'status': 'success', 'dice_configs': normalized, 'generic_base_rule': generic_base, 'full_roll_rule': full_roll}
+            return {'status': 'success', 'dice_configs': normalized}
         except Exception as e:
             self.logger.error(f"Failed to save dice config for {couple_id}: {e}")
             return handle_exception(e, "Failed to save dice configuration")
@@ -206,13 +210,19 @@ class DiceRollService:
                 return {'status': 'error', 'message': 'Only the non–morning-card person can save the dice selection'}
             if not isinstance(saved_dice_selection, list):
                 return {'status': 'error', 'message': 'saved_dice_selection must be a list'}
-            if len(saved_dice_selection) > 3:
-                return {'status': 'error', 'message': 'At most 3 dice can be selected'}
+            couple_id = self.get_couple_id(username)
+            if not couple_id:
+                return {'status': 'error', 'message': 'Could not determine couple_id'}
+            config_result = self.get_dice_configuration(couple_id)
+            dice_configs = config_result.get('dice_configs') or {}
+            max_idx = len(self._sorted_die_keys(dice_configs)) - 1
+            if len(saved_dice_selection) > max_idx + 1:
+                return {'status': 'error', 'message': f'At most {max_idx + 1} dice can be selected'}
             seen = set()
             for x in saved_dice_selection:
                 try:
                     i = int(x)
-                    if i < 0 or i > 3:
+                    if i < 0 or i > max_idx:
                         return {'status': 'error', 'message': f'Invalid die index: {i}'}
                     if i in seen:
                         return {'status': 'error', 'message': 'Duplicate die index'}
@@ -220,9 +230,6 @@ class DiceRollService:
                 except (TypeError, ValueError):
                     return {'status': 'error', 'message': f'Invalid die index: {x}'}
             normalized = sorted(seen)
-            couple_id = self.get_couple_id(username)
-            if not couple_id:
-                return {'status': 'error', 'message': 'Could not determine couple_id'}
             config_ref = self.db.collection('dice_configurations').document(couple_id)
             config_ref.set({'saved_dice_selection': normalized, 'updated_at': firestore.SERVER_TIMESTAMP}, merge=True)
             return {'status': 'success', 'message': 'Selection saved', 'saved_dice_selection': normalized}
@@ -248,18 +255,22 @@ class DiceRollService:
         return {'title': title, 'base_rule': base, 'alternate_rule': alt, 'face_rules': fr, 'face_names': fn}
     
     def import_dice_configuration(self, couple_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Import (partial) dice config. For each die present, full replace that die; empty fields stay empty. Optional generic_base_rule, full_roll_rule replace if provided. Validate before any write."""
+        """Import (partial) dice config. For each die present, full replace that die; empty fields stay empty. Only replaces dice that exist in current config."""
         try:
             if not isinstance(body, dict):
                 return {'status': 'error', 'message': 'Import payload must be a JSON object'}
             dice_configs_in = body.get('dice_configs')
             if dice_configs_in is not None and not isinstance(dice_configs_in, dict):
                 return {'status': 'error', 'message': 'dice_configs must be an object'}
-            valid_die_keys = {f'die_{i}' for i in range(1, 5)}
+            # Get current config - only allow replacing dice that exist
+            current = self.get_dice_configuration(couple_id)
+            if current.get('status') != 'success':
+                return current
+            valid_die_keys = set(current.get('dice_configs') or {})
             if dice_configs_in:
                 for key in dice_configs_in:
                     if key not in valid_die_keys:
-                        return {'status': 'error', 'message': f'Invalid key "{key}": must be die_1, die_2, die_3, or die_4'}
+                        return {'status': 'error', 'message': f'Invalid key "{key}": not in current configuration'}
                     d = dice_configs_in[key]
                     if not isinstance(d, dict):
                         return {'status': 'error', 'message': f'dice_configs.{key} must be an object'}
@@ -270,27 +281,13 @@ class DiceRollService:
                         if d.get('face_names') is not None and not isinstance(d.get('face_names'), dict):
                             return {'status': 'error', 'message': f'dice_configs.{key}.face_names must be an object with keys "1"-"6"'}
             
-            # Get current config and build merged (full replace per die present)
-            current = self.get_dice_configuration(couple_id)
-            if current.get('status') != 'success':
-                return current
             merged_configs = dict(current.get('dice_configs') or self._default_dice_configs())
-            merged_generic = (body.get('generic_base_rule') if 'generic_base_rule' in body else current.get('generic_base_rule')) or ''
-            merged_full_roll = (body.get('full_roll_rule') if 'full_roll_rule' in body else current.get('full_roll_rule')) or ''
-            if isinstance(merged_generic, str):
-                merged_generic = merged_generic.strip()
-            if isinstance(merged_full_roll, str):
-                merged_full_roll = merged_full_roll.strip()
             if dice_configs_in:
                 for key in valid_die_keys:
                     if key in dice_configs_in:
                         merged_configs[key] = self._normalize_one_die(dice_configs_in[key])
             
-            return self.save_dice_configuration(couple_id, {
-                'dice_configs': merged_configs,
-                'generic_base_rule': merged_generic,
-                'full_roll_rule': merged_full_roll
-            })
+            return self.save_dice_configuration(couple_id, {'dice_configs': merged_configs})
         except Exception as e:
             self.logger.error(f"Failed to import dice config for {couple_id}: {e}")
             return handle_exception(e, "Failed to import dice configuration")
@@ -409,66 +406,16 @@ class DiceRollService:
         except Exception as e:
             return handle_exception(e, "Failed to add credits from morning cards")
     
-    def roll_dice(self, username: str, dice_selected: List[int]) -> Dict[str, Any]:
-        """Roll selected dice, apply configured rules, deduct credits"""
+    def roll_dice(self, username: str, available_dice: List[int] = None, num_dice: int = None) -> Dict[str, Any]:
+        """Roll dice - either partner can roll. Roller picks available pool + exact count; backend picks that many random dice from pool and rolls them."""
         try:
-            # Check user has permission
-            user_ref = self.db.collection('users').document(username)
-            user_doc = user_ref.get()
-            
-            if not user_doc.exists:
-                return {
-                    'status': 'error',
-                    'message': 'User not found'
-                }
-            
-            user_data = user_doc.to_dict()
-            can_select = user_data.get('can_select_morning_cards', False)
-            
-            if not can_select:
-                return {
-                    'status': 'error',
-                    'message': 'You do not have permission to roll dice'
-                }
-            
-            # Roller uses saved_dice_selection from config (ignore request body)
             couple_id = self.get_couple_id(username)
             if not couple_id or not isinstance(couple_id, str) or couple_id.strip() == '':
                 return {
                     'status': 'error',
                     'message': 'Could not determine couple_id'
                 }
-            config_result = self.get_dice_configuration(couple_id)
-            if config_result.get('status') != 'success':
-                return config_result
-            saved = config_result.get('saved_dice_selection') or []
-            if not isinstance(saved, list):
-                saved = []
-            # Normalize: ints 0-3, max 3, no duplicates
-            dice_selected = []
-            seen = set()
-            for x in saved:
-                try:
-                    i = int(x)
-                    if 0 <= i <= 3 and i not in seen:
-                        dice_selected.append(i)
-                        seen.add(i)
-                    if len(dice_selected) >= 3:
-                        break
-                except (TypeError, ValueError):
-                    continue
-            
-            # Calculate credits needed
-            credits_needed = 1 + len(dice_selected)  # Base + per die
-            
-            # Get couple_id and check credits
-            couple_id = self.get_couple_id(username)
-            if not couple_id or not isinstance(couple_id, str) or couple_id.strip() == '':
-                return {
-                    'status': 'error',
-                    'message': 'Could not determine couple_id'
-                }
-            
+
             # Ensure username is valid
             if not username or not isinstance(username, str) or username.strip() == '':
                 return {
@@ -476,20 +423,32 @@ class DiceRollService:
                     'message': 'Invalid username'
                 }
             
-            credits_data = self.get_or_create_credits(couple_id)
-            current_credits = credits_data.get('total_credits', 0)
-            
-            if current_credits < credits_needed:
-                return {
-                    'status': 'error',
-                    'message': f'Insufficient credits. Need {credits_needed}, have {current_credits}'
-                }
-            
             # Get dice configuration
             config_result = self.get_dice_configuration(couple_id)
             dice_configs = config_result.get('dice_configs') or self._default_dice_configs()
-            generic_base = (config_result.get('generic_base_rule') or '').strip()
-            full_roll = (config_result.get('full_roll_rule') or '').strip()
+            sorted_keys = self._sorted_die_keys(dice_configs)
+            num_dice = len(sorted_keys)
+            
+            # Normalize available_dice: list of ints 0..N-1, no duplicates
+            pool = []
+            if isinstance(available_dice, list):
+                seen = set()
+                for x in available_dice:
+                    try:
+                        i = int(x)
+                        if 0 <= i < num_dice and i not in seen:
+                            pool.append(i)
+                            seen.add(i)
+                    except (TypeError, ValueError):
+                        continue
+            # Normalize num_dice: exact count to roll, cap at pool size
+            try:
+                n = int(num_dice) if num_dice is not None else len(pool)
+            except (TypeError, ValueError):
+                n = len(pool)
+            n = max(0, min(n, len(pool))) if pool else 0
+            # Pick exactly n random dice from the available pool
+            dice_selected = sorted(random.sample(pool, n)) if n > 0 else []
             
             # Roll dice
             dice_results = {}
@@ -501,9 +460,11 @@ class DiceRollService:
             # - Not selected: base_rule only. Selected: alternate_rule and face_rule separately.
             final_rules = {}
             rules_detail = {}
-            for rule_idx in range(1, 5):
-                die_idx = rule_idx - 1
-                cfg = dice_configs.get(f'die_{rule_idx}') or {}
+            die_titles = {}
+            face_names_by_die = {}
+            for pos, (rule_idx, die_key) in enumerate(zip(range(1, num_dice + 1), sorted_keys)):
+                die_idx = pos
+                cfg = dice_configs.get(die_key) or {}
                 base = (cfg.get('base_rule') or '').strip()
                 alt = (cfg.get('alternate_rule') or '').strip()
                 face_rules_map = cfg.get('face_rules') or {}
@@ -512,169 +473,17 @@ class DiceRollService:
                     face_value = dice_results.get(str(die_idx), 1)
                     face_rule = (face_rules_map.get(str(face_value)) or '').strip()
                     parts = [p for p in (alt, face_rule) if p]
-                    final_rules[rule_key] = ' '.join(parts)  # keep combined for event/back compat
+                    final_rules[rule_key] = ' '.join(parts)
                     rules_detail[str(rule_idx)] = {'alternate': alt, 'face': face_rule}
                 else:
                     final_rules[rule_key] = base
                     rules_detail[str(rule_idx)] = {'alternate': base, 'face': ''}
-            
-            # Generic base rule: 0–2 dice → generic_base when set; 3 dice → full_roll when set (else nothing)
-            base_rule = full_roll if len(dice_selected) == 3 else generic_base
-            if base_rule:
-                final_rules['base'] = base_rule
-            
-            # Clean final_rules - ensure no None values, empty keys, or empty values
-            # Firestore does not allow empty strings as values in map fields
-            cleaned_final_rules = {}
-            for key, value in final_rules.items():
-                if key is None:
-                    continue
-                key_str = str(key).strip()
-                if not key_str:  # Skip empty keys
-                    continue
-                if value is None:
-                    continue
-                value_str = str(value).strip()
-                # CRITICAL: Firestore rejects empty strings in map fields - must have non-empty value
-                if not value_str:
-                    self.logger.warning(f"Skipping empty value for rule key: {key_str}")
-                    continue
-                cleaned_final_rules[key_str] = value_str
-            
-            # Deduct credits
-            new_total = current_credits - credits_needed
-            credits_ref = self.db.collection('dice_roll_credits').document(couple_id)
-            credits_ref.update({
-                'total_credits': new_total,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
-            
-            # Create dice game event - ensure all fields are valid for Firestore
-            today_central = datetime.now(self.central_tz).date()
-            
-            # Final validation of all fields
-            couple_id_str = str(couple_id).strip()
-            username_str = str(username).strip()
-            
-            if not couple_id_str or not username_str:
-                return {
-                    'status': 'error',
-                    'message': 'Invalid couple_id or username'
-                }
-            
-            # Build event_data, only including non-empty dictionaries
-            # Ensure dice_selected is a list of integers (Firestore can handle this)
-            # Ensure dice_results has string keys (already done above)
-            event_data = {
-                'couple_id': couple_id_str,
-                'username': username_str,
-                'date': today_central.isoformat(),
-                'dice_selected': list(dice_selected) if dice_selected else [],
-                'dice_results': dict(dice_results) if dice_results else {},
-                'credits_used': int(credits_needed),
-                'created_at': firestore.SERVER_TIMESTAMP
-            }
-            
-            # Validate final_rules - only include non-empty (Firestore rejects empty map values)
-            validated_final_rules = {}
-            if cleaned_final_rules:
-                for key, value in cleaned_final_rules.items():
-                    if value and str(value).strip():
-                        validated_final_rules[str(key).strip()] = str(value).strip()
-                    else:
-                        self.logger.warning(f"Skipping empty final_rule value for key: {key}")
-            
-            if validated_final_rules:
-                event_data['final_rules'] = validated_final_rules
-            
-            # Validate event_data before storing - check all nested values
-            try:
-                # Validate all nested dictionary values and ensure proper types
-                for key, value in event_data.items():
-                    # Skip SERVER_TIMESTAMP - that's handled by Firestore
-                    if value == firestore.SERVER_TIMESTAMP:
-                        continue
-                    
-                    if isinstance(value, dict):
-                        # Ensure all map keys are strings (Firestore requirement)
-                        for dict_key, dict_value in value.items():
-                            if dict_key is None:
-                                raise ValueError(f"None key in {key} dictionary")
-                            dict_key_str = str(dict_key).strip()
-                            if not dict_key_str:
-                                raise ValueError(f"Empty key in {key} dictionary")
-                            if dict_value is None:
-                                raise ValueError(f"None value for key {dict_key_str} in {key}")
-                            if isinstance(dict_value, str) and not dict_value.strip():
-                                raise ValueError(f"Empty string value for key {dict_key_str} in {key}")
-                    elif isinstance(value, str) and not value.strip():
-                        raise ValueError(f"Empty string value in event_data for key: {key}")
-                    elif isinstance(value, list):
-                        # Validate list items
-                        for item in value:
-                            if item is None:
-                                raise ValueError(f"None value in list for key: {key}")
-                
-                # Create a clean copy with only Firestore-compatible types
-                clean_event_data = {}
-                for key, value in event_data.items():
-                    if value == firestore.SERVER_TIMESTAMP:
-                        clean_event_data[key] = value
-                    elif isinstance(value, dict):
-                        # Ensure all keys are strings
-                        clean_dict = {}
-                        for k, v in value.items():
-                            clean_dict[str(k)] = v
-                        clean_event_data[key] = clean_dict
-                    else:
-                        clean_event_data[key] = value
-                
-                event_ref = self.db.collection('dice_game_events').add(clean_event_data)
-                event_id = event_ref[1].id
-            except Exception as e:
-                # Log more details about the data structure
-                self.logger.error(f"Error creating dice game event: {e}")
-                self.logger.error(f"couple_id: '{couple_id_str}', username: '{username_str}'")
-                self.logger.error(f"event_data keys: {list(event_data.keys())}")
-                if 'final_rules' in event_data:
-                    self.logger.error(f"final_rules: {event_data['final_rules']}")
-                    self.logger.error(f"final_rules types: {[(k, type(v).__name__) for k, v in event_data['final_rules'].items()]}")
-                if 'dice_results' in event_data:
-                    self.logger.error(f"dice_results: {event_data['dice_results']}")
-                    self.logger.error(f"dice_results key types: {[type(k).__name__ for k in event_data['dice_results'].keys()]}")
-                raise
-            
-            # Log transaction - ensure all fields are valid
-            transaction_data = {
-                'couple_id': couple_id_str,
-                'date': today_central.isoformat(),
-                'type': 'spent',
-                'amount': float(credits_needed),
-                'source': 'dice_roll',
-                'username': username_str,
-                'created_at': firestore.SERVER_TIMESTAMP
-            }
-            # Validate transaction data before storing
-            for key, value in transaction_data.items():
-                if value == firestore.SERVER_TIMESTAMP:
-                    continue
-                if isinstance(value, str) and not value.strip():
-                    self.logger.warning(f"Empty string in transaction_data for key: {key}")
-                    transaction_data[key] = 'unknown'  # Use placeholder instead of empty string
-            
-            self.db.collection('dice_credit_transactions').add(transaction_data)
-            
-            self.logger.info(f"User {username} rolled {len(dice_selected)} dice, used {credits_needed} credits")
-            
-            # Build display names for frontend (die titles and face names)
-            die_titles = {}
-            face_names_by_die = {}
-            for rule_idx in range(1, 5):
-                cfg = dice_configs.get(f'die_{rule_idx}') or {}
                 t = (cfg.get('title') or '').strip()
                 die_titles[rule_idx] = t if t else f'Die {rule_idx}'
                 fn = cfg.get('face_names') or {}
                 face_names_by_die[rule_idx] = {str(f): (fn.get(str(f)) or '').strip() or str(f) for f in range(1, 7)}
+            
+            self.logger.info(f"User {username} rolled {len(dice_selected)} dice")
             
             return {
                 'status': 'success',
@@ -682,60 +491,13 @@ class DiceRollService:
                 'dice_results': dice_results,
                 'final_rules': final_rules,
                 'rules_detail': rules_detail,
-                'base_rule': base_rule,
                 'die_titles': die_titles,
                 'face_names_by_die': face_names_by_die,
-                'credits_used': credits_needed,
-                'remaining_credits': new_total,
-                'event_id': event_id
+                'credits_used': 0,
+                'remaining_credits': 0
             }
         except Exception as e:
             return handle_exception(e, "Failed to roll dice")
-    
-    def get_recent_games(self, username: str, limit: int = 10) -> Dict[str, Any]:
-        """Get recent dice game events for couple"""
-        try:
-            couple_id = self.get_couple_id(username)
-            if not couple_id:
-                return {
-                    'status': 'error',
-                    'message': 'Could not determine couple_id'
-                }
-            
-            # Query events for this couple (no ordering to avoid composite index requirement)
-            events_query = self.db.collection('dice_game_events').where(
-                filter=FieldFilter('couple_id', '==', couple_id)
-            )
-            
-            events = []
-            for doc in events_query.stream():
-                event_data = prepare_firestore_document(doc)
-                events.append(event_data)
-            
-            # Sort by created_at in memory (most recent first)
-            # Handle both datetime objects and timestamps
-            def get_sort_key(event):
-                created_at = event.get('created_at')
-                if created_at is None:
-                    return datetime.min
-                if isinstance(created_at, datetime):
-                    return created_at
-                # If it's a Firestore timestamp, convert it
-                if hasattr(created_at, 'timestamp'):
-                    return datetime.fromtimestamp(created_at.timestamp())
-                return datetime.min
-            
-            events.sort(key=get_sort_key, reverse=True)
-            
-            # Limit after sorting
-            events = events[:limit]
-            
-            return {
-                'status': 'success',
-                'events': events
-            }
-        except Exception as e:
-            return handle_exception(e, "Failed to get recent games")
     
     def reset_credits_daily(self) -> Dict[str, Any]:
         """Daily reset at 2am - carry over credits (with cap)"""

@@ -8,14 +8,16 @@ from datetime import datetime
 import pytz
 from src.utils.logger import logger
 from src.utils.config import get_spouse
+from src.services.task_points_service import DEFAULT_TIER_UNLOCK_POINTS
 from src.utils.random_selection import resolve_random_selection
 
 
 class TaskMaster:
     """Manages task selection from daily tasks using point-based selection"""
-    
-    def __init__(self, db):
+
+    def __init__(self, db, task_points_service=None):
         self.db = db
+        self.task_points_service = task_points_service
     
     def _sanitize_task_data(self, task_data):
         """Convert Firestore timestamps for JSON serialization"""
@@ -38,11 +40,18 @@ class TaskMaster:
         return task_data
     
     def _select_tasks_by_points(self, username, tasks_needed=5, exclude_task_ids=None):
-        """Select tasks by point value (largest absolute points first)"""
+        """Select tasks by point value: highest absolute points first, then next tier down."""
         try:
             local_tz = pytz.timezone('US/Central')
             today_central = datetime.now(local_tz).date()
-            
+
+            points_earned_today = 0
+            if self.task_points_service:
+                config = self.task_points_service.get_config(username)
+                points_earned_today = self.task_points_service.get_daily_points_today(username)
+            else:
+                config = {'points_threshold': DEFAULT_TIER_UNLOCK_POINTS}
+
             # Get all daily task instances for today (not completed, not abandoned)
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
@@ -51,51 +60,74 @@ class TaskMaster:
                     FieldFilter('completed', '==', False)
                 ])
             )
-            
-            available_tasks = []
-            seen_instance_ids = set()  # Prevent duplicates from query
-            
+
+            doable_tasks = []  # Presented + unpresented, not completed, not abandoned
+            available_tasks = []  # Unpresented only (eligible to be presented)
+            seen_instance_ids = set()
+
             for doc in instances_query.stream():
                 instance_id = doc.id
-                
-                # Skip if we've already seen this instance ID (duplicate prevention)
                 if instance_id in seen_instance_ids:
                     logger.warning(f"Duplicate instance ID detected in query: {instance_id} for {username}")
                     continue
                 seen_instance_ids.add(instance_id)
-                
+
                 instance_data = doc.to_dict()
                 instance_data['id'] = instance_id
-                
-                # Skip abandoned tasks
+
                 if instance_data.get('abandoned', False):
                     continue
-                
-                # Skip excluded tasks
+
+                doable_tasks.append(instance_data)
+
                 if exclude_task_ids and instance_id in exclude_task_ids:
                     continue
-                
-                # Skip tasks that are already presented (unless we're refreshing)
                 if instance_data.get('presented_at'):
                     continue
-                
+
                 available_tasks.append(instance_data)
-            
+
             if not available_tasks:
                 logger.debug(f"No available tasks for {username}")
                 return []
-            
-            # Group tasks by absolute point value (descending)
+
+            # Backup tasks: only enter the selection pool when non-backup "doable" point supply is
+            # below ceil(1.5 * remaining_goal), where remaining_goal = max(0, goal - earned_today).
+            # Debug: compare non_backup_remaining_points (available) vs coverage_target (needed buffer).
+            goal_points = config.get('points_threshold', DEFAULT_TIER_UNLOCK_POINTS)
+            remaining_goal = max(0, int(goal_points) - int(points_earned_today))
+            non_backup_remaining_points = 0
+            for t in doable_tasks:
+                if t.get('is_backup', False):
+                    continue
+                non_backup_remaining_points += max(0, int(t.get('points', 0) or 0))
+
+            coverage_target = int((remaining_goal * 3 + 1) // 2)  # ceil(remaining_goal * 1.5)
+            backups_eligible = (remaining_goal > 0) and (non_backup_remaining_points < coverage_target)
+            logger.debug(
+                f"Backup tasks {username}: non-backup pts available={non_backup_remaining_points}, "
+                f"needed for pool (ceil 1.5x remaining_goal)={coverage_target} "
+                f"(remaining_goal={remaining_goal}, daily_goal={goal_points}, earned_today={points_earned_today}); "
+                f"backups_eligible={backups_eligible}"
+            )
+
+            # Filter backups unless eligible
+            if not backups_eligible:
+                available_tasks = [t for t in available_tasks if not t.get('is_backup', False)]
+                if not available_tasks:
+                    logger.debug(f"No available non-backup tasks for {username} (backups not eligible)")
+                    return []
+
+            # Group available tasks by point value
             tasks_by_points = {}
             for task in available_tasks:
                 points = abs(task.get('points', 0))
                 if points not in tasks_by_points:
                     tasks_by_points[points] = []
                 tasks_by_points[points].append(task)
-            
-            # Sort point values descending
+
             sorted_point_values = sorted(tasks_by_points.keys(), reverse=True)
-            
+
             selected_tasks = []
             # Select tasks starting from highest point tier
             for point_value in sorted_point_values:
@@ -295,13 +327,7 @@ class TaskMaster:
             })
             
             logger.debug(f"Marked daily task {completed_task_id} as completed for {username}")
-            
-            # Check and update tracker on 100-point threshold
-            # Note: This is called from task_master, so we need to create a minimal service
-            # Since we can't easily access app_manager here, we'll skip threshold check
-            # The threshold check will be handled in daily_task_service.complete_daily_task
-            # which is called from the API endpoint
-            
+
             # Remove completed task from current session
             remaining_tasks = [t for t in current_tasks if t['id'] != completed_task_id]
             
