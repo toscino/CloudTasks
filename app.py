@@ -40,12 +40,12 @@ CORS(app)
 
 # Initialize Services
 db = app_manager.db
-task_points_service = TaskPointsService(app_manager)
-task_master = TaskMaster(db, task_points_service)
+daily_task_service = DailyTaskService(app_manager)
+task_points_service = TaskPointsService(app_manager, daily_task_service)
+task_master = TaskMaster(db, task_points_service, daily_task_service)
 task_service = TaskService(app_manager, task_master)
 goal_service = GoalService(app_manager)
 statistics_service = StatisticsService(app_manager, task_master)
-daily_task_service = DailyTaskService(app_manager)
 collaboration_service = CollaborationService(app_manager)
 morning_card_service = MorningCardService(app_manager)
 user_service = UserService(app_manager)
@@ -321,7 +321,7 @@ def spend_task_points():
 @app_manager.route('/api/task-points/config', ['GET'], limit="50 per minute")
 @with_error_handling
 def get_task_points_config():
-    """Get tier_unlock_points and streak_threshold"""
+    """Get computed daily_goal_today (and spouse if linked)"""
     username = get_user_info(app_manager)
     return app_manager.jsonify({
         'status': 'success',
@@ -332,11 +332,9 @@ def get_task_points_config():
 @app_manager.route('/api/task-points/config', ['PUT'], limit="20 per minute")
 @with_error_handling
 def update_task_points_config():
-    """Update points_threshold (used for tier unlock and streak)"""
+    """Deprecated: daily goal is computed from tasks; PUT returns current config only"""
     username = get_user_info(app_manager)
-    data = app_manager.get_json() or {}
-    points_threshold = data.get('points_threshold')
-    return task_points_service.update_config(username, points_threshold)
+    return task_points_service.update_config(username)
 
 
 @app_manager.route('/api/task-points/spending-history', ['GET'], limit="20 per minute")

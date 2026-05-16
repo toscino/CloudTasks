@@ -10,6 +10,17 @@ from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
 from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
+from collections import defaultdict
+
+
+def compute_daily_goal_from_instances(instances: List[Dict[str, Any]]) -> int:
+    """Sum points at the highest point tier for the day; floor at 0."""
+    if not instances:
+        return 0
+    points_list = [int(i.get('points', 0) or 0) for i in instances]
+    max_pts = max(points_list)
+    total = sum(p for p in points_list if p == max_pts)
+    return max(0, total)
 
 
 class DailyTaskService:
@@ -290,6 +301,53 @@ class DailyTaskService:
                 'status': 'error',
                 'message': f'Failed to get today\'s instances: {str(e)}'
             }
+
+    def compute_daily_goal(self, username: str, target_date: date) -> int:
+        """Daily goal = sum of points at the top point tier for all instances that day."""
+        try:
+            instances_query = self.db.collection('daily_task_instances').where(
+                filter=firestore.And([
+                    FieldFilter('username', '==', username),
+                    FieldFilter('date', '==', target_date.isoformat()),
+                ])
+            )
+            instances = [doc.to_dict() for doc in instances_query.stream()]
+            return compute_daily_goal_from_instances(instances)
+        except Exception as e:
+            self.logger.error(f"Failed to compute daily goal for {username} on {target_date}: {e}")
+            return 0
+
+    def compute_daily_goals_for_range(
+        self, username: str, start_date: date, end_date: date
+    ) -> Dict[str, int]:
+        """Map date ISO string -> daily goal for each day in range (inclusive)."""
+        try:
+            by_date: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            instances_query = self.db.collection('daily_task_instances').where(
+                filter=firestore.And([
+                    FieldFilter('username', '==', username),
+                    FieldFilter('date', '>=', start_date.isoformat()),
+                    FieldFilter('date', '<=', end_date.isoformat()),
+                ])
+            )
+            for doc in instances_query.stream():
+                data = doc.to_dict()
+                day_str = data.get('date')
+                if day_str:
+                    by_date[day_str].append(data)
+
+            goals: Dict[str, int] = {}
+            d = start_date
+            while d <= end_date:
+                day_str = d.isoformat()
+                goals[day_str] = compute_daily_goal_from_instances(by_date.get(day_str, []))
+                d += timedelta(days=1)
+            return goals
+        except Exception as e:
+            self.logger.error(
+                f"Failed to compute daily goals for {username} {start_date}..{end_date}: {e}"
+            )
+            return {}
     
     def complete_daily_task(self, instance_id: str, username: str) -> Dict[str, Any]:
         """Complete daily task instance"""

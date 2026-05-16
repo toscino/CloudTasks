@@ -144,10 +144,9 @@
 
 <div class="settings-section">
     <h3>Task Points</h3>
-    <p>Points threshold (tier unlock and streak):</p>
-    <input type="number" id="points-threshold" min="0" placeholder="200" style="width: 80px; padding: 8px; margin-right: 10px;">
-    <button class="btn btn-sm" id="save-task-points-config-btn" style="margin-top: 10px;">Save</button>
-    <div id="task-points-config-status" class="status-message" style="display: none; margin-top: 10px;"></div>
+    <p>Daily goal is calculated automatically from your highest-point tasks scheduled for today.</p>
+    <p><strong>Your goal today:</strong> <span id="daily-goal-today">—</span> pts</p>
+    <p id="spouse-daily-goal-row" style="display: none;"><strong>Spouse goal today:</strong> <span id="spouse-daily-goal-today">—</span> pts</p>
 </div>
 
 <div class="settings-section">
@@ -389,38 +388,19 @@ async function loadTaskPointsConfig() {
         const data = await response.json();
         if (data.status === 'success' && data.config) {
             const c = data.config;
-            const el = document.getElementById('points-threshold');
-            if (el) el.value = c.points_threshold ?? 200;
+            const goalEl = document.getElementById('daily-goal-today');
+            if (goalEl) goalEl.textContent = c.daily_goal_today ?? 0;
+            const spouseRow = document.getElementById('spouse-daily-goal-row');
+            const spouseGoalEl = document.getElementById('spouse-daily-goal-today');
+            if (c.spouse_daily_goal_today != null && spouseRow && spouseGoalEl) {
+                spouseRow.style.display = 'block';
+                spouseGoalEl.textContent = c.spouse_daily_goal_today;
+            } else if (spouseRow) {
+                spouseRow.style.display = 'none';
+            }
         }
     } catch (e) {
         console.error('Error loading task points config:', e);
-    }
-}
-
-async function saveTaskPointsConfig() {
-    const el = document.getElementById('points-threshold');
-    const statusEl = document.getElementById('task-points-config-status');
-    const val = el ? parseInt(el.value, 10) : null;
-    try {
-        const response = await fetch('/api/task-points/config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                points_threshold: isNaN(val) ? undefined : val
-            })
-        });
-        const data = await response.json();
-        if (statusEl) {
-            statusEl.style.display = 'block';
-            statusEl.className = 'status-message ' + (data.status === 'success' ? 'success' : 'error');
-            statusEl.textContent = data.status === 'success' ? 'Saved' : (data.message || 'Failed');
-        }
-    } catch (e) {
-        if (statusEl) {
-            statusEl.style.display = 'block';
-            statusEl.className = 'status-message error';
-            statusEl.textContent = 'Error saving';
-        }
     }
 }
 
@@ -451,10 +431,6 @@ document.addEventListener('DOMContentLoaded', function() {
         linkBtn.addEventListener('click', linkWithCode);
     }
 
-    const saveTaskPointsBtn = document.getElementById('save-task-points-config-btn');
-    if (saveTaskPointsBtn) {
-        saveTaskPointsBtn.addEventListener('click', saveTaskPointsConfig);
-    }
 });
 </script>
 

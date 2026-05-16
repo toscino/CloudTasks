@@ -8,16 +8,16 @@ from datetime import datetime
 import pytz
 from src.utils.logger import logger
 from src.utils.config import get_spouse
-from src.services.task_points_service import DEFAULT_TIER_UNLOCK_POINTS
 from src.utils.random_selection import resolve_random_selection
 
 
 class TaskMaster:
     """Manages task selection from daily tasks using point-based selection"""
 
-    def __init__(self, db, task_points_service=None):
+    def __init__(self, db, task_points_service=None, daily_task_service=None):
         self.db = db
         self.task_points_service = task_points_service
+        self.daily_task_service = daily_task_service
     
     def _sanitize_task_data(self, task_data):
         """Convert Firestore timestamps for JSON serialization"""
@@ -47,10 +47,14 @@ class TaskMaster:
 
             points_earned_today = 0
             if self.task_points_service:
-                config = self.task_points_service.get_config(username)
                 points_earned_today = self.task_points_service.get_daily_points_today(username)
+
+            if self.daily_task_service:
+                goal_points = self.daily_task_service.compute_daily_goal(username, today_central)
+            elif self.task_points_service:
+                goal_points = self.task_points_service.get_daily_goal(username, today_central)
             else:
-                config = {'points_threshold': DEFAULT_TIER_UNLOCK_POINTS}
+                goal_points = 0
 
             # Get all daily task instances for today (not completed, not abandoned)
             instances_query = self.db.collection('daily_task_instances').where(
@@ -94,7 +98,6 @@ class TaskMaster:
             # Backup tasks: only enter the selection pool when non-backup "doable" point supply is
             # below ceil(1.5 * remaining_goal), where remaining_goal = max(0, goal - earned_today).
             # Debug: compare non_backup_remaining_points (available) vs coverage_target (needed buffer).
-            goal_points = config.get('points_threshold', DEFAULT_TIER_UNLOCK_POINTS)
             remaining_goal = max(0, int(goal_points) - int(points_earned_today))
             non_backup_remaining_points = 0
             for t in doable_tasks:

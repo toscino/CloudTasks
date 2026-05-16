@@ -4,47 +4,47 @@ Task Points Service - manages standalone task points (per-person daily, joint ba
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from src.utils.config import get_timezone
 
-
-# Default config value (used for both tier unlock and streak threshold)
-DEFAULT_POINTS_THRESHOLD = 200
-DEFAULT_TIER_UNLOCK_POINTS = 200  # Alias for TaskMaster
+if TYPE_CHECKING:
+    from src.services.daily_task_service import DailyTaskService
 
 
 class TaskPointsService:
     """Service for standalone task points tracking"""
 
-    def __init__(self, app_manager):
+    def __init__(self, app_manager, daily_task_service: Optional['DailyTaskService'] = None):
         self.app_manager = app_manager
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.central_tz = get_timezone()
+        self._daily_task_service = daily_task_service
 
-    def get_couple_id(self, username: str) -> Optional[str]:
-        """Get couple identifier (sorted usernames); single user = username"""
-        try:
-            user_ref = self.db.collection('users').document(username)
-            user_doc = user_ref.get()
+    def set_daily_task_service(self, daily_task_service: 'DailyTaskService') -> None:
+        """Wire DailyTaskService after construction (avoids circular init in app.py)."""
+        self._daily_task_service = daily_task_service
 
-            if not user_doc.exists:
-                return username  # Assume single user
+    def get_daily_goal(self, username: str, target_date: date) -> int:
+        """Per-day goal from top point tier of scheduled instances."""
+        if self._daily_task_service:
+            return self._daily_task_service.compute_daily_goal(username, target_date)
+        return 0
 
-            user_data = user_doc.to_dict()
-            spouse_username = user_data.get('spouse_username')
-
-            if not spouse_username:
-                return username
-
-            usernames = sorted([username, spouse_username])
-            return '_'.join(usernames)
-        except Exception as e:
-            self.logger.error(f"Failed to get couple_id for {username}: {e}")
-            return None
+    def _threshold_for_date(
+        self,
+        username: str,
+        target_date: date,
+        goals_by_date: Optional[Dict[str, int]] = None,
+    ) -> int:
+        """Goal for a date: preloaded map, compute from instances, or 0."""
+        day_str = target_date.isoformat()
+        if goals_by_date is not None and day_str in goals_by_date:
+            return goals_by_date[day_str]
+        return self.get_daily_goal(username, target_date)
 
     def add_points_on_completion(self, username: str, points: int) -> Dict[str, Any]:
-        """Add points to joint balance (only excess above streak threshold), update daily total, update streak"""
+        """Add points to joint balance (only excess above daily goal), update daily total, update streak"""
         try:
             couple_id = self.get_couple_id(username)
             if not couple_id:
@@ -52,10 +52,8 @@ class TaskPointsService:
 
             today = datetime.now(self.central_tz).date()
             date_str = today.isoformat()
+            threshold = self.get_daily_goal(username, today)
 
-            # Fetch config and daily total before updating (needed for balance formula)
-            config = self.get_config(username)
-            threshold = config.get('points_threshold', DEFAULT_POINTS_THRESHOLD)
             daily_key = f"{username}_{date_str}"
             daily_ref = self.db.collection('task_points_daily').document(daily_key)
             daily_doc = daily_ref.get()
@@ -69,7 +67,6 @@ class TaskPointsService:
             new_daily = old_daily + points
             points_for_balance = max(0, new_daily - threshold) - max(0, old_daily - threshold)
 
-            # 1. Update joint balance (only add excess above threshold)
             balance_ref = self.db.collection('task_points_balance').document(couple_id)
             balance_doc = balance_ref.get()
 
@@ -84,7 +81,6 @@ class TaskPointsService:
                 'updated_at': firestore.SERVER_TIMESTAMP
             }, merge=True)
 
-            # 2. Update per-person daily total (store threshold in effect so past days aren't reinterpreted)
             daily_ref.set({
                 'username': username,
                 'date': date_str,
@@ -93,20 +89,18 @@ class TaskPointsService:
                 'updated_at': firestore.SERVER_TIMESTAMP
             }, merge=True)
 
-            # 3. Update streak
-            self._update_streak(username, new_daily)
+            self._update_streak(username, new_daily, threshold)
 
             return {'status': 'success', 'points_added': points_for_balance}
         except Exception as e:
             self.logger.error(f"Failed to add points for {username}: {e}")
             return {'status': 'error', 'message': str(e)}
 
-    def _update_streak(self, username: str, points_earned_today: int) -> None:
-        """Update streak based on today's points vs threshold"""
+    def _update_streak(self, username: str, points_earned_today: int, threshold: Optional[int] = None) -> None:
+        """Update streak based on today's points vs daily goal"""
         try:
-            couple_id = self.get_couple_id(username)
-            config = self.get_config(username)
-            threshold = config.get('points_threshold', DEFAULT_POINTS_THRESHOLD)
+            if threshold is None:
+                threshold = self.get_daily_goal(username, datetime.now(self.central_tz).date())
 
             streak_ref = self.db.collection('task_streaks').document(username)
             streak_doc = streak_ref.get()
@@ -122,7 +116,7 @@ class TaskPointsService:
                     if last_date_str:
                         last_date = date.fromisoformat(last_date_str)
                         if last_date == today:
-                            pass  # Already counted today
+                            pass
                         elif last_date == today - timedelta(days=1):
                             current_streak += 1
                         else:
@@ -137,7 +131,6 @@ class TaskPointsService:
                         'updated_at': firestore.SERVER_TIMESTAMP
                     }, merge=True)
                 else:
-                    # Below threshold - streak broken for today
                     streak_ref.set({
                         'current_streak': 0,
                         'last_streak_date': today.isoformat(),
@@ -232,26 +225,34 @@ class TaskPointsService:
             self.logger.error(f"Failed to get daily points for {username} on {target_date}: {e}")
             return 0
 
-    def get_daily_points_and_threshold(self, username: str, target_date: date, fallback_threshold: int) -> tuple:
-        """Get points and the threshold that was in effect for that day (so we don't reinterpret past days). Returns (points, threshold)."""
+    def get_daily_points_and_threshold(
+        self,
+        username: str,
+        target_date: date,
+        goals_by_date: Optional[Dict[str, int]] = None,
+    ) -> tuple:
+        """Get points and daily goal in effect for that day. Returns (points, threshold)."""
         try:
             date_str = target_date.isoformat()
             daily_key = f"{username}_{date_str}"
             daily_ref = self.db.collection('task_points_daily').document(daily_key)
             daily_doc = daily_ref.get()
 
+            fallback = self._threshold_for_date(username, target_date, goals_by_date)
+
             if not daily_doc.exists:
-                return (0, fallback_threshold)
+                return (0, fallback)
 
             data = daily_doc.to_dict()
             pts = data.get('points_earned', 0)
             thresh = data.get('streak_threshold')
             if thresh is not None:
                 return (pts, thresh)
-            return (pts, fallback_threshold)
+            return (pts, fallback)
         except Exception as e:
             self.logger.error(f"Failed to get daily points/threshold for {username} on {target_date}: {e}")
-            return (0, fallback_threshold)
+            fallback = self._threshold_for_date(username, target_date, goals_by_date)
+            return (0, fallback)
 
     def get_daily_points_today(self, username: str) -> int:
         """Get per-person points for today"""
@@ -271,13 +272,15 @@ class TaskPointsService:
         except Exception as e:
             self.logger.error(f"Failed to clear daily points for {username} on {target_date}: {e}")
 
-    def _compute_streak_from_daily(self, username: str, fallback_threshold: int) -> int:
-        """Compute current streak from task_points_daily. Uses each day's stored threshold so past days aren't reinterpreted. Walk backwards from yesterday."""
+    def _compute_streak_from_daily(
+        self, username: str, goals_by_date: Optional[Dict[str, int]] = None
+    ) -> int:
+        """Compute current streak from task_points_daily. Walk backwards from yesterday."""
         today = datetime.now(self.central_tz).date()
         count = 0
         d = today - timedelta(days=1)
         while True:
-            pts, thresh = self.get_daily_points_and_threshold(username, d, fallback_threshold)
+            pts, thresh = self.get_daily_points_and_threshold(username, d, goals_by_date)
             if pts >= thresh:
                 count += 1
                 d -= timedelta(days=1)
@@ -286,11 +289,17 @@ class TaskPointsService:
         return count
 
     def get_streak(self, username: str) -> Dict[str, Any]:
-        """Get current streak and threshold. Streak is computed from task_points_daily (same as calendar)."""
+        """Get current streak and today's daily goal."""
         try:
-            config = self.get_config(username)
-            threshold = config.get('points_threshold', DEFAULT_POINTS_THRESHOLD)
-            current_streak = self._compute_streak_from_daily(username, threshold)
+            today = datetime.now(self.central_tz).date()
+            threshold = self.get_daily_goal(username, today)
+            goals_by_date = None
+            if self._daily_task_service:
+                start = today - timedelta(days=365)
+                goals_by_date = self._daily_task_service.compute_daily_goals_for_range(
+                    username, start, today
+                )
+            current_streak = self._compute_streak_from_daily(username, goals_by_date)
             return {
                 'status': 'success',
                 'current_streak': current_streak,
@@ -298,55 +307,29 @@ class TaskPointsService:
             }
         except Exception as e:
             self.logger.error(f"Failed to get streak for {username}: {e}")
-            return {'status': 'error', 'message': str(e), 'current_streak': 0, 'streak_threshold': DEFAULT_POINTS_THRESHOLD}
+            return {'status': 'error', 'message': str(e), 'current_streak': 0, 'streak_threshold': 0}
 
     def get_config(self, username: str) -> Dict[str, Any]:
-        """Get task points config (points_threshold - used for both tier unlock and streak)"""
+        """Return today's computed daily goal from scheduled task instances."""
         try:
-            couple_id = self.get_couple_id(username)
-            if not couple_id:
-                val = DEFAULT_POINTS_THRESHOLD
-                return {'points_threshold': val, 'tier_unlock_points': val, 'streak_threshold': val}
+            today = datetime.now(self.central_tz).date()
+            daily_goal = self.get_daily_goal(username, today)
+            spouse_username = None
+            user_ref = self.db.collection('users').document(username).get()
+            if user_ref.exists:
+                spouse_username = user_ref.to_dict().get('spouse_username')
 
-            config_ref = self.db.collection('task_points_config').document(couple_id)
-            config_doc = config_ref.get()
-
-            if not config_doc.exists:
-                val = DEFAULT_POINTS_THRESHOLD
-                return {'points_threshold': val, 'tier_unlock_points': val, 'streak_threshold': val}
-
-            data = config_doc.to_dict()
-            val = data.get('points_threshold')
-            if val is None:
-                val = data.get('tier_unlock_points', data.get('streak_threshold', DEFAULT_POINTS_THRESHOLD))
-            if val is None or val < 0:
-                val = DEFAULT_POINTS_THRESHOLD
-            return {'points_threshold': val, 'tier_unlock_points': val, 'streak_threshold': val}
+            result: Dict[str, Any] = {'daily_goal_today': daily_goal}
+            if spouse_username:
+                result['spouse_daily_goal_today'] = self.get_daily_goal(spouse_username, today)
+            return result
         except Exception as e:
             self.logger.error(f"Failed to get config for {username}: {e}")
-            val = DEFAULT_POINTS_THRESHOLD
-            return {'points_threshold': val, 'tier_unlock_points': val, 'streak_threshold': val}
+            return {'daily_goal_today': 0}
 
-    def update_config(self, username: str, points_threshold: Optional[int] = None) -> Dict[str, Any]:
-        """Update task points config (single threshold for tier unlock and streak)"""
-        try:
-            couple_id = self.get_couple_id(username)
-            if not couple_id:
-                return {'status': 'error', 'message': 'Could not determine couple_id'}
-
-            if points_threshold is not None:
-                if points_threshold < 0:
-                    return {'status': 'error', 'message': 'points_threshold must be non-negative'}
-                config_ref = self.db.collection('task_points_config').document(couple_id)
-                config_ref.set({
-                    'points_threshold': points_threshold,
-                    'updated_at': firestore.SERVER_TIMESTAMP
-                }, merge=True)
-
-            return {'status': 'success', 'config': self.get_config(username)}
-        except Exception as e:
-            self.logger.error(f"Failed to update config for {username}: {e}")
-            return {'status': 'error', 'message': str(e)}
+    def update_config(self, username: str) -> Dict[str, Any]:
+        """Daily goal is computed from tasks; config is read-only."""
+        return {'status': 'success', 'config': self.get_config(username)}
 
     def get_spending_history(self, username: str, limit: int = 20) -> Dict[str, Any]:
         """Get recent spending records for couple"""
@@ -357,7 +340,7 @@ class TaskPointsService:
 
             query = (self.db.collection('task_points_spending')
                      .where('couple_id', '==', couple_id)
-                     .limit(limit * 2))  # Fetch extra, sort in memory (avoids composite index)
+                     .limit(limit * 2))
 
             docs = list(query.stream())
             history_raw = []
@@ -411,7 +394,7 @@ class TaskPointsService:
                 spouse_username = user_ref.to_dict().get('spouse_username')
 
             spouse_daily = 0
-            spouse_streak = {'current_streak': 0, 'streak_threshold': user_streak.get('streak_threshold', DEFAULT_POINTS_THRESHOLD)}
+            spouse_streak = {'current_streak': 0, 'streak_threshold': 0}
             if spouse_username:
                 spouse_daily = self.get_daily_points_today(spouse_username)
                 spouse_streak = self.get_streak(spouse_username)
@@ -438,17 +421,21 @@ class TaskPointsService:
             today = datetime.now(self.central_tz).date()
             end_date = today
             start_date = today - timedelta(days=max(0, num_days - 1))
-            start_str = start_date.isoformat()
-            end_str = end_date.isoformat()
 
-            config = self.get_config(username)
-            threshold = config.get('points_threshold', DEFAULT_POINTS_THRESHOLD)
+            threshold = self.get_daily_goal(username, today)
 
             user_ref = self.db.collection('users').document(username).get()
             spouse_username = user_ref.to_dict().get('spouse_username') if user_ref.exists else None
             usernames = [username]
             if spouse_username:
                 usernames.append(spouse_username)
+
+            goals_by_user: Dict[str, Dict[str, int]] = {}
+            if self._daily_task_service:
+                for u in usernames:
+                    goals_by_user[u] = self._daily_task_service.compute_daily_goals_for_range(
+                        u, start_date, end_date
+                    )
 
             days_map: Dict[str, Dict[str, Dict[str, Any]]] = {}
             for d in range((end_date - start_date).days + 1):
@@ -458,6 +445,7 @@ class TaskPointsService:
 
             col = self.db.collection('task_points_daily')
             for u in usernames:
+                user_goals = goals_by_user.get(u, {})
                 refs = [
                     col.document(f"{u}_{(start_date + timedelta(days=d)).isoformat()}")
                     for d in range((end_date - start_date).days + 1)
@@ -470,7 +458,9 @@ class TaskPointsService:
                             pts = data.get('points_earned', 0)
                             day_threshold = data.get('streak_threshold')
                             if day_threshold is None:
-                                day_threshold = threshold
+                                day_threshold = user_goals.get(
+                                    day_str, self._threshold_for_date(u, date.fromisoformat(day_str), user_goals)
+                                )
                             days_map[day_str][u] = {
                                 'points': pts,
                                 'made_streak': pts >= day_threshold
@@ -483,4 +473,25 @@ class TaskPointsService:
             }
         except Exception as e:
             self.logger.error(f"Failed to get daily history for {username}: {e}")
-            return {'status': 'error', 'message': str(e), 'days': {}, 'threshold': DEFAULT_POINTS_THRESHOLD}
+            return {'status': 'error', 'message': str(e), 'days': {}, 'threshold': 0}
+
+    def get_couple_id(self, username: str) -> Optional[str]:
+        """Get couple identifier (sorted usernames); single user = username"""
+        try:
+            user_ref = self.db.collection('users').document(username)
+            user_doc = user_ref.get()
+
+            if not user_doc.exists:
+                return username
+
+            user_data = user_doc.to_dict()
+            spouse_username = user_data.get('spouse_username')
+
+            if not spouse_username:
+                return username
+
+            usernames = sorted([username, spouse_username])
+            return '_'.join(usernames)
+        except Exception as e:
+            self.logger.error(f"Failed to get couple_id for {username}: {e}")
+            return None
