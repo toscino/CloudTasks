@@ -14,10 +14,11 @@ from collections import defaultdict
 
 
 def compute_daily_goal_from_instances(instances: List[Dict[str, Any]]) -> int:
-    """Sum points at the highest point tier for the day; floor at 0."""
-    if not instances:
+    """Sum points at the highest point tier for the day; floor at 0. Backup tasks excluded."""
+    eligible = [i for i in instances if not i.get('is_backup', False)]
+    if not eligible:
         return 0
-    points_list = [int(i.get('points', 0) or 0) for i in instances]
+    points_list = [int(i.get('points', 0) or 0) for i in eligible]
     max_pts = max(points_list)
     total = sum(p for p in points_list if p == max_pts)
     return max(0, total)
@@ -303,7 +304,7 @@ class DailyTaskService:
             }
 
     def compute_daily_goal(self, username: str, target_date: date) -> int:
-        """Daily goal = sum of points at the top point tier for all instances that day."""
+        """Daily goal = sum of points at the top point tier (non-backup instances only)."""
         try:
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([

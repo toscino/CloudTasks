@@ -50,6 +50,19 @@ class TestDailyGoal(unittest.TestCase):
         instances = [{'description': 'no points field'}]
         self.assertEqual(compute_daily_goal_from_instances(instances), 0)
 
+    def test_backup_tasks_excluded(self):
+        instances = [
+            {'points': 100},
+            {'points': 100},
+            {'points': 100, 'is_backup': True},
+            {'points': 100, 'is_backup': True},
+        ]
+        self.assertEqual(compute_daily_goal_from_instances(instances), 200)
+
+    def test_only_backups_yields_zero(self):
+        instances = [{'points': 100, 'is_backup': True}] * 3
+        self.assertEqual(compute_daily_goal_from_instances(instances), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
