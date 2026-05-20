@@ -2,6 +2,7 @@
 
 ## Deployment
 - [x] **Publish flask_base to GitHub** - Installed from [flask-base 0.3.1](https://github.com/toscino/flaskbase/releases/tag/v0.3.1) via wheel in `requirements.txt`.
+- [x] **Artifact Registry hygiene** - Root `.gcloudignore`, prune script (`scripts/prune-gae-images.ps1`), optional cleanup policy in `config/artifact-registry-cleanup-policy.json`.
 
 ## Performance Optimizations
 

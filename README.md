@@ -34,6 +34,15 @@ A comprehensive task management application built for Google App Engine with Fir
    gcloud app deploy config/production.yaml
    ```
 
+   **Artifact Registry storage:** Each deploy adds a ~500MB image to `gae-standard`. Without cleanup, storage cost grows (~$0.10/GB/month). The project root `.gcloudignore` keeps dev-only files out of uploads.
+
+   - **One-time backlog prune** (keeps 5 newest `app/default` images):
+     ```powershell
+     .\scripts\prune-gae-images.ps1              # dry run
+     .\scripts\prune-gae-images.ps1 -Keep 5 -Apply
+     ```
+   - **Automatic cleanup** (optional; repo may already have console policies): `.\scripts\apply-artifact-cleanup-policy.ps1 -Apply` uses `config/artifact-registry-cleanup-policy.json` (keep 5 recent, delete `app/` images older than 30 days).
+
 ## Features
 
 - **Task Management**: Create, complete, and save tasks with AI-generated content and swipe-to-complete interface

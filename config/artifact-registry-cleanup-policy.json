@@ -1,0 +1,28 @@
+[
+  {
+    "name": "keep-recent-deploys",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {
+      "packageNamePrefixes": ["app/"],
+      "keepCount": 5
+    }
+  },
+  {
+    "name": "delete-old-app-images",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "packageNamePrefixes": ["app/"],
+      "olderThan": "30d"
+    }
+  },
+  {
+    "name": "delete-old-build-cache",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "packageNamePrefixes": ["build-cache/"],
+      "olderThan": "7d"
+    }
+  }
+]
