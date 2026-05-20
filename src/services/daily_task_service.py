@@ -324,17 +324,16 @@ class DailyTaskService:
         """Map date ISO string -> daily goal for each day in range (inclusive)."""
         try:
             by_date: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            start_str = start_date.isoformat()
+            end_str = end_date.isoformat()
+            # Single-field query avoids composite index (username + date range).
             instances_query = self.db.collection('daily_task_instances').where(
-                filter=firestore.And([
-                    FieldFilter('username', '==', username),
-                    FieldFilter('date', '>=', start_date.isoformat()),
-                    FieldFilter('date', '<=', end_date.isoformat()),
-                ])
+                filter=FieldFilter('username', '==', username),
             )
             for doc in instances_query.stream():
                 data = doc.to_dict()
                 day_str = data.get('date')
-                if day_str:
+                if day_str and start_str <= day_str <= end_str:
                     by_date[day_str].append(data)
 
             goals: Dict[str, int] = {}
