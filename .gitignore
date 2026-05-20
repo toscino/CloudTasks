@@ -128,9 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Google Cloud specific
-.gcloudignore
-
 # IDE files
 .vscode/
 .idea/

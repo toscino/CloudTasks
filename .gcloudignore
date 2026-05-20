@@ -1,0 +1,30 @@
+# Files not uploaded to Google Cloud Storage during `gcloud app deploy`.
+# Syntax matches .gitignore; see: gcloud topic gcloudignore
+#
+# App Engine installs dependencies from requirements.txt at build time —
+# do not upload .venv or other local env directories.
+
+.gcloudignore
+.git
+.gitignore
+
+# Project ignore rules (.env, .venv, __pycache__, IDE, etc.)
+#!include:.gitignore
+
+# App Engine / Python (gcloud default)
+/setup.cfg
+
+# Not needed in the running app (optional slim deploy)
+tests/
+plans/
+htmlcov/
+.coverage
+.coverage.*
+
+# Editor / tooling (not in .gitignore)
+.cursor/
+
+# Local vendored flask_base trees (production uses requirements.txt)
+flask_base/
+flask_base_old/
+_tmp_flaskbase/
