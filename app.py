@@ -72,6 +72,20 @@ app_manager.page("rewards_owed.html")
 app_manager.page("morning_cards.html")
 app_manager.page("dice-rolls.html")
 
+# flask-base only auto-populates nav for auth-gated pages; set explicitly for public pages
+app_manager._pages = [
+    {"route": "/", "title": "📋 Tasks", "permission": None},
+    {"route": "/stats", "title": "📊 Stats", "permission": None},
+    {"route": "/morning-cards", "title": "🌅 Morning Cards", "permission": None},
+    {"route": "/dice-rolls", "title": "🎲 Dice Rolls", "permission": None},
+    {"route": "/daily-tasks", "title": "📅 Daily Tasks", "permission": None},
+    {"route": "/morning-cards/manage", "title": "🃏 Manage Cards", "permission": None},
+    {"route": "/goals", "title": "🎯 Goals", "permission": None},
+    {"route": "/test", "title": "🧪 Test", "permission": None},
+    {"route": "/settings", "title": "⚙️ Settings", "permission": None},
+    {"route": "/rewards-owed", "title": "💝 Rewards Owed", "permission": None},
+]
+
 @app_manager.route('/morning-cards/manage')
 def morning_cards_manage_page():
     """Morning cards management page"""

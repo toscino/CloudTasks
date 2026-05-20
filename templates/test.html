@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}CloudTasks - Test Interface{% endblock %}
 
@@ -154,6 +154,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script>
         async function testConnection() {
             const resultDiv = document.getElementById('connectionResult');

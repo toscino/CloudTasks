@@ -1,7 +1,7 @@
 # CloudTasks Project TODO List
 
 ## Deployment
-- [ ] **Publish flask_base to GitHub** - Put flask_base package on GitHub so it can be installed via `git+https://github.com/...` in requirements.txt instead of bundling locally. This will make deployments cleaner and allow versioning.
+- [x] **Publish flask_base to GitHub** - Installed from [flask-base 0.3.1](https://github.com/toscino/flaskbase/releases/tag/v0.3.1) via wheel in `requirements.txt`.
 
 ## Performance Optimizations
 

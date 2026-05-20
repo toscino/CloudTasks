@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}Rewards Owed{% endblock %}
 
@@ -135,6 +135,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script>
     console.log('DEBUG: Reward goals page script starting...');
     

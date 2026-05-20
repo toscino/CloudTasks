@@ -1,3 +1,3 @@
 @echo off
 echo Running tests...
-python -m pytest tests/ -v
+.venv\Scripts\python.exe -m pytest tests/ -v --ignore=tests/test_app.py

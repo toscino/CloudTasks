@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}CloudTasks - Manage Morning Cards{% endblock %}
 
@@ -345,6 +345,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script>
         // Card Management JavaScript
         let cards = [];

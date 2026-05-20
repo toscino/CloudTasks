@@ -6,8 +6,10 @@ A comprehensive task management application built for Google App Engine with Fir
 
 1. **Install dependencies:**
    ```bash
-   pip install -r requirements.txt
+   py -3.11 -m venv .venv
+   .venv\Scripts\python.exe -m pip install -r requirements.txt
    ```
+   CloudTasks uses [flask-base 0.3.1](https://github.com/toscino/flaskbase) (installed from the release wheel in `requirements.txt`).
 
 2. **Set up Google Cloud Project:**
    - Create a new project in [Google Cloud Console](https://console.cloud.google.com/)
@@ -17,14 +19,14 @@ A comprehensive task management application built for Google App Engine with Fir
 
 3. **Local Development:**
    ```bash
-   # Run locally using flask_base
-   python app.py --run
+   # Run locally (flask-base)
+   .venv\Scripts\python.exe app.py --run
    ```
 
 4. **Deploy to App Engine:**
    ```bash
-   # Deploy using flask_base
-   python app.py --deploy
+   # Deploy (flask-base)
+   .venv\Scripts\python.exe app.py --deploy
    # or manually
    gcloud app deploy config/development.yaml
    

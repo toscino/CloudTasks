@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}CloudTasks - Goals{% endblock %}
 
@@ -219,6 +219,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script type="module">
     import { waitForAuth, apiCall, showError, scrollToTop } from '/static/js/utils.js';
     

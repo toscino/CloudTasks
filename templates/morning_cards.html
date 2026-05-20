@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}CloudTasks - Morning Cards{% endblock %}
 
@@ -342,6 +342,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script type="module">
     import { waitForAuth, apiCall, alert, getCurrentUsername } from '/static/js/utils.js';
     

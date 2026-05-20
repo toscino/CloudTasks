@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
 {% block title %}CloudTasks - Stats{% endblock %}
 
@@ -148,6 +148,7 @@
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
 <script type="module">
     import { waitForAuth, apiCall } from '/static/js/utils.js';
 
