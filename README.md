@@ -1,312 +1,139 @@
-# CloudTasks - Task Management App
+# CloudTasks
 
-A comprehensive task management application built for Google App Engine with Firestore integration. Features a complete rewards system with spouse collaboration, AI-generated tasks, and real-time synchronization.
+Task management app for Google App Engine with Firestore, spouse collaboration, daily routines, morning cards, and task points.
 
 ## Setup
 
-1. **Install dependencies:**
-   ```bash
+1. **Install dependencies**
+
+   ```powershell
    py -3.11 -m venv .venv
    .venv\Scripts\python.exe -m pip install -r requirements.txt
    ```
-   CloudTasks uses [flask-base 0.3.1](https://github.com/toscino/flaskbase) (installed from the release wheel in `requirements.txt`).
 
-2. **Set up Google Cloud Project:**
-   - Create a new project in [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable Firestore API
-   - Create a service account and download the key file
-   - Update `GOOGLE_CLOUD_PROJECT` in `.env` file
+   Uses [flask-base 0.3.1](https://github.com/toscino/flaskbase) (wheel in `requirements.txt`).
 
-3. **Local Development:**
-   ```bash
-   # Run locally (flask-base)
+2. **Google Cloud**
+
+   - Create a project in [Google Cloud Console](https://console.cloud.google.com/)
+   - Enable Firestore
+   - Create a service account and download credentials (or use Application Default Credentials locally)
+   - Set `GOOGLE_CLOUD_PROJECT` in `.env`
+
+3. **Run locally**
+
+   ```powershell
    .venv\Scripts\python.exe app.py --run
    ```
 
-4. **Deploy to App Engine:**
-   ```bash
-   # Deploy (flask-base)
+   Open `http://127.0.0.1:8080/` (demo user works without a key).
+
+4. **Deploy**
+
+   ```powershell
    .venv\Scripts\python.exe app.py --deploy
-   # or manually
-   gcloud app deploy config/development.yaml
-   
-   # Deploy to production
+   # or
+   gcloud app deploy app.yaml
    gcloud app deploy config/production.yaml
    ```
 
-   **Artifact Registry storage:** Each deploy adds a ~500MB image to `gae-standard`. Without cleanup, storage cost grows (~$0.10/GB/month). The project root `.gcloudignore` keeps dev-only files out of uploads.
+   Deploy config details: [docs/CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md).
 
-   - **One-time backlog prune** (keeps 5 newest `app/default` images):
-     ```powershell
-     .\scripts\prune-gae-images.ps1              # dry run
-     .\scripts\prune-gae-images.ps1 -Keep 5 -Apply
-     ```
-   - **Automatic cleanup** (optional; repo may already have console policies): `.\scripts\apply-artifact-cleanup-policy.ps1 -Apply` uses `config/artifact-registry-cleanup-policy.json` (keep 5 recent, delete `app/` images older than 30 days).
+### Artifact Registry cleanup
+
+Each deploy adds a large image to `gae-standard`. Without cleanup, storage cost grows (~$0.10/GB/month). Root `.gcloudignore` keeps dev-only files out of uploads. Setup Automic Cleanup to delete old images
 
 ## Features
 
-- **Task Management**: Create, complete, and save tasks with AI-generated content and swipe-to-complete interface
-- **Rewards System**: Complete rewards system with spouse collaboration
-  - **Rewards to Claim**: Earn rewards by completing difficult tasks
-  - **Rewards Owed**: Complete challenges to fulfill rewards your spouse selected
-  - **Challenges**: AI-generated tasks to complete reward goals
-- **User Separation**: Multi-user support with session-based authentication
-- **Firestore Integration**: Real-time task storage with Google Cloud Firestore
-- **AI Integration**: OpenAI-powered task and reward generation
-- **Background Processing**: Pregenerated tasks and rewards for instant loading
-- **Mobile-Friendly**: Touch and swipe gestures for task completion
-- **Weekly Tracking**: Difficulty points tracking with Friday-to-Friday weeks
-- **Spouse Comparison**: Compare pending rewards with your spouse
+- **Tasks** — Main Interface, swipe to complete, categories, goals linkage
+- **Daily tasks** — Task Setup and Init, reocurring weekly tasks, Some Randomization Possible
+- **Goals** — Personal goals; Not Used, Want better Integrtion with Tasks
+- **Task points** — Tracked But Not Well Used
+- **Morning cards** — Alternate System for Daily Selection, Probably needs Removed
+- **Dice rolls** — Alternate System for Partner Interactions, Should be Migrated to its own App
+- **Stats** — Weekly and collaboration metrics
+- **Auth** — Session-based login via flask-base (demo + named users)
 
-## API Endpoints
+## Pages
 
-### Task Management
-- `GET /` - Main task display page (tasks.html) - includes challenges
-- `GET /test` - Testing interface (test.html)
-- `GET /api/tasks` - Get active tasks for current user (max 4)
-- `POST /api/tasks` - Create new task
-- `PUT /api/tasks/<task_id>/complete` - Mark task as completed
-- `PUT /api/tasks/<task_id>/save` - Toggle save status
+| Route | Template |
+|-------|----------|
+| `/` | tasks.html |
+| `/stats` | stats.html |
+| `/goals` | goals.html |
+| `/daily-tasks` | daily_tasks.html |
+| `/rewards-owed` | rewards_owed.html |
+| `/morning-cards` | morning_cards.html |
+| `/morning-cards/manage` | morning_cards_manage.html |
+| `/dice-rolls` | dice-rolls.html |
+| `/settings` | settings.html |
+| `/test` | test.html |
 
-### Rewards System
-- `GET /rewards` - Rewards to claim page (reward_claim.html)
-- `GET /rewards-owed` - Rewards owed page (rewards_owed.html)
-- `GET /api/rewards` - Get rewards to claim (earned rewards)
-- `GET /api/rewards-owed` - Get rewards owed (spouse-selected rewards)
-- `GET /api/challenges` - Get challenges (tasks to complete rewards owed)
-- `POST /api/challenges/<task_id>/complete` - Complete a challenge
-- `POST /api/rewards-owed/<goal_id>/complete` - Complete a reward owed
+## API overview
 
-### Earned Rewards
-- `GET /api/earned-rewards` - Get pending earned rewards
-- `POST /api/earned-rewards/<reward_id>/generate-options` - Generate reward options
-- `POST /api/earned-rewards/<reward_id>/select-option` - Select reward option
+Routes are defined in `app.py`. Main groups:
 
-### Statistics & Comparison
-- `GET /api/weekly-points` - Get weekly difficulty points (Friday 5pm to Friday 5pm)
-- `GET /api/reward-comparison` - Compare pending rewards with spouse
-
-### System Testing
-- `GET /api/test` - Test Firestore connection
-- `GET /api/user` - Get current user information
-
-## Firestore Schema
-
-### Tasks Collection
-Each task document contains:
-- `username` (string) - User identifier for separation
-- `description` (string) - Task description text
-- `category` (string) - Task category (Work, Kids, Spouse, House, Self, or General)
-- `difficulty` (number) - Task difficulty (1-10)
-- `duration` (number) - Estimated duration in minutes
-- `completed` (boolean) - Task completion status
-- `saved` (boolean) - Save/bookmark status
-- `completed_at` (timestamp) - Completion timestamp
-- `created_at` (timestamp) - Creation timestamp
-- `updated_at` (timestamp) - Last modification timestamp
-
-### Reward Goals Collection
-Each reward goal document contains:
-- `username` (string) - User identifier
-- `description` (string) - Reward description
-- `status` (string) - 'pending' or 'completed'
-- `earned_by` (string) - Username who earned the reward
-- `reward_themes` (array) - Reward themes/tags
-- `created_at` (timestamp) - Creation timestamp
-- `completed_at` (timestamp) - Completion timestamp
-
-### Reward Tasks Collection (Challenges)
-Each reward task document contains:
-- `username` (string) - User identifier
-- `reward_goal_id` (string) - Associated reward goal ID
-- `description` (string) - Challenge description
-- `difficulty` (number) - Challenge difficulty
-- `duration` (number) - Estimated duration in minutes
-- `status` (string) - 'pending' or 'completed'
-- `expires_at` (timestamp) - Expiration timestamp
-- `created_at` (timestamp) - Creation timestamp
-
-### Earned Rewards Collection
-Each earned reward document contains:
-- `username` (string) - User identifier
-- `task_difficulty` (number) - Difficulty of task that earned the reward
-- `status` (string) - 'pending' or 'completed'
-- `earned_at` (timestamp) - When reward was earned
-- `selected_option` (object) - Selected reward option (if completed)
-
-### Task Categories
-The application supports the following task categories:
-- **Work** - Professional and work-related tasks
-- **Kids** - Tasks related to children and family care
-- **Spouse** - Relationship and partner-focused tasks
-- **House** - Home maintenance and household tasks
-- **Self** - Self-care and personal wellness tasks
-- **General** - Uncategorized tasks
+| Area | Examples |
+|------|----------|
+| Tasks | `GET/POST /api/tasks`, complete/save/abandon |
+| Goals | `GET/POST /api/goals`, categories |
+| Daily tasks | `/api/daily-tasks`, today instances, reset |
+| Task points | balance, spend, config, history |
+| Collaboration | tracker, today's points, history |
+| Rewards owed | `GET /api/rewards-owed`, complete by goal id |
+| Morning cards | CRUD, today select/unlock, import |
+| Dice rolls | credits, config, roll, import |
+| User | settings, spouse link/unlink, preferences |
+| Debug | locks, queue reset (dev/test) |
 
 ## Authentication
 
-The app uses **session-based** authentication with **three authenticated users** plus a **demo account**:
+Built on **flask-base** session auth:
 
-### **Authentication System**
-- **No secret key** = `test_user` (demo account with 🧪 icon)
-- **Valid secret key** = Authenticated user (`Ian`, `Karleigh`, or `user3` with 🔑 icon)
-- **Unknown secret key** = Falls back to `test_user` (demo account)
-- **All API endpoints work** regardless of authentication status
-- **User separation** maintained in Firestore by username
-- **User isolation** enforced - users can only modify their own tasks/rewards
+- No key → demo user `test_user`
+- Valid `secret_key` (query or `POST /api/login`) → mapped user
+- Unknown key → falls back to demo user
+- Data is isolated by `username` in Firestore
 
-### Environment Variables
-Set these in your `.env` file or deployment environment:
+Environment variables (`.env` or App Engine config):
 
 ```bash
-# Required
 GOOGLE_CLOUD_PROJECT=your-project-id
 FLASK_SECRET=your-flask-secret-key
 ADMIN_KEY=your-admin-key
 FLASK_BASE_KEY_PREFIX=CT_KEY_
-
-# User-specific secret keys
-USER1_SECRET_KEY=user1-demo-key-abc123
-USER2_SECRET_KEY=user2-demo-key-def456
-USER3_SECRET_KEY=user3-demo-key-ghi789
+USER1_SECRET_KEY=...
+USER2_SECRET_KEY=...
+USER3_SECRET_KEY=...
 ```
 
-### Browser Access
-**Demo Account (No Key Required):**
-- `http://127.0.0.1:8080/` - Works immediately as `test_user`
-
-**Authenticated Users:**
-- `http://127.0.0.1:8080/?secret_key=user1-demo-key-abc123` - Logs in as `Ian`
-- `http://127.0.0.1:8080/?secret_key=user2-demo-key-def456` - Logs in as `Karleigh`
-- `http://127.0.0.1:8080/?secret_key=user3-demo-key-ghi789` - Logs in as `user3`
-
-### API Authentication
-The system uses **session-based authentication**:
-1. **Initial login**: Pass `secret_key` via URL parameter or POST to `/api/login`
-2. **Session persistence**: Authentication persists across page navigation
-3. **Server-side username mapping**: Secret keys map to usernames on the server
-4. **No client-side username handling**: Prevents username spoofing
-
-## Development Status
-
-### ✅ Completed
-- **Complete Task Management System**
-  - AI-generated tasks with difficulty scaling
-  - Swipe-to-complete interface
-  - Task categories and time-based weighting
-  - Background task pregeneration
-- **Complete Rewards System**
-  - Rewards to claim (earned rewards)
-  - Rewards owed (spouse-selected rewards)
-  - Challenges (tasks to complete rewards)
-  - AI-generated reward options
-- **Session-based Authentication System**
-  - Three authenticated users (`Ian`, `Karleigh`, `user3`) + demo account (`test_user`)
-  - Server-side username mapping
-  - User isolation and security
-- **Background Processing**
-  - Centralized `ensure_minimums()` function
-  - Parallel thread execution
-  - Pregenerated tasks, rewards, and challenges
-- **Statistics & Tracking**
-  - Weekly difficulty points (Friday 5pm to Friday 5pm)
-  - Spouse reward comparison
-  - Real-time updates
-- **Firestore Integration**
-  - Real-time synchronization
-  - Optimized queries
-  - User data isolation
-
-### 🚧 Current Features
-- **AI Integration**: OpenAI-powered task and reward generation
-- **Mobile-Friendly**: Touch and swipe gestures
-- **Real-time Updates**: Live statistics and comparisons
-- **Performance Optimized**: Background processing for instant loading
-
-### 📋 Future Enhancements
-- Advanced reward themes and categories
-- Task scheduling and recurring tasks
-- Enhanced analytics and reporting
-- Mobile app development
-
-## Performance Optimization Notes
-
-### Current Implementation (Test Phase)
-- **Client-side filtering**: Queries use single-field ordering, filter incomplete tasks in Python
-- **Why**: Allows flexible testing of different ordering approaches without index management
-- **Performance**: Suitable for small test datasets (< 100 tasks per user)
-
-### Future Migration (Production)
-When ready for production optimization, create  Firestore composite indexes:
-Replace client-side filtering with direct Firestore queries:
+Example: `http://127.0.0.1:8080/?secret_key=<USER1_SECRET_KEY>`
 
 
-**Migration Benefits**: 10-40x faster queries, reduced network traffic, better scalability
-
-## Testing
-
-```bash
-# Run all tests
-test.bat
-# or
-python -m pytest tests/ -v
-
-# Run only unit tests
-python -m pytest tests/test_app.py -v
-
-# Run only integration tests
-python -m pytest tests/test_firestore.py -v
-```
-
-## Project Structure
+## Project structure
 
 ```
-├── app.py                # Main Flask application with all routes
-├── src/core/TaskMaster.py         # Task management and generation
-├── src/core/TaskGenerator.py      # AI task generation
-├── src/core/RewardGenerator.py    # Reward generation
-├── src/core/RewardMaster.py       # Reward management
-├── src/core/ChallengeMaster.py   # Challenge management
-├── app.yaml              # App Engine development config
-├── production.yaml       # App Engine production config
-├── tests/                # Test files
-│   ├── __init__.py
-│   ├── test_app.py       # Unit tests
-│   └── test_firestore.py # Integration tests
-├── templates/            # HTML templates
-│   ├── base.html         # Base template with navigation
-│   ├── tasks.html        # Main task display (includes challenges)
-│   ├── reward_claim.html # Rewards to claim page
-│   ├── rewards_owed.html # Rewards owed page
-│   ├── goals.html        # Goals management
-│   ├── test.html         # Testing interface
-│   └── about.html        # About page
-├── requirements.txt      # Python dependencies
-├── .env                 # Environment variables
-├── .gitignore           # Git ignore rules
-└── README.md            # This file
+app.py                 # Flask app and routes
+config/                # development.yaml, production.yaml, cleanup policy
+src/
+  core/task_master.py  # Task queue and generation
+  services/            # Task, goal, daily, points, collaboration, etc.
+  models/              # Task and goal models
+  auth/                # Auth helpers
+templates/             # HTML pages
+tests/                 # pytest suites
+scripts/               # GAE image prune and Artifact Registry policy
+docs/                  # CONFIG_GUIDE, frontend notes, etc.
 ```
 
-## Available Commands
+## Performance note
 
-- `pip install -r requirements.txt` - Install dependencies
-- `python -m pytest tests/` - Run all tests
-- `python app.py --run` - Run locally (flask_base)
-- `python app.py --deploy` - Deploy to App Engine (flask_base)
+Queries currently use single-field Firestore ordering and filter incomplete tasks in Python for flexibility during development. For production scale, add composite indexes and query filters in Firestore (see comment in `app.py`).
 
-## Naming Convention
+## Terminology
 
-The application uses a clear naming convention to distinguish between different types of rewards:
-
-- **Tasks** - Regular tasks (Work, Kids, Spouse, House, Self categories)
-- **Rewards** - Rewards you need to claim (earned rewards waiting to be claimed)
-- **Rewards Owed** - Rewards you need to do (rewards your spouse selected for you to fulfill)
-- **Challenges** - Tasks to complete reward goals (displayed under Tasks page)
-
-## User Flow
-
-1. **Complete Tasks** → Earn rewards based on difficulty
-2. **Claim Rewards** → Select from AI-generated reward options
-3. **Spouse Selects Rewards** → Creates "Rewards Owed" for you
-4. **Complete Challenges** → Fulfill the rewards your spouse selected
-5. **Track Progress** → View weekly points and spouse comparison
+- **Tasks** — Regular work (Work, Kids, Spouse, House, Self, General)
+- **Goals** — Longer-term targets; can tie to tasks
+- **Rewards owed** — Rewards your spouse chose for you to fulfill
+- **Daily tasks** — Repeating items with per-day instances
+- **Task points** — Currency earned from tasks and spent on configured rewards
