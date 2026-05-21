@@ -189,14 +189,14 @@
             // Fetch tasks (includes stats)
             let tasksData = await apiCall('/api/tasks');
             
-            // If first load returned success but 0 tasks, retry with short delays (handles cold start / slow task generation)
-            if (tasksData.status === 'success' && (!tasksData.tasks || tasksData.tasks.length === 0)) {
-                const delays = [1500, 2000];
-                for (let attempt = 0; attempt < delays.length; attempt++) {
-                    await new Promise(r => setTimeout(r, delays[attempt]));
-                    tasksData = await apiCall('/api/tasks');
-                    if (tasksData.status === 'success' && tasksData.tasks && tasksData.tasks.length > 0) break;
-                }
+            // Retry once only when server indicates tasks are still being generated
+            if (
+                tasksData.status === 'success' &&
+                tasksData.generating &&
+                (!tasksData.tasks || tasksData.tasks.length === 0)
+            ) {
+                await new Promise(r => setTimeout(r, 800));
+                tasksData = await apiCall('/api/tasks');
             }
             
             console.log('Got tasks:', tasksData);

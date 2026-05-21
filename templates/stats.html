@@ -17,6 +17,43 @@
         font-size: 16px;
         font-weight: 600;
     }
+    .stats-today-section {
+        margin-bottom: 20px;
+    }
+    .today-scores-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+    }
+    .today-score-card {
+        background: white;
+        padding: 16px 14px;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        text-align: center;
+    }
+    .today-score-card .name {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 6px;
+    }
+    .today-score-card .score {
+        font-size: 28px;
+        font-weight: 700;
+        color: #1c1e21;
+        line-height: 1.1;
+    }
+    .today-score-card .goal {
+        font-size: 13px;
+        color: #666;
+        margin-top: 6px;
+    }
+    .today-score-card.below-minimum {
+        border-color: #ffc107;
+        background-color: #fffdf5;
+    }
     .task-points-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -72,6 +109,9 @@
         font-size: 14px;
         color: #856404;
     }
+    .stats-details-section.loading-dim {
+        opacity: 0.65;
+    }
     .streak-calendar-section { margin-bottom: 30px; }
     .streak-calendar-grid {
         display: grid;
@@ -81,6 +121,7 @@
         width: fit-content;
         margin-left: auto;
         margin-right: auto;
+        min-height: 24px;
     }
     .streak-calendar-cell {
         width: 16px;
@@ -115,19 +156,36 @@
     .streak-calendar-legend .dot.spouse-only { background-color: #fd7e14; }
     .streak-calendar-legend .dot.both { background-color: #28a745; }
     .streak-calendar-legend .dot.neither { background-color: #adb5bd; }
+    .calendar-loading {
+        font-size: 13px;
+        color: #666;
+        text-align: center;
+        padding: 12px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="stats-section">
-    <h3>Points</h3>
+<div class="stats-section stats-today-section">
+    <h3>Today</h3>
+    <div class="today-scores-grid" id="today-scores-grid">
+        <div class="today-score-card">
+            <div class="name">Loading…</div>
+            <div class="score">—</div>
+            <div class="goal"></div>
+        </div>
+    </div>
+    <div id="below-minimum-message" class="below-minimum-message" style="display: none;"></div>
+</div>
+
+<div class="stats-section stats-details-section loading-dim" id="stats-details-section">
+    <h3>Balance &amp; streaks</h3>
     <div class="task-points-grid" id="task-points-grid">
         <div class="task-points-item">
             <div class="label">Joint Balance</div>
             <div class="value" id="task-points-balance">—</div>
         </div>
     </div>
-    <div id="below-minimum-message" class="below-minimum-message" style="display: none;"></div>
     <div class="spend-form">
         <div class="form-row-inline">
             <input type="number" id="spend-amount" placeholder="Amount" min="1">
@@ -139,10 +197,12 @@
     </div>
 </div>
 
-<div class="stats-section streak-calendar-section">
+<div class="stats-section streak-calendar-section" id="streak-calendar-section">
     <h3>Streak calendar</h3>
-    <p style="font-size: 13px; color: #666; margin: 0 0 10px 0;">Last 365 days: who hit the daily points minimum (streak).</p>
-    <div id="streak-calendar-grid" class="streak-calendar-grid"></div>
+    <p style="font-size: 13px; color: #666; margin: 0 0 10px 0;">Full year (365 days). Loads when you scroll here—not on page open.</p>
+    <div id="streak-calendar-grid" class="streak-calendar-grid">
+        <p class="calendar-loading" id="calendar-placeholder">Scroll here to load the year.</p>
+    </div>
     <div id="streak-calendar-legend" class="streak-calendar-legend"></div>
 </div>
 {% endblock %}
@@ -152,78 +212,120 @@
 <script type="module">
     import { waitForAuth, apiCall } from '/static/js/utils.js';
 
+    let calendarLoaded = false;
+
     document.addEventListener('DOMContentLoaded', async function() {
         await waitForAuth();
-        loadTaskPointsBalance();
-        loadStreakCalendar();
+        await loadTodayScores();
+        loadBalanceDetails();
+        requestAnimationFrame(() => setupLazyCalendar());
         document.getElementById('spend-points-btn')?.addEventListener('click', handleSpendPoints);
     });
 
-    async function loadTaskPointsBalance() {
-        try {
-            const data = await apiCall('/api/task-points/balance');
-            const grid = document.getElementById('task-points-grid');
-            const balanceEl = document.getElementById('task-points-balance');
-            if (!grid || !balanceEl) return;
+    function renderTodayScores(todayData) {
+        const grid = document.getElementById('today-scores-grid');
+        const belowEl = document.getElementById('below-minimum-message');
+        if (!grid) return;
 
-            if (data.status === 'success') {
-                balanceEl.textContent = data.balance ?? 0;
-                let html = `
+        if (!todayData || todayData.status !== 'success' || !todayData.today_points) {
+            grid.innerHTML = '<p style="color:#666;font-size:13px;">Could not load today\'s scores.</p>';
+            if (belowEl) belowEl.style.display = 'none';
+            return;
+        }
+
+        const currentUser = window.authState?.currentUsername;
+        const users = Object.keys(todayData.today_points);
+        const spouseUser = users.length === 2 ? users.find((u) => u !== currentUser) : null;
+        const order = [];
+        if (currentUser && todayData.today_points[currentUser] != null) order.push(currentUser);
+        if (spouseUser) order.push(spouseUser);
+        for (const u of users) {
+            if (!order.includes(u)) order.push(u);
+        }
+
+        grid.innerHTML = '';
+        for (const user of order) {
+            const pts = todayData.today_points[user] ?? 0;
+            const thresh = todayData.thresholds?.[user] ?? 0;
+            const below = todayData.below_minimum?.includes(user);
+            const card = document.createElement('div');
+            card.className = 'today-score-card' + (below ? ' below-minimum' : '');
+            card.innerHTML = `
+                <div class="name">${user}</div>
+                <div class="score">${pts}</div>
+                <div class="goal">of ${thresh} pts today</div>
+            `;
+            grid.appendChild(card);
+        }
+
+        if (belowEl) {
+            if (todayData.below_minimum?.length) {
+                belowEl.textContent = 'Below minimum today: ' + todayData.below_minimum.join(', ');
+                belowEl.style.display = 'block';
+            } else {
+                belowEl.style.display = 'none';
+            }
+        }
+    }
+
+    async function loadTodayScores() {
+        try {
+            let todayData = window.taskPointsTodayCache;
+            if (!todayData || todayData.status !== 'success') {
+                todayData = await apiCall('/api/task-points/today');
+                window.taskPointsTodayCache = todayData;
+            }
+            renderTodayScores(todayData);
+        } catch (error) {
+            console.error('Error loading today scores:', error);
+            renderTodayScores(null);
+        }
+    }
+
+    function renderBalanceDetails(balanceData) {
+        const grid = document.getElementById('task-points-grid');
+        const details = document.getElementById('stats-details-section');
+        if (!grid) return;
+        if (details) details.classList.remove('loading-dim');
+
+        const jointBalance = balanceData?.status === 'success' ? (balanceData.balance ?? 0) : '—';
+        let html = `
+            <div class="task-points-item">
+                <div class="label">Joint Balance</div>
+                <div class="value">${jointBalance}</div>
+            </div>
+        `;
+
+        const streaks = balanceData?.streaks;
+        if (streaks) {
+            for (const [user, s] of Object.entries(streaks)) {
+                const streak = (s && typeof s === 'object') ? s.current_streak : 0;
+                const thresh = (s && typeof s === 'object') ? s.streak_threshold : 0;
+                html += `
                     <div class="task-points-item">
-                        <div class="label">Joint Balance</div>
-                        <div class="value">${data.balance ?? 0}</div>
+                        <div class="label">${user} streak</div>
+                        <div class="value">${streak} days (≥${thresh} pts)</div>
                     </div>
                 `;
-                if (data.today_points) {
-                    for (const [user, pts] of Object.entries(data.today_points)) {
-                        html += `
-                            <div class="task-points-item">
-                                <div class="label">${user} today</div>
-                                <div class="value">${pts}</div>
-                            </div>
-                        `;
-                    }
-                }
-                if (data.streaks) {
-                    for (const [user, s] of Object.entries(data.streaks)) {
-                        const streak = (s && typeof s === 'object') ? s.current_streak : 0;
-                        const thresh = (s && typeof s === 'object') ? s.streak_threshold : 0;
-                        html += `
-                            <div class="task-points-item">
-                                <div class="label">${user} streak</div>
-                                <div class="value">${streak} days (≥${thresh} pts)</div>
-                            </div>
-                        `;
-                    }
-                }
-                grid.innerHTML = html;
-                const belowEl = document.getElementById('below-minimum-message');
-                if (belowEl && data.today_points && data.streaks) {
-                    const belowNames = [];
-                    for (const [user, pts] of Object.entries(data.today_points)) {
-                        const s = data.streaks[user];
-                        const thresh = (s && typeof s === 'object' && s.streak_threshold != null) ? s.streak_threshold : 10;
-                        if ((pts == null ? 0 : pts) < thresh) belowNames.push(user);
-                    }
-                    if (belowNames.length) {
-                        belowEl.textContent = 'Below minimum today: ' + belowNames.join(', ');
-                        belowEl.style.display = 'block';
-                    } else {
-                        belowEl.style.display = 'none';
-                    }
-                }
-            } else {
-                balanceEl.textContent = '—';
-                const belowEl = document.getElementById('below-minimum-message');
-                if (belowEl) belowEl.style.display = 'none';
             }
-        } catch (error) {
-            console.error('Error loading task points balance:', error);
-            const balanceEl = document.getElementById('task-points-balance');
-            if (balanceEl) balanceEl.textContent = '—';
-            const belowEl = document.getElementById('below-minimum-message');
-            if (belowEl) belowEl.style.display = 'none';
         }
+
+        grid.innerHTML = html;
+    }
+
+    async function loadBalanceDetails() {
+        try {
+            const balanceData = await apiCall('/api/task-points/balance');
+            renderBalanceDetails(balanceData);
+        } catch (error) {
+            console.error('Error loading balance details:', error);
+            renderBalanceDetails(null);
+        }
+    }
+
+    async function loadTaskPointsBalance() {
+        await loadTodayScores();
+        await loadBalanceDetails();
     }
 
     async function handleSpendPoints() {
@@ -263,55 +365,122 @@
         }
     }
 
-    async function loadStreakCalendar() {
-        const gridEl = document.getElementById('streak-calendar-grid');
-        const legendEl = document.getElementById('streak-calendar-legend');
-        if (!gridEl || !legendEl) return;
-        try {
-            const data = await apiCall('/api/task-points/daily-history?days=365');
-            if (data.status !== 'success' || !data.days) {
-                gridEl.innerHTML = '<p style="color:#666;font-size:13px;">No calendar data.</p>';
-                return;
-            }
-            const days = data.days;
-            const threshold = data.threshold ?? 10;
-            const sortedDates = Object.keys(days).sort();
-            const users = sortedDates.length ? Object.keys(days[sortedDates[0]]) : [];
-            const currentUser = window.authState?.currentUsername || (users[0] || '');
-            const spouseUser = users.length === 2 ? users.find(u => u !== currentUser) : null;
-            gridEl.innerHTML = '';
-            for (let i = 0; i < sortedDates.length; i++) {
-                const dateStr = sortedDates[i];
+    function setupLazyCalendar() {
+        const section = document.getElementById('streak-calendar-section');
+        if (!section) return;
+
+        const loadOnce = () => loadStreakCalendar();
+
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                if (entries.some((e) => e.isIntersecting)) {
+                    observer.disconnect();
+                    loadOnce();
+                }
+            }, { rootMargin: '0px', threshold: 0.05 });
+            observer.observe(section);
+        } else {
+            loadOnce();
+        }
+    }
+
+    const CALENDAR_DAYS = 365;
+    const CALENDAR_RENDER_CHUNK = 40;
+
+    function streakStateForDay(day, currentUser, spouseUser) {
+        const youMet = currentUser && (day[currentUser] || {}).made_streak;
+        const spouseMet = spouseUser && (day[spouseUser] || {}).made_streak;
+        if (youMet && spouseMet) return 'both';
+        if (youMet) return 'you-only';
+        if (spouseMet) return 'spouse-only';
+        return 'neither';
+    }
+
+    function renderCalendarLegend(legendEl, currentUser, spouseUser, threshold) {
+        const youLabel = currentUser || 'You';
+        const spouseLabel = spouseUser || 'Spouse';
+        legendEl.innerHTML = `
+            <span><span class="dot both"></span> Both</span>
+            <span><span class="dot you-only"></span> ${youLabel} only</span>
+            <span><span class="dot spouse-only"></span> ${spouseLabel} only</span>
+            <span><span class="dot neither"></span> Neither</span>
+            <span style="margin-left:8px;">(Streak = ≥${threshold} pts that day. 20 days per row.)</span>
+        `;
+    }
+
+    function renderCalendarCellsPhased(gridEl, days, sortedDates, currentUser, spouseUser, onDone) {
+        gridEl.innerHTML = '';
+        let index = 0;
+
+        function appendChunk() {
+            const end = Math.min(index + CALENDAR_RENDER_CHUNK, sortedDates.length);
+            for (; index < end; index++) {
+                const dateStr = sortedDates[index];
                 const day = days[dateStr];
                 const d = new Date(dateStr + 'T12:00:00');
-                const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                const youMet = currentUser && (day[currentUser] || {}).made_streak;
-                const spouseMet = spouseUser && (day[spouseUser] || {}).made_streak;
-                let state = 'neither';
-                if (youMet && spouseMet) state = 'both';
-                else if (youMet) state = 'you-only';
-                else if (spouseMet) state = 'spouse-only';
+                const label = d.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+                const state = streakStateForDay(day, currentUser, spouseUser);
                 const parts = [];
-                if (currentUser) parts.push(`${currentUser}: ${(day[currentUser] || {}).points ?? 0} pts`);
-                if (spouseUser) parts.push(`${spouseUser}: ${(day[spouseUser] || {}).points ?? 0} pts`);
+                if (currentUser) {
+                    parts.push(`${currentUser}: ${(day[currentUser] || {}).points ?? 0} pts`);
+                }
+                if (spouseUser) {
+                    parts.push(`${spouseUser}: ${(day[spouseUser] || {}).points ?? 0} pts`);
+                }
                 const cell = document.createElement('div');
                 cell.className = 'streak-calendar-cell';
                 cell.title = `${label}: ${parts.join('; ')}`;
                 cell.innerHTML = `<span class="dot ${state}"></span>`;
                 gridEl.appendChild(cell);
             }
-            const youLabel = currentUser || 'You';
-            const spouseLabel = spouseUser || 'Spouse';
-            legendEl.innerHTML = `
-                <span><span class="dot both"></span> Both</span>
-                <span><span class="dot you-only"></span> ${youLabel} only</span>
-                <span><span class="dot spouse-only"></span> ${spouseLabel} only</span>
-                <span><span class="dot neither"></span> Neither</span>
-                <span style="margin-left:8px;">(Streak = ≥${threshold} pts that day. 2 columns of 10 per row.)</span>
-            `;
+            if (index < sortedDates.length) {
+                requestAnimationFrame(appendChunk);
+            } else if (onDone) {
+                onDone();
+            }
+        }
+
+        requestAnimationFrame(appendChunk);
+    }
+
+    async function loadStreakCalendar() {
+        if (calendarLoaded) return;
+        calendarLoaded = true;
+
+        const gridEl = document.getElementById('streak-calendar-grid');
+        const legendEl = document.getElementById('streak-calendar-legend');
+        if (!gridEl || !legendEl) return;
+
+        gridEl.innerHTML = '<p class="calendar-loading">Loading full year…</p>';
+        legendEl.innerHTML = '';
+
+        try {
+            const data = await apiCall(`/api/task-points/daily-history?days=${CALENDAR_DAYS}`);
+            if (data.status !== 'success' || !data.days) {
+                gridEl.innerHTML = '<p style="color:#666;font-size:13px;">No calendar data.</p>';
+                calendarLoaded = false;
+                return;
+            }
+
+            const days = data.days;
+            const threshold = data.threshold ?? 10;
+            const sortedDates = Object.keys(days).sort();
+            const users = sortedDates.length ? Object.keys(days[sortedDates[0]]) : [];
+            const currentUser = window.authState?.currentUsername || (users[0] || '');
+            const spouseUser = users.length === 2 ? users.find((u) => u !== currentUser) : null;
+
+            gridEl.innerHTML = '<p class="calendar-loading">Drawing calendar…</p>';
+            renderCalendarCellsPhased(gridEl, days, sortedDates, currentUser, spouseUser, () => {
+                renderCalendarLegend(legendEl, currentUser, spouseUser, threshold);
+            });
         } catch (e) {
             console.error('Error loading streak calendar:', e);
             gridEl.innerHTML = '<p style="color:#999;font-size:13px;">Could not load calendar.</p>';
+            calendarLoaded = false;
         }
     }
 </script>

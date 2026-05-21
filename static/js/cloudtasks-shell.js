@@ -12,6 +12,8 @@ window.authState = {
     spouseUsername: null
 };
 
+window.taskPointsTodayCache = null;
+
 function checkForInitialLogin() {
     const urlParams = new URLSearchParams(window.location.search);
     const secretKey = urlParams.get('secret_key');
@@ -166,30 +168,26 @@ async function checkPendingStreakMinimum() {
         return;
     }
     try {
-        const response = await fetch('/api/task-points/balance');
+        const response = await fetch('/api/task-points/today');
         const data = await response.json();
-        if (data.status !== 'success' || !data.today_points || !data.streaks) {
+        if (data.status !== 'success' || !data.today_points || !data.thresholds) {
             indicator.style.display = 'none';
             return;
         }
+        window.taskPointsTodayCache = data;
         const todayPoints = data.today_points;
-        const streaks = data.streaks;
+        const thresholds = data.thresholds;
         const currentUser = window.authState.currentUsername;
         let anyBelow = false;
         let youBelow = false;
         let spouseBelow = false;
         const parts = [];
-        const belowNames = [];
+        const belowNames = data.below_minimum || [];
         for (const [user, pts] of Object.entries(todayPoints)) {
-            const s = streaks[user];
-            const thresh =
-                s && typeof s === 'object' && s.streak_threshold != null
-                    ? s.streak_threshold
-                    : 10;
+            const thresh = thresholds[user] != null ? thresholds[user] : 10;
             const below = (pts == null ? 0 : pts) < thresh;
             if (below) {
                 anyBelow = true;
-                belowNames.push(user);
                 if (user === currentUser) youBelow = true;
                 else spouseBelow = true;
             }

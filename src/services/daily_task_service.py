@@ -10,7 +10,6 @@ from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
 from src.utils.error_handlers import handle_exception
 from typing import List, Dict, Any
-from collections import defaultdict
 
 
 def compute_daily_goal_from_instances(instances: List[Dict[str, Any]]) -> int:
@@ -318,37 +317,6 @@ class DailyTaskService:
             self.logger.error(f"Failed to compute daily goal for {username} on {target_date}: {e}")
             return 0
 
-    def compute_daily_goals_for_range(
-        self, username: str, start_date: date, end_date: date
-    ) -> Dict[str, int]:
-        """Map date ISO string -> daily goal for each day in range (inclusive)."""
-        try:
-            by_date: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-            start_str = start_date.isoformat()
-            end_str = end_date.isoformat()
-            # Single-field query avoids composite index (username + date range).
-            instances_query = self.db.collection('daily_task_instances').where(
-                filter=FieldFilter('username', '==', username),
-            )
-            for doc in instances_query.stream():
-                data = doc.to_dict()
-                day_str = data.get('date')
-                if day_str and start_str <= day_str <= end_str:
-                    by_date[day_str].append(data)
-
-            goals: Dict[str, int] = {}
-            d = start_date
-            while d <= end_date:
-                day_str = d.isoformat()
-                goals[day_str] = compute_daily_goal_from_instances(by_date.get(day_str, []))
-                d += timedelta(days=1)
-            return goals
-        except Exception as e:
-            self.logger.error(
-                f"Failed to compute daily goals for {username} {start_date}..{end_date}: {e}"
-            )
-            return {}
-    
     def complete_daily_task(self, instance_id: str, username: str) -> Dict[str, Any]:
         """Complete daily task instance"""
         try:
@@ -629,6 +597,11 @@ class DailyTaskService:
         """Reset daily tasks for a specific user (helper method)"""
         try:
             self.logger.info(f"Resetting daily tasks for {username} on {today_central}")
+
+            task_points_service = getattr(self.app_manager, 'task_points_service', None)
+            if task_points_service:
+                locked_day = today_central - timedelta(days=1)
+                task_points_service.lock_daily_threshold_for_date(username, locked_day)
             
             # Before creating new instances, delete any existing instances for today
             # This includes ALL instances regardless of status (completed, abandoned, presented)
@@ -654,7 +627,6 @@ class DailyTaskService:
                 self.logger.info(f"Deleted {deleted_count} instances for {username} on {today_central}")
             
             # Clear task points daily tally for today (standalone task points; e.g. backup pool / streak)
-            task_points_service = getattr(self.app_manager, 'task_points_service', None)
             if task_points_service:
                 task_points_service.clear_daily_points_for_reset(username, today_central)
 
@@ -729,6 +701,7 @@ class DailyTaskService:
             self.db.collection('daily_task_resets').add(reset_data)
             
             self.logger.info(f"Created {instances_created} daily task instances for {username}")
+
             return instances_created
             
         except Exception as e:

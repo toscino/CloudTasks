@@ -32,12 +32,9 @@ Task management app for Google App Engine with Firestore, spouse collaboration, 
 
    ```powershell
    .venv\Scripts\python.exe app.py --deploy
-   # or
-   gcloud app deploy app.yaml
-   gcloud app deploy config/production.yaml
    ```
 
-   Deploy config details: [docs/CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md).
+   `--deploy` uses `app.production.yaml` when present, otherwise `app.yaml`. Both set `min_instances: 1` for a warm instance. See [docs/CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md).
 
 ### Artifact Registry cleanup
 
@@ -78,7 +75,7 @@ Routes are defined in `app.py`. Main groups:
 | Tasks | `GET/POST /api/tasks`, complete/save/abandon |
 | Goals | `GET/POST /api/goals`, categories |
 | Daily tasks | `/api/daily-tasks`, today instances, reset |
-| Task points | balance, spend, config, history |
+| Task points | today (fast), balance, spend, config, history |
 | Collaboration | tracker, today's points, history |
 | Rewards owed | `GET /api/rewards-owed`, complete by goal id |
 | Morning cards | CRUD, today select/unlock, import |
@@ -114,7 +111,7 @@ Example: `http://127.0.0.1:8080/?secret_key=<USER1_SECRET_KEY>`
 
 ```
 app.py                 # Flask app and routes
-config/                # development.yaml, production.yaml, cleanup policy
+config/                # development.yaml (legacy), cleanup policy
 src/
   core/task_master.py  # Task queue and generation
   services/            # Task, goal, daily, points, collaboration, etc.

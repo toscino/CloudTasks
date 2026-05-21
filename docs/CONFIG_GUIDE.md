@@ -35,19 +35,19 @@ This application uses multiple configuration files for different deployment envi
 
 **Note**: This appears to be an older development configuration. Consider consolidating with `app.yaml`.
 
-### `config/production.yaml` (Production Config)
-**Runtime**: Python 3.9  
+### `app.production.yaml` (Production Config)
+**Runtime**: Python 3.11  
 **Project**: `cloudtasks-app-473120`  
 **Environment**: Production  
-**Purpose**: Production deployment
+**Purpose**: Production deployment (`python app.py --deploy` uses this file when present)
 
 **Key Settings**:
-- Uses Python 3.9
-- Higher scaling (2-20 instances)
-- Production secret keys (placeholder values)
-- All environment variables defined
+- Uses Python 3.11
+- `min_instances: 1` (one warm instance)
+- `max_instances: 2`
+- flask-base auth keys: `CT_KEY_*` (same format as `app.yaml`)
 
-**Usage**: `gcloud app deploy config/production.yaml`
+**Usage**: `gcloud app deploy app.production.yaml` or `.venv\Scripts\python.exe app.py --deploy`
 
 ## Environment Variables
 
@@ -61,13 +61,16 @@ FLASK_BASE_KEY_PREFIX=CT_KEY_
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-### User Authentication
+### User Authentication (flask-base)
 
 ```bash
-USER1_SECRET_KEY=user1-secret-key  # Ian's secret key
-USER2_SECRET_KEY=user2-secret-key  # Karleigh's secret key
-USER3_SECRET_KEY=user3-secret-key  # Third user's secret key
+FLASK_BASE_KEY_PREFIX=CT_KEY_
+CT_KEY_IAN=user1-secret-key
+CT_KEY_KARLEIGH=user2-secret-key
+CT_KEY_USER3=user3-secret-key
 ```
+
+Username is derived from the env var name after the prefix (underscores become spaces).
 
 ### Optional Variables
 
@@ -82,12 +85,12 @@ FLASK_ENV=development  # or production
 - **crucial-haiku-473123-r7**: Legacy development project
 
 ### Python Versions
-- **Python 3.11**: Used in `app.yaml` (current development)
-- **Python 3.9**: Used in legacy configs
+- **Python 3.11**: Used in `app.yaml` and `app.production.yaml`
+- **Python 3.9**: Used in legacy `config/development.yaml` only
 
 ### Scaling
-- **Development**: 1-2 instances (minimal)
-- **Production**: 2-20 instances (auto-scaling)
+- **Development** (`app.yaml`): 1-2 instances
+- **Production** (`app.production.yaml`): 1-2 instances (`min_instances: 1`)
 
 ## Recommendations
 
@@ -97,25 +100,39 @@ FLASK_ENV=development  # or production
 3. **Single Development Config**: Use `app.yaml` as the single development config
 
 ### Production Deployment
-1. **Update Secret Keys**: Replace placeholder values in `config/production.yaml`
+1. **Update Secret Keys**: Replace placeholder values in `app.production.yaml`
 2. **Validate Environment**: Ensure all required variables are set
-3. **Test Deployment**: Verify production config before deployment
+3. **Test Deployment**: `python app.py --deploy` (deploys `app.production.yaml` automatically)
 
 ## Deployment Commands
 
-### Development
+### `python app.py --deploy` (flask-base)
+
+The deploy helper ([flask_base/deploy.py](https://github.com/toscino/flaskbase)) picks:
+
+1. **`app.production.yaml`** if present (recommended for production deploys)
+2. Else **`app.yaml`**
+
+`app.production.yaml` uses `min_instances: 1` to keep one warm instance (reduces cold starts).
+
+After deploy, confirm in **GCP Console → App Engine → Versions** that the active version shows `min instances: 1`.
+
+### Manual deploy
+
 ```bash
-# Deploy to development (using app.yaml)
+# Local / dev
 gcloud app deploy app.yaml
 
-# Or deploy to legacy dev environment
-gcloud app deploy config/development.yaml
+# Production
+gcloud app deploy app.production.yaml
 ```
 
-### Production
-```bash
-# Deploy to production
-gcloud app deploy config/production.yaml
+### Endpoint timing (local)
+
+With the server running:
+
+```powershell
+.venv\Scripts\python.exe scripts\perf_check_endpoints.py
 ```
 
 ## Configuration Validation
@@ -134,7 +151,7 @@ Before deployment, ensure:
 - Ensure you have access to the project
 
 ### "Secret key not found" Error
-- Check `USER1_SECRET_KEY`, `USER2_SECRET_KEY`, `USER3_SECRET_KEY`
+- Check `CT_KEY_*` entries in `app.yaml` / `app.production.yaml` (or `.env` locally)
 - Verify `.env` file exists locally
 - Check environment variables in deployment console
 

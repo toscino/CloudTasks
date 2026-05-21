@@ -315,6 +315,14 @@ def get_task_points_balance():
     return task_points_service.get_balance_summary(username)
 
 
+@app_manager.route('/api/task-points/today', ['GET'], limit="100 per minute")
+@with_error_handling
+def get_task_points_today():
+    """Fast today points and thresholds for user and spouse (nav indicator)."""
+    username = get_user_info(app_manager)
+    return task_points_service.get_today_summary(username)
+
+
 @app_manager.route('/api/task-points/spend', ['POST'], limit="20 per minute")
 @with_error_handling
 def spend_task_points():
@@ -366,7 +374,7 @@ def get_task_points_spending_history():
 def get_task_points_daily_history():
     """Get per-day points and streak status for calendar (last N days)"""
     username = get_user_info(app_manager)
-    num_days = request.args.get('days', 365, type=int)
+    num_days = request.args.get('days', 90, type=int)
     num_days = min(max(num_days, 1), 365)
     return task_points_service.get_daily_history(username, num_days)
 
