@@ -1,0 +1,322 @@
+{% extends "layout.html" %}
+
+{% block title %}CloudTasks - Manage Dice{% endblock %}
+
+{% block styles %}
+<style>
+    .dice-manage-container { max-width: 900px; margin: 0 auto; }
+    h2 { color: #1c1e21; margin-bottom: 8px; font-size: 18px; font-weight: 600; }
+    .intro { color: #6c757d; font-size: 14px; margin-bottom: 20px; }
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        background-color: #007bff;
+        color: white;
+    }
+    .btn:hover { background-color: #0056b3; }
+    .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+    .btn-secondary:hover { background-color: #545b62; }
+    .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dice-die-block {
+        background-color: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 12px;
+    }
+    .dice-die-block summary {
+        padding: 12px 15px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+    .dice-die-block .dice-die-fields { padding: 0 15px 15px 15px; }
+    .dice-die-fields .form-group { margin-bottom: 10px; }
+    .dice-die-fields .form-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+    }
+    .dice-die-fields .form-group input {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .dice-face-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+    .dice-face-row .dice-face-num { flex: 0 0 24px; font-size: 12px; color: #666; }
+    .dice-face-row .face-name { flex: 0 0 100px; }
+    .dice-face-row .face-rule { flex: 1; }
+    .import-export-dice {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+    }
+    .import-export-dice textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        box-sizing: border-box;
+    }
+    .nav-back { margin-bottom: 16px; font-size: 14px; }
+    .nav-back a { color: #007bff; text-decoration: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dice-manage-container">
+    <p class="nav-back"><a href="/dice-rolls">← Back to dice rolls</a></p>
+    <h2>🎲 Manage dice</h2>
+    <p class="intro">Configure rules for each die. Base rule applies when the die is not selected; alternate + face rule when selected.</p>
+
+    <div id="dice-config-form"></div>
+
+    <div style="margin-top: 15px;">
+        <button type="button" class="btn btn-secondary" id="add-die-btn">+ Add die</button>
+    </div>
+    <div style="margin-top: 15px;">
+        <button type="button" class="btn" id="save-dice-config-btn">Save dice configuration</button>
+        <span id="dice-config-status" style="margin-left: 10px; font-size: 14px;"></span>
+    </div>
+
+    <div class="import-export-dice">
+        <button type="button" class="btn btn-secondary" id="export-dice-btn">Export dice</button>
+        <div style="margin-top: 15px;">
+            <label for="import-dice-textarea" style="display: block; margin-bottom: 5px; font-size: 14px;">Import dice (paste JSON; partial ok — each die present is full-replaced)</label>
+            <textarea id="import-dice-textarea" rows="6" placeholder='{"dice_configs": {"die_1": {...}}}'></textarea>
+            <button type="button" class="btn" id="import-dice-btn" style="margin-top: 8px;">Import dice</button>
+            <span id="import-dice-status" style="margin-left: 10px; font-size: 14px;"></span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="module">
+    import { waitForAuth, apiCall } from '/static/js/utils.js';
+
+    function createDieBlockHTML(dieKey, data = {}) {
+        const num = dieKey.replace(/^die_/, '') || '1';
+        const title = (data.title || '').trim() || ('Die ' + num);
+        const faceRows = [1, 2, 3, 4, 5, 6].map(f => `
+            <div class="dice-face-row"><span class="dice-face-num">${f}</span>
+            <input type="text" id="die-${num}-face-${f}-name" class="face-name" placeholder="Name">
+            <input type="text" id="die-${num}-face-${f}" class="face-rule" placeholder="Rule"></div>`).join('');
+        return `
+        <details class="dice-die-block" data-die-key="${dieKey}" open>
+            <summary class="dice-die-summary">${title}</summary>
+            <div class="dice-die-fields">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                    <button type="button" class="btn btn-secondary remove-die-btn" data-die-key="${dieKey}" title="Remove this die">Remove</button>
+                </div>
+                <div class="form-group"><label for="die-${num}-title">Title</label>
+                    <input type="text" id="die-${num}-title" placeholder="e.g. Chore"></div>
+                <div class="form-group"><label for="die-${num}-base">Base rule (when not selected)</label>
+                    <input type="text" id="die-${num}-base" placeholder="Rule when this die is not rolled"></div>
+                <div class="form-group"><label for="die-${num}-alt">Alternate rule (when selected)</label>
+                    <input type="text" id="die-${num}-alt" placeholder="Rule when this die is rolled"></div>
+                <div class="form-group"><label>Face rules (1–6): name and rule</label>
+                    <div class="dice-face-rows">${faceRows}</div></div>
+            </div>
+        </details>`;
+    }
+
+    function sortedDieKeys(diceConfigs) {
+        return Object.keys(diceConfigs || {})
+            .filter(k => /^die_\d+$/.test(k) && k !== 'die_0')
+            .sort((a, b) => parseInt(a.replace('die_', ''), 10) - parseInt(b.replace('die_', ''), 10));
+    }
+
+    function updateRemoveButtons() {
+        const blocks = document.querySelectorAll('.dice-die-block');
+        blocks.forEach(block => {
+            const btn = block.querySelector('.remove-die-btn');
+            if (btn) btn.disabled = blocks.length <= 1;
+        });
+    }
+
+    async function loadDiceConfig() {
+        const data = await apiCall('/api/dice-rolls/config');
+        const dice_configs = (data.status === 'success' && data.dice_configs) ? data.dice_configs : {};
+        let keys = sortedDieKeys(dice_configs);
+        if (keys.length === 0) keys = ['die_1'];
+        const container = document.getElementById('dice-config-form');
+        container.innerHTML = '';
+        keys.forEach(key => {
+            const d = dice_configs[key] || {};
+            const div = document.createElement('div');
+            div.innerHTML = createDieBlockHTML(key, d);
+            container.appendChild(div.firstElementChild);
+        });
+        keys.forEach(key => {
+            const d = dice_configs[key] || {};
+            const num = key.replace(/^die_/, '');
+            const titleEl = document.getElementById('die-' + num + '-title');
+            const baseEl = document.getElementById('die-' + num + '-base');
+            const altEl = document.getElementById('die-' + num + '-alt');
+            if (titleEl) titleEl.value = (d.title || '').trim();
+            if (baseEl) baseEl.value = (d.base_rule || '').trim();
+            if (altEl) altEl.value = (d.alternate_rule || '').trim();
+            const fr = d.face_rules || {};
+            const fn = d.face_names || {};
+            for (let f = 1; f <= 6; f++) {
+                const ruleEl = document.getElementById('die-' + num + '-face-' + f);
+                const nameEl = document.getElementById('die-' + num + '-face-' + f + '-name');
+                if (ruleEl) ruleEl.value = (fr[String(f)] || '').trim();
+                if (nameEl) nameEl.value = (fn[String(f)] || '').trim();
+            }
+            const block = container.querySelector(`[data-die-key="${key}"]`);
+            const sum = block && block.querySelector('summary.dice-die-summary');
+            if (sum) sum.textContent = (d.title || '').trim() || ('Die ' + num);
+        });
+        updateRemoveButtons();
+    }
+
+    function collectDiceConfigs() {
+        const dice_configs = {};
+        document.querySelectorAll('.dice-die-block').forEach(block => {
+            const key = block.getAttribute('data-die-key');
+            if (!key) return;
+            const num = key.replace(/^die_/, '');
+            const titleEl = document.getElementById('die-' + num + '-title');
+            const baseEl = document.getElementById('die-' + num + '-base');
+            const altEl = document.getElementById('die-' + num + '-alt');
+            const face_rules = {};
+            const face_names = {};
+            for (let f = 1; f <= 6; f++) {
+                const ruleEl = document.getElementById('die-' + num + '-face-' + f);
+                const nameEl = document.getElementById('die-' + num + '-face-' + f + '-name');
+                face_rules[String(f)] = ruleEl ? (ruleEl.value || '').trim() : '';
+                face_names[String(f)] = nameEl ? (nameEl.value || '').trim() : '';
+            }
+            dice_configs[key] = {
+                title: titleEl ? (titleEl.value || '').trim() : '',
+                base_rule: baseEl ? (baseEl.value || '').trim() : '',
+                alternate_rule: altEl ? (altEl.value || '').trim() : '',
+                face_rules,
+                face_names,
+            };
+        });
+        return dice_configs;
+    }
+
+    async function saveDiceConfig() {
+        const btn = document.getElementById('save-dice-config-btn');
+        const status = document.getElementById('dice-config-status');
+        btn.disabled = true;
+        status.textContent = 'Saving...';
+        status.style.color = '#6c757d';
+        const result = await apiCall('/api/dice-rolls/config', {
+            method: 'POST',
+            body: JSON.stringify({ dice_configs: collectDiceConfigs() }),
+        });
+        if (result.status === 'success') {
+            status.textContent = 'Saved.';
+            status.style.color = '#155724';
+        } else {
+            status.textContent = result.message || 'Failed to save';
+            status.style.color = '#721c24';
+        }
+        btn.disabled = false;
+    }
+
+    async function exportDice() {
+        const data = await apiCall('/api/dice-rolls/config');
+        if (data.status !== 'success') {
+            alert('Failed to load dice config for export');
+            return;
+        }
+        document.getElementById('import-dice-textarea').value = JSON.stringify(
+            { dice_configs: data.dice_configs || {} },
+            null,
+            2
+        );
+    }
+
+    async function importDice() {
+        const statusEl = document.getElementById('import-dice-status');
+        const raw = (document.getElementById('import-dice-textarea').value || '').trim();
+        if (!raw) {
+            statusEl.textContent = 'Paste JSON first';
+            statusEl.style.color = '#721c24';
+            return;
+        }
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            statusEl.textContent = 'Invalid JSON: ' + e.message;
+            statusEl.style.color = '#721c24';
+            return;
+        }
+        statusEl.textContent = 'Importing...';
+        statusEl.style.color = '#6c757d';
+        const data = await apiCall('/api/dice-rolls/config/import', {
+            method: 'POST',
+            body: JSON.stringify(parsed),
+        });
+        if (data.status === 'success') {
+            statusEl.textContent = 'Imported.';
+            statusEl.style.color = '#155724';
+            await loadDiceConfig();
+        } else {
+            statusEl.textContent = data.message || 'Import failed';
+            statusEl.style.color = '#721c24';
+        }
+    }
+
+    function addDie() {
+        const blocks = document.querySelectorAll('.dice-die-block');
+        let maxNum = 0;
+        blocks.forEach(block => {
+            const key = block.getAttribute('data-die-key');
+            const m = key && key.match(/^die_(\d+)$/);
+            if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+        });
+        const newKey = 'die_' + (maxNum + 1);
+        const container = document.getElementById('dice-config-form');
+        const div = document.createElement('div');
+        div.innerHTML = createDieBlockHTML(newKey, {});
+        container.appendChild(div.firstElementChild);
+        updateRemoveButtons();
+    }
+
+    function removeDie(dieKey) {
+        const block = document.querySelector(`.dice-die-block[data-die-key="${dieKey}"]`);
+        if (block) {
+            block.remove();
+            updateRemoveButtons();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await waitForAuth();
+        await loadDiceConfig();
+        document.getElementById('save-dice-config-btn').addEventListener('click', saveDiceConfig);
+        document.getElementById('export-dice-btn').addEventListener('click', exportDice);
+        document.getElementById('import-dice-btn').addEventListener('click', importDice);
+        document.getElementById('add-die-btn').addEventListener('click', addDie);
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('.remove-die-btn') && !e.target.disabled) {
+                removeDie(e.target.getAttribute('data-die-key'));
+            }
+        });
+    });
+</script>
+{% endblock %}

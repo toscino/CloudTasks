@@ -84,7 +84,7 @@ All API endpoints return JSON in this format:
 
 **GET** `/api/tasks`
 
-**Description**: Get active tasks for current user (max 4 tasks)
+**Description**: Get active daily task session (5 tasks), pending performance bonus items for the assignee, and owed-point balances for the couple.
 
 **Response**:
 ```json
@@ -100,7 +100,32 @@ All API endpoints return JSON in this format:
       "saved": false,
       "completed": false
     }
-  ]
+  ],
+  "bonus_items": [
+    {
+      "id": "karleigh_2025-05-21",
+      "type": "performance_bonus",
+      "description": "Tier 4 reward text",
+      "kind": "reward",
+      "category": "Reward",
+      "earner_username": "karleigh",
+      "assignee_username": "ian",
+      "earned_for_date": "2025-05-21",
+      "days_remaining": 2,
+      "owed_conversion_points": 50,
+      "can_abandon": true
+    }
+  ],
+  "owed_points": {
+    "ian": 0,
+    "karleigh": 25
+  },
+  "stats": {
+    "total_instances": 5,
+    "completed_instances": 2,
+    "total_points": 10,
+    "completed_points": 4
+  }
 }
 ```
 
@@ -515,130 +540,90 @@ All API endpoints return JSON in this format:
 }
 ```
 
-## Morning Cards
+## Performance rewards and owed points
 
-### Get Morning Card Templates
+Bands are computed at the daily reset from yesterday's `task_points_daily` (`points_earned` vs `streak_threshold`). Goal &lt; 3 skips band evaluation. Each earned slot becomes a bonus item (`{earner}_{earned_for_date}` and `{earner}_{earned_for_date}_2` for the second 2× slot).
 
-**GET** `/api/morning-cards`
+Reset is **lazy** (first site visit per day, not a cron). Expiry and creation run only in `check_and_reset_daily_tasks`; the task list API does not expire items. Skipped days, late reset, missed-reset reward catch-up (1 vs 2+ missed days), and missed daily tasks are documented in [DAILY_RESET_BEHAVIOR.md](DAILY_RESET_BEHAVIOR.md).
+
+### Get tier settings
+
+**GET** `/api/performance-tier-settings`
 
 **Response**:
 ```json
 {
   "status": "success",
-  "templates": [
+  "username": "ian",
+  "tiers": [
     {
-      "id": "card123",
-      "card_text": "Morning meditation",
-      "clothes_points": 1,
-      "timer_minutes": 5,
-      "ian_rules": [],
-      "karleigh_rules": [],
-      "active": true
+      "band_index": 0,
+      "label": "Below goal",
+      "kind": "consequence",
+      "reward_slots": [
+        {
+          "item_text": "Consequence text",
+          "owed_conversion_points": 10,
+          "assign_to": "self"
+        }
+      ]
+    },
+    {
+      "band_index": 4,
+      "label": "2× goal",
+      "kind": "reward",
+      "reward_slots": [
+        { "item_text": "First reward", "owed_conversion_points": 5, "assign_to": "self" },
+        { "item_text": "Second reward", "owed_conversion_points": 3, "assign_to": "spouse" }
+      ]
     }
   ]
 }
 ```
 
-### Create Morning Card
+Tier settings are stored **per user** (`performance_tier_settings/{username}`). When you earn a band, your configured text applies; `assign_to` is relative to you (`self` = you complete it, `spouse` = your partner completes it). Your spouse maintains a separate settings doc for their own rewards/consequences. Bands 0–3 have one slot; band 4 has two (second may be empty text to skip).
 
-**POST** `/api/morning-cards`
+### Save tier settings
+
+**PUT** `/api/performance-tier-settings`
 
 **Request**:
 ```json
 {
-  "card_text": "Morning meditation",
-  "clothes_points": 1,
-  "timer_minutes": 5,
-  "ian_rules": [],
-  "karleigh_rules": [],
-  "active": true
+  "tiers": [ /* five tier objects, same shape as GET */ ]
 }
 ```
+
+### Band preview (today's goals)
+
+**GET** `/api/performance-tier-settings/preview`
+
+Returns dynamic cutoffs (G, steps to 2G) per user for the couple.
+
+### Complete bonus item
+
+**PUT** `/api/performance-bonus/<item_id>/complete`
+
+Assignee only. Marks `completed`; no owed points.
+
+### Abandon bonus item
+
+**PUT** `/api/performance-bonus/<item_id>/abandon`
+
+Assignee only. Immediately credits `owed_conversion_points` to assignee's `owed_points_balance` (same as 3rd-night expiry) and marks `expired`.
+
+### Get owed points
+
+**GET** `/api/owed-points`
 
 **Response**:
 ```json
 {
   "status": "success",
-  "message": "Card created",
-  "card": {
-    "id": "card123",
-    "card_text": "Morning meditation",
-    "clothes_points": 1,
-    "timer_minutes": 5
+  "balances": {
+    "ian": 0,
+    "karleigh": 25
   }
-}
-```
-
-### Get Today's Selection
-
-**GET** `/api/morning-cards/today`
-
-**Response**:
-```json
-{
-  "status": "success",
-  "selection": {
-    "locked": true,
-    "selected_card_ids": ["card1", "card2"],
-    "total_clothes_points": 3,
-    "total_timer_minutes": 15,
-    "ian_rules": [],
-    "karleigh_rules": []
-  }
-}
-```
-
-### Lock Today's Selection
-
-**POST** `/api/morning-cards/today/select`
-
-**Request**:
-```json
-{
-  "card_ids": ["card1", "card2"]
-}
-```
-
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Selection locked"
-}
-```
-
-### Update Morning Card
-
-**PUT** `/api/morning-cards/<card_id>`
-
-**Request**:
-```json
-{
-  "card_text": "Updated text",
-  "clothes_points": 2,
-  "timer_minutes": 10,
-  "ian_rules": ["Rule 1"],
-  "karleigh_rules": ["Rule 2"]
-}
-```
-
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Card updated"
-}
-```
-
-### Delete Morning Card
-
-**DELETE** `/api/morning-cards/<card_id>`
-
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Card deleted"
 }
 ```
 

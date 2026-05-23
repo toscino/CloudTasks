@@ -3,8 +3,7 @@ Goal service - handles goal-related business logic
 """
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
-from datetime import datetime
-from src.models.goal import GoalModel, RewardGoalModel, create_goal_from_request_data, create_reward_goal_from_option
+from src.models.goal import GoalModel, create_goal_from_request_data
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import NotFoundError, UnauthorizedError, ValidationError, FirestoreError
 from src.utils.error_handlers import handle_exception
@@ -163,84 +162,3 @@ class GoalService:
             'status': 'success',
             'categories': categories
         }
-    
-    def get_rewards_owed(self, username: str) -> Dict[str, Any]:
-        """Get pending rewards owed"""
-        try:
-            self.logger.debug(f"Fetching rewards for user: {username}")
-            
-            # Query pending reward goals for this user only
-            goals_query = self.db.collection('reward_goals').where(
-                filter=firestore.And([
-                    FieldFilter('username', '==', username),
-                    FieldFilter('status', '==', 'pending')
-                ])
-            )
-            goals_docs = list(goals_query.stream())  # Convert to list to avoid iterator issues
-            self.logger.debug(f"Found {len(goals_docs)} reward goal documents")
-            
-            rewards = []
-            for doc in goals_docs:
-                goal_data = doc.to_dict()
-                goal_data['id'] = doc.id
-                
-                # Convert timestamps
-                if 'created_at' in goal_data and hasattr(goal_data['created_at'], 'timestamp'):
-                    goal_data['created_at'] = datetime.fromtimestamp(goal_data['created_at'].timestamp())
-                if 'updated_at' in goal_data and hasattr(goal_data['updated_at'], 'timestamp'):
-                    goal_data['updated_at'] = datetime.fromtimestamp(goal_data['updated_at'].timestamp())
-                
-                rewards.append(goal_data)
-            
-            self.logger.debug(f"Returning {len(rewards)} rewards")
-            return {
-                'status': 'success',
-                'rewards': rewards
-            }
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to get rewards: {str(e)}'
-            }
-    
-    def complete_reward_owed(self, goal_id: str, username: str) -> Dict[str, Any]:
-        """Complete reward owed"""
-        try:
-            doc_ref = self.db.collection('reward_goals').document(goal_id)
-            doc = doc_ref.get()
-            
-            if not doc.exists:
-                return {
-                    'status': 'error',
-                    'message': 'Reward not found'
-                }
-            
-            goal_data = doc.to_dict()
-            if goal_data.get('username') != username:
-                return {
-                    'status': 'error',
-                    'message': 'Unauthorized: Reward belongs to another user'
-                }
-            
-            if goal_data.get('status') != 'pending':
-                return {
-                    'status': 'error',
-                    'message': 'Reward is already completed'
-                }
-            
-            # Mark as completed
-            doc_ref.update({
-                'status': 'completed',
-                'completed_at': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            })
-            
-            return {
-                'status': 'success',
-                'message': 'Reward completed successfully'
-            }
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to complete reward: {str(e)}'
-            }

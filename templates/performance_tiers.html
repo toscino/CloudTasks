@@ -1,0 +1,522 @@
+{% extends "layout.html" %}
+
+
+
+{% block title %}CloudTasks - Performance Tiers{% endblock %}
+
+
+
+{% block styles %}
+
+<style>
+
+    .tiers-container { max-width: 900px; margin: 0 auto; }
+
+    .tier-card {
+
+        background: #fff;
+
+        border: 1px solid #e0e0e0;
+
+        border-radius: 8px;
+
+        padding: 16px;
+
+        margin-bottom: 12px;
+
+    }
+
+    .tier-card h3 { margin: 0 0 12px 0; font-size: 16px; }
+
+    .form-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+
+    .form-group { flex: 1; min-width: 140px; }
+
+    .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+
+    .form-group input, .form-group select, .form-group textarea {
+
+        width: 100%;
+
+        padding: 8px;
+
+        border: 1px solid #ced4da;
+
+        border-radius: 4px;
+
+        font-size: 14px;
+
+    }
+
+    .form-group.wide { flex: 2; min-width: 280px; }
+
+    .reward-slot-block {
+
+        border: 1px solid #e8e8e8;
+
+        border-radius: 6px;
+
+        padding: 12px;
+
+        margin-bottom: 10px;
+
+        background: #fafafa;
+
+    }
+
+    .reward-slot-block h4 {
+
+        margin: 0 0 10px 0;
+
+        font-size: 13px;
+
+        color: #444;
+
+        font-weight: 600;
+
+    }
+
+    .preview-box {
+
+        background: #f8f9fa;
+
+        border: 1px solid #e0e0e0;
+
+        border-radius: 8px;
+
+        padding: 16px;
+
+        margin-bottom: 20px;
+
+        font-size: 14px;
+
+    }
+
+    .preview-box h3 { margin-top: 0; }
+
+    .btn-primary {
+
+        background: #007bff;
+
+        color: white;
+
+        border: none;
+
+        padding: 10px 20px;
+
+        border-radius: 6px;
+
+        cursor: pointer;
+
+        font-size: 14px;
+
+    }
+
+    .btn-primary:hover { background: #0056b3; }
+
+    #save-status { margin-left: 12px; color: #28a745; }
+
+</style>
+
+{% endblock %}
+
+
+
+{% block content %}
+
+<div class="tiers-container">
+
+    <h1>Performance tiers</h1>
+
+    <p id="tiers-intro">Your rewards and consequences when you earn each band (two slots on 2× goal). Self = you complete it; Spouse = your partner completes it. Your spouse configures their own tiers separately.</p>
+
+
+
+    <div id="preview-box" class="preview-box">
+
+        <h3>Today’s band cutoffs</h3>
+
+        <div id="preview-content">Loading…</div>
+
+    </div>
+
+
+
+    <div id="tiers-form"></div>
+
+    <button type="button" class="btn-primary" id="save-tiers-btn">Save settings</button>
+
+    <span id="save-status"></span>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block scripts %}
+
+{{ super() }}
+
+<script type="module">
+
+    import { waitForAuth, apiCall } from '/static/js/utils.js';
+
+
+
+    const tierLabels = [
+
+        'Below goal (consequence)',
+
+        'Goal → +30%',
+
+        '+30% → +60%',
+
+        '+60% → 2× goal',
+
+        '2× goal+',
+
+    ];
+
+
+
+    const slotTitles = {
+
+        0: ['Consequence'],
+
+        4: ['First reward', 'Second reward (optional)'],
+
+    };
+
+
+
+    function escapeHtml(s) {
+
+        const d = document.createElement('div');
+
+        d.textContent = s;
+
+        return d.innerHTML;
+
+    }
+
+
+
+    function slotCount(bandIndex) {
+
+        return bandIndex === 4 ? 2 : 1;
+
+    }
+
+
+
+    function slotTitle(bandIndex, slotIndex) {
+
+        const titles = slotTitles[bandIndex] || ['Reward'];
+
+        return titles[slotIndex] || `Reward ${slotIndex + 1}`;
+
+    }
+
+
+
+    function renderRewardSlot(bandIndex, slotIndex, slot) {
+
+        return `
+
+            <div class="reward-slot-block">
+
+                <h4>${slotTitle(bandIndex, slotIndex)}</h4>
+
+                <div class="form-row">
+
+                    <div class="form-group wide">
+
+                        <label>Task list text</label>
+
+                        <textarea rows="2" data-field="item_text" data-index="${bandIndex}" data-slot="${slotIndex}">${escapeHtml(slot.item_text || '')}</textarea>
+
+                    </div>
+
+                </div>
+
+                <div class="form-row">
+
+                    <div class="form-group">
+
+                        <label>Owed points if missed</label>
+
+                        <input type="number" min="0" data-field="owed_conversion_points" data-index="${bandIndex}" data-slot="${slotIndex}" value="${slot.owed_conversion_points ?? 0}">
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>Assign to</label>
+
+                        <select data-field="assign_to" data-index="${bandIndex}" data-slot="${slotIndex}">
+
+                            <option value="self" ${slot.assign_to === 'self' ? 'selected' : ''}>Self (you)</option>
+
+                            <option value="spouse" ${slot.assign_to === 'spouse' ? 'selected' : ''}>Spouse (partner)</option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+
+    function renderTierForm(tiers) {
+
+        const container = document.getElementById('tiers-form');
+
+        container.innerHTML = '';
+
+        tiers.sort((a, b) => a.band_index - b.band_index).forEach((tier) => {
+
+            const i = tier.band_index;
+
+            const slots = tier.reward_slots || [];
+
+            const count = slotCount(i);
+
+            let slotsHtml = '';
+
+            for (let s = 0; s < count; s++) {
+
+                slotsHtml += renderRewardSlot(i, s, slots[s] || {});
+
+            }
+
+            const card = document.createElement('div');
+
+            card.className = 'tier-card';
+
+            card.innerHTML = `
+
+                <h3>${tierLabels[i] || 'Tier ' + i}</h3>
+
+                <div class="form-row">
+
+                    <div class="form-group wide">
+
+                        <label>Tier label</label>
+
+                        <input type="text" data-field="label" data-index="${i}" value="${escapeHtml(tier.label || '')}">
+
+                    </div>
+
+                </div>
+
+                ${slotsHtml}
+
+            `;
+
+            container.appendChild(card);
+
+        });
+
+    }
+
+
+
+    function getField(bandIndex, field, base, slot) {
+
+        const el = document.querySelector(
+
+            `[data-field="${field}"][data-index="${bandIndex}"][data-slot="${slot}"]`
+
+        );
+
+        return el ? el.value : (base[field] ?? '');
+
+    }
+
+
+
+    function getLabel(bandIndex, base) {
+
+        const el = document.querySelector(`[data-field="label"][data-index="${bandIndex}"]`);
+
+        return el ? el.value : base.label;
+
+    }
+
+
+
+    function collectTiers(originalTiers) {
+
+        const tiers = [];
+
+        for (let i = 0; i < 5; i++) {
+
+            const base = originalTiers.find(t => t.band_index === i) || { band_index: i };
+
+            const reward_slots = [];
+
+            for (let s = 0; s < slotCount(i); s++) {
+
+                const slotBase = (base.reward_slots && base.reward_slots[s]) || {};
+
+                reward_slots.push({
+
+                    item_text: getField(i, 'item_text', slotBase, s),
+
+                    owed_conversion_points: parseInt(getField(i, 'owed_conversion_points', slotBase, s), 10) || 0,
+
+                    assign_to: getField(i, 'assign_to', slotBase, s),
+
+                });
+
+            }
+
+            tiers.push({
+
+                band_index: i,
+
+                label: getLabel(i, base),
+
+                kind: i === 0 ? 'consequence' : 'reward',
+
+                reward_slots,
+
+            });
+
+        }
+
+        return tiers;
+
+    }
+
+
+
+    async function loadPreview() {
+
+        const data = await apiCall('/api/performance-tier-settings/preview');
+
+        const el = document.getElementById('preview-content');
+
+        if (data.status !== 'success') {
+
+            el.textContent = 'Could not load preview.';
+
+            return;
+
+        }
+
+        let html = '';
+
+        for (const [user, info] of Object.entries(data.previews || {})) {
+
+            if (info.skipped) {
+
+                html += `<p><strong>${user}</strong>: goal too low — no bands today.</p>`;
+
+            } else {
+
+                const c = info.cutoffs || {};
+
+                html += `<p><strong>${user}</strong> (goal ${info.goal}): ` +
+
+                    `&lt; ${c.below_goal} · ${c.below_goal}–${c.band_1 - 1} · ${c.band_1}–${c.band_2 - 1} · ${c.band_2}–${c.two_x - 1} · ${c.two_x}+</p>`;
+
+            }
+
+        }
+
+        el.innerHTML = html || '<p>No preview data.</p>';
+
+    }
+
+
+
+    let loadedTiers = [];
+
+
+
+    async function loadTiers() {
+
+        const data = await apiCall('/api/performance-tier-settings');
+
+        if (data.status === 'success') {
+
+            loadedTiers = data.tiers || [];
+
+            renderTierForm(loadedTiers);
+
+        }
+
+    }
+
+
+
+    document.getElementById('save-tiers-btn').addEventListener('click', async () => {
+
+        const tiers = collectTiers(loadedTiers);
+
+        const result = await apiCall('/api/performance-tier-settings', {
+
+            method: 'PUT',
+
+            body: JSON.stringify({ tiers }),
+
+        });
+
+        const status = document.getElementById('save-status');
+
+        if (result.status === 'success') {
+
+            loadedTiers = result.tiers || tiers;
+
+            renderTierForm(loadedTiers);
+
+            status.textContent = 'Saved.';
+
+            status.style.color = '#28a745';
+
+            setTimeout(() => { status.textContent = ''; }, 3000);
+
+        } else {
+
+            status.textContent = result.message || 'Save failed';
+
+            status.style.color = '#dc3545';
+
+        }
+
+    });
+
+
+
+    document.addEventListener('DOMContentLoaded', async () => {
+
+        await waitForAuth();
+
+        const intro = document.getElementById('tiers-intro');
+        const name = window.authState?.currentUsername;
+        if (intro && name) {
+            intro.innerHTML =
+                `<strong>${escapeHtml(name)}</strong>: your rewards when you earn each band. ` +
+                '<strong>Self</strong> = you complete it; <strong>Spouse</strong> = your partner completes it. ' +
+                'Your spouse sets their own tiers while logged in as them.';
+        }
+
+        await loadTiers();
+
+        await loadPreview();
+
+    });
+
+</script>
+
+{% endblock %}
+
+

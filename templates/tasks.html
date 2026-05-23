@@ -10,10 +10,40 @@
             font-size: 18px;
             font-weight: 600;
         }
-        #task-list, #rewards-list {
+        #task-list, #bonus-task-list {
             list-style: none;
             padding: 0;
             margin: 0 0 30px 0;
+        }
+        .bonus-tasks-section {
+            margin-top: 28px;
+            padding-top: 16px;
+            border-top: 2px solid #e8e8e8;
+        }
+        .bonus-tasks-section h2 {
+            font-size: 15px;
+            color: #666;
+            margin: 0 0 12px 0;
+            font-weight: 600;
+        }
+        .task-item.bonus-item {
+            border-style: dashed;
+        }
+        .category.consequence {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .category.reward {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .owed-points-bar {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
         }
         .task-item {
             position: relative;
@@ -55,10 +85,6 @@
             font-weight: 500;
         }
         
-        /* Center challenge content since there's no button */
-        #rewards-list .task-content {
-            justify-content: center !important;
-        }
         .category {
             background-color: #e3f2fd;
             color: #1976d2;
@@ -121,18 +147,6 @@
         .abandon-confirm-btn:hover {
             background-color: #f0f0f0;
         }
-        .section-divider {
-            border-top: 2px solid #e0e0e0;
-            margin: 30px 0;
-        }
-        .rewards-section {
-            margin-top: 20px;
-        }
-        
-        .daily-tasks-section {
-            margin-top: 20px;
-        }
-        
         .btn-sm {
             padding: 6px 12px;
             font-size: 12px;
@@ -140,20 +154,14 @@
 {% endblock %}
 
 {% block content %}
+        <div id="owed-points-bar" class="owed-points-bar" style="display: none;"></div>
         <ul id="task-list">
             <li class="empty-state">Authenticating...</li>
         </ul>
-
-        <!-- DISABLED: Challenges section temporarily disabled
-        <div class="section-divider"></div>
-        
-        <div class="rewards-section">
-            <h2>Challenges</h2>
-            <ul id="rewards-list">
-                <li class="empty-state">Authenticating...</li>
-            </ul>
+        <div class="bonus-tasks-section" id="bonus-section" style="display: none;">
+            <h2>Rewards & consequences</h2>
+            <ul id="bonus-task-list"></ul>
         </div>
-        -->
 {% endblock %}
 
 {% block scripts %}
@@ -163,7 +171,9 @@
     
     // JavaScript Logic
     const taskListElement = document.getElementById('task-list');
-    const rewardsListElement = document.getElementById('rewards-list');
+    const bonusListElement = document.getElementById('bonus-task-list');
+    const bonusSection = document.getElementById('bonus-section');
+    const owedPointsBar = document.getElementById('owed-points-bar');
 
     // Wait for authentication to be ready, then load tasks
     document.addEventListener('DOMContentLoaded', async function() {
@@ -173,12 +183,6 @@
         
         // Load tasks using global authentication
         fetchAndDisplayTasks();
-        
-        // DISABLED: Challenges and stats temporarily disabled
-        // fetchAndDisplayRewards();
-        // loadWeeklyPoints();
-        // loadPendingRewards();
-        // checkPendingRewards();
     });
 
     // Function to fetch tasks from the Python backend
@@ -257,10 +261,73 @@
                 taskListElement.innerHTML = '<li class="empty-state">No tasks yet. <a href="/test">Create your first task</a></li>';
             }
 
+            renderBonusItems(tasksData);
+            renderOwedPoints(tasksData.owed_points);
+
         } catch (error) {
             console.error("Failed to fetch tasks:", error);
             taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
         }
+    }
+
+    function renderOwedPoints(balances) {
+        if (!owedPointsBar || !balances || typeof balances !== 'object') {
+            if (owedPointsBar) owedPointsBar.style.display = 'none';
+            return;
+        }
+        const parts = Object.entries(balances).map(([u, n]) => `${u}: ${n} owed`);
+        if (parts.length === 0) {
+            owedPointsBar.style.display = 'none';
+            return;
+        }
+        owedPointsBar.textContent = 'Owed points — ' + parts.join(' · ');
+        owedPointsBar.style.display = 'block';
+    }
+
+    function buildBonusItemHtml(item) {
+        const catClass = item.kind === 'consequence' ? 'consequence' : 'reward';
+        const days = item.days_remaining || 1;
+        const daysLabel = days === 2 ? '2 days left' : '1 day left';
+        const earnerNote = item.earner_username
+            ? `<span class="duration">For ${item.earner_username} (${item.earned_for_date || ''})</span>`
+            : '';
+        return `
+            <div class="task-content">
+                <div class="task-info">
+                    <span class="task-text">${item.description}</span>
+                    <div class="task-meta">
+                        <span class="category ${catClass}">${item.category || 'Bonus'}</span>
+                        <span class="duration">${daysLabel}</span>
+                        ${earnerNote}
+                    </div>
+                </div>
+            </div>
+            <div class="swipe-confirmation">
+                <button class="complete-confirm-btn">Complete?</button>
+            </div>
+            <div class="swipe-confirmation abandon">
+                <button class="abandon-confirm-btn">Abandon?</button>
+            </div>
+        `;
+    }
+
+    function renderBonusItems(tasksData) {
+        if (!bonusListElement) return;
+        bonusListElement.innerHTML = '';
+        const items = (tasksData.status === 'success' && tasksData.bonus_items) ? tasksData.bonus_items : [];
+        if (items.length === 0) {
+            if (bonusSection) bonusSection.style.display = 'none';
+            return;
+        }
+        if (bonusSection) bonusSection.style.display = 'block';
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'task-item bonus-item';
+            li.dataset.taskId = item.id;
+            li.dataset.taskType = 'performance_bonus';
+            li.innerHTML = buildBonusItemHtml(item);
+            bonusListElement.appendChild(li);
+        });
     }
 
         // Function to load and display task stats
@@ -334,211 +401,72 @@
             }
         }
 
-        // DISABLED: Challenges system temporarily disabled
-        // Function to fetch challenges from the Python backend
-        // async function fetchAndDisplayRewards() {
-        //     try {
-        //         // Fetch challenges (backend will generate new ones if needed)
-        //         const response = await fetch('/api/challenges');
-        //         const data = await response.json();
-
-        //         // Clear any old rewards
-        //         rewardsListElement.innerHTML = '';
-
-        //         if (data.status === 'success' && data.challenges && data.challenges.length > 0) {
-        //             // Sort challenges alphabetically by description
-        //             const sortedChallenges = data.challenges.sort((a, b) => a.description.localeCompare(b.description));
-        //             // Create and display a list item for each challenge
-        //             sortedChallenges.forEach(task => {
-        //                 const li = document.createElement('li');
-        //                 li.className = 'task-item';
-        //                 li.dataset.taskId = task.id;
-                        
-        //                 // Format difficulty and duration display
-        //                 const difficulty = task.difficulty || 'N/A';
-        //                 const duration = task.duration ? `${task.duration} min` : 'N/A';
-                        
-        //                 li.innerHTML = `
-        //                     <div class="task-content">
-        //                         <div class="task-info">
-        //                             <span class="task-text">${task.description}</span>
-        //                             <div class="task-meta">
-        //                                 <span class="category">Reward</span>
-        //                                 <span class="difficulty">Difficulty: ${difficulty}/10</span>
-        //                                 <span class="duration">Duration: ${duration}</span>
-        //                             </div>
-        //                         </div>
-        //                     </div>
-        //                     <div class="swipe-confirmation">
-        //                         <button class="complete-confirm-btn">Complete?</button>
-        //                     </div>
-        //                 `;
-                        
-        //                 rewardsListElement.appendChild(li);
-        //             });
-        //         } else {
-        //             rewardsListElement.innerHTML = '<li class="empty-state">No challenges yet. You\'ll get challenges when your partner earns rewards!</li>';
-        //         }
-
-        //     } catch (error) {
-        //         console.error("Failed to fetch challenges:", error);
-        //         rewardsListElement.innerHTML = '<li class="empty-state">Error loading challenges. Please try again.</li>';
-        //     }
-        // }
-
-        // DISABLED: Challenges system temporarily disabled
-        // Function to complete a challenge via API
-        // async function completeChallenge(taskId) {
-        //     try {
-        //         console.log('DEBUG: Completing challenge:', taskId);
-        //         const response = await fetch(`/api/challenges/${taskId}/complete`, {
-        //             method: 'POST',
-        //             headers: {
-        //                 'Content-Type': 'application/json'
-        //             }
-        //         });
-
-        //         console.log('DEBUG: Challenge completion response status:', response.status);
-                
-        //         if (response.ok) {
-        //             const result = await response.json();
-        //             console.log('DEBUG: Challenge completion successful:', result);
-        //             return true;
-        //         } else {
-        //             const errorText = await response.text();
-        //             console.error('Failed to complete challenge:', response.status, errorText);
-        //             return false;
-        //         }
-        //     } catch (error) {
-        //         console.error('Error completing challenge:', error);
-        //         return false;
-        //     }
-        // }
-
-        // Add a click listener to the entire task list for event delegation
-        taskListElement.addEventListener('click', async function(event) {
-            // Check if complete confirmation button was clicked
-            if (event.target.classList.contains('complete-confirm-btn')) {
-                const taskItem = event.target.closest('.task-item');
-                const taskId = taskItem.dataset.taskId;
-                
-                // Hide confirmation
-                const confirmation = taskItem.querySelector('.swipe-confirmation');
-                confirmation.classList.remove('show');
-                
-                // Add visual effect for completion
-                taskItem.style.textDecoration = 'line-through';
-                taskItem.style.opacity = '0';
-                taskItem.style.transform = 'translateX(20px)';
-
-                // Complete the task via API (all tasks are daily tasks now)
-                const response = await fetch(`/api/tasks/${taskId}/complete`, {
-                    method: 'PUT'
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('Task completed!');
-                    
-                    // Remove the task from the view after the animation completes
-                    setTimeout(() => {
-                        taskItem.remove();
-                        // Add small delay to ensure database is updated before fetching
-                        setTimeout(() => {
-                            fetchAndDisplayTasks();
-                        }, 100);
-                    }, 400);
-                } else {
-                    // Revert the visual changes if API call failed
-                    taskItem.style.textDecoration = '';
-                    taskItem.style.opacity = '';
-                    taskItem.style.transform = '';
-                    alert('Failed to complete task. Please try again.');
-                }
+        async function handleItemComplete(taskItem) {
+            const taskId = taskItem.dataset.taskId;
+            const isBonus = taskItem.dataset.taskType === 'performance_bonus';
+            const confirmation = taskItem.querySelector('.swipe-confirmation:not(.abandon)');
+            if (confirmation) confirmation.classList.remove('show');
+            taskItem.style.textDecoration = 'line-through';
+            taskItem.style.opacity = '0';
+            taskItem.style.transform = 'translateX(20px)';
+            const url = isBonus
+                ? `/api/performance-bonus/${taskId}/complete`
+                : `/api/tasks/${taskId}/complete`;
+            const response = await fetch(url, { method: 'PUT' });
+            if (response.ok) {
+                setTimeout(() => {
+                    taskItem.remove();
+                    setTimeout(() => fetchAndDisplayTasks(), 100);
+                }, 400);
+            } else {
+                taskItem.style.textDecoration = '';
+                taskItem.style.opacity = '';
+                taskItem.style.transform = '';
+                alert('Failed to complete. Please try again.');
             }
-            
-            // Check if abandon confirmation button was clicked
-            if (event.target.classList.contains('abandon-confirm-btn')) {
-                const taskItem = event.target.closest('.task-item');
-                const taskId = taskItem.dataset.taskId;
-                
-                // Hide confirmation
-                const abandonConfirmation = taskItem.querySelector('.swipe-confirmation.abandon');
-                abandonConfirmation.classList.remove('show');
-                
-                // Add visual effect for abandonment
-                taskItem.style.textDecoration = 'line-through';
-                taskItem.style.opacity = '0.5';
-                taskItem.style.transform = 'translateX(-20px)';
+        }
 
-                // Abandon the task via API
-                const response = await fetch(`/api/tasks/${taskId}/abandon`, {
-                    method: 'PUT'
-                });
-                
-                if (response.ok) {
-                    console.log('Task abandoned successfully');
-                    
-                    // Remove the task from the view after the animation completes
-                    setTimeout(() => {
-                        taskItem.remove();
-                        // Refresh tasks to update display
-                        setTimeout(() => {
-                            fetchAndDisplayTasks();
-                        }, 100);
-                    }, 400);
-                } else {
-                    alert('Failed to abandon task. Please try again.');
-                    // Reset visual state
-                    taskItem.style.opacity = '1';
-                    taskItem.style.transform = 'translateX(0)';
-                    taskItem.style.textDecoration = 'none';
-                }
+        async function handleItemAbandon(taskItem) {
+            const taskId = taskItem.dataset.taskId;
+            const isBonus = taskItem.dataset.taskType === 'performance_bonus';
+            const abandonConfirmation = taskItem.querySelector('.swipe-confirmation.abandon');
+            if (abandonConfirmation) abandonConfirmation.classList.remove('show');
+            taskItem.style.textDecoration = 'line-through';
+            taskItem.style.opacity = '0.5';
+            taskItem.style.transform = 'translateX(-20px)';
+            const url = isBonus
+                ? `/api/performance-bonus/${taskId}/abandon`
+                : `/api/tasks/${taskId}/abandon`;
+            const response = await fetch(url, { method: 'PUT' });
+            if (response.ok) {
+                setTimeout(() => {
+                    taskItem.remove();
+                    setTimeout(() => fetchAndDisplayTasks(), 100);
+                }, 400);
+            } else {
+                alert('Failed to abandon. Please try again.');
+                taskItem.style.opacity = '1';
+                taskItem.style.transform = 'translateX(0)';
+                taskItem.style.textDecoration = 'none';
             }
-        });
+        }
 
-        // DISABLED: Challenges system temporarily disabled
-        // Add a click listener to the rewards list for event delegation
-        // rewardsListElement.addEventListener('click', async function(event) {
-        //     // Challenges don't have save functionality - only completion
-            
-        //     // Check if complete confirmation button was clicked
-        //     if (event.target.classList.contains('complete-confirm-btn')) {
-        //         const rewardItem = event.target.closest('.task-item');
-        //         const taskId = rewardItem.dataset.taskId;
-                
-        //         // Hide confirmation
-        //         const confirmation = rewardItem.querySelector('.swipe-confirmation');
-        //         confirmation.classList.remove('show');
-                
-        //         // Add visual effect for completion
-        //         rewardItem.style.textDecoration = 'line-through';
-        //         rewardItem.style.opacity = '0';
-        //         rewardItem.style.transform = 'translateX(20px)';
+        function attachListClickHandlers(listElement) {
+            if (!listElement) return;
+            listElement.addEventListener('click', async function(event) {
+                if (event.target.classList.contains('complete-confirm-btn')) {
+                    const taskItem = event.target.closest('.task-item');
+                    if (taskItem) await handleItemComplete(taskItem);
+                }
+                if (event.target.classList.contains('abandon-confirm-btn')) {
+                    const taskItem = event.target.closest('.task-item');
+                    if (taskItem) await handleItemAbandon(taskItem);
+                }
+            });
+        }
+        attachListClickHandlers(taskListElement);
+        attachListClickHandlers(bonusListElement);
 
-        //         // Complete the challenge via API
-        //         const success = await completeChallenge(taskId);
-                
-        //         if (success) {
-        //             // Remove the reward from the view after the animation completes
-        //             setTimeout(() => {
-        //                 rewardItem.remove();
-        //                 // Refresh pending goals stats after reward completion
-        //                 loadPendingRewards();
-        //                 // Fetch new rewards to replace the completed one
-        //                 fetchAndDisplayRewards();
-        //             }, 400);
-        //         } else {
-        //             // Revert the visual changes if API call failed
-        //             rewardItem.style.textDecoration = '';
-        //             rewardItem.style.opacity = '';
-        //             rewardItem.style.transform = '';
-        //             alert('Failed to complete reward. Please try again.');
-        //         }
-        //     }
-        // });
-
-        // Add touch and mouse event listeners for swipe detection on tasks
         let startX = 0;
         let currentX = 0;
         let isDragging = false;
@@ -637,675 +565,36 @@
             currentTaskItem = null;
         }
 
-        // Touch events for mobile (only task list now)
-        taskListElement.addEventListener('touchstart', function(event) {
-            startDrag(event, event.touches[0].clientX);
-        });
+        function attachSwipeHandlers(listElement) {
+            if (!listElement) return;
+            listElement.addEventListener('touchstart', function(event) {
+                startDrag(event, event.touches[0].clientX);
+            });
+            listElement.addEventListener('touchmove', function(event) {
+                updateDrag(event.touches[0].clientX);
+            });
+            listElement.addEventListener('touchend', function() {
+                endDrag();
+            });
+            listElement.addEventListener('mousedown', function(event) {
+                if (!event.target.classList.contains('complete-confirm-btn') &&
+                    !event.target.classList.contains('abandon-confirm-btn')) {
+                    startDrag(event, event.clientX);
+                    event.preventDefault();
+                }
+            });
+            listElement.addEventListener('mousemove', function(event) {
+                updateDrag(event.clientX);
+            });
+            listElement.addEventListener('mouseup', function() {
+                endDrag();
+            });
+            listElement.addEventListener('dragstart', function(event) {
+                event.preventDefault();
+            });
+        }
+        attachSwipeHandlers(taskListElement);
+        attachSwipeHandlers(bonusListElement);
 
-        taskListElement.addEventListener('touchmove', function(event) {
-            updateDrag(event.touches[0].clientX);
-        });
-
-        taskListElement.addEventListener('touchend', function(event) {
-            endDrag();
-        });
-
-        // Mouse events for desktop
-        taskListElement.addEventListener('mousedown', function(event) {
-            // Only start drag if not clicking on a button
-            if (!event.target.classList.contains('complete-confirm-btn')) {
-                startDrag(event, event.clientX);
-                event.preventDefault(); // Prevent text selection
-            }
-        });
-
-        
-        taskListElement.addEventListener('mousemove', function(event) {
-            updateDrag(event.clientX);
-        });
-
-        taskListElement.addEventListener('mouseup', function(event) {
-            endDrag();
-        });
-
-        // Prevent default drag behavior
-        taskListElement.addEventListener('dragstart', function(event) {
-            event.preventDefault();
-        });
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to show reward notification
-        // function showRewardNotification(rewardOptions = []) {
-        //     // Create notification element
-        //     const notification = document.createElement('div');
-        //     notification.className = 'reward-notification';
-            
-        //     let content = `
-        //         <div class="reward-notification-content">
-        //             <h3>🎉 Reward Earned!</h3>
-        //             <p>You've earned a reward for completing a difficult task!</p>
-        //     `;
-            
-        //     if (rewardOptions && rewardOptions.length > 0) {
-        //         content += `
-        //             <p>Choose one of these reward options:</p>
-        //             <div class="reward-options">
-        //         `;
-                
-        //         rewardOptions.forEach((option, index) => {
-        //             content += `
-        //                 <div class="reward-option" data-option-id="${option.id}">
-        //                     <h4>Option ${index + 1}</h4>
-        //                     <p>${option.display}</p>
-        //                     <button class="select-reward-btn" onclick="selectRewardOption('${option.id}')">Select This Reward</button>
-        //                 </div>
-        //             `;
-        //         });
-                
-        //         content += `
-        //             </div>
-        //             <p><em>Choose your reward to continue!</em></p>
-        //         `;
-        //     } else {
-        //         content += `
-        //             <p><em>Reward options will be available soon.</em></p>
-        //             <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
-        //         `;
-        //     }
-            
-        //     content += `</div>`;
-        //     notification.innerHTML = content;
-            
-        //     // Add styles
-        //     notification.style.cssText = `
-        //         position: fixed;
-        //         top: 0;
-        //         left: 0;
-        //         width: 100%;
-        //         height: 100%;
-        //         background: rgba(0, 0, 0, 0.5);
-        //         display: flex;
-        //         justify-content: center;
-        //         align-items: center;
-        //         z-index: 1000;
-        //     `;
-            
-        //     notification.querySelector('.reward-notification-content').style.cssText = `
-        //         background: white;
-        //         padding: 2rem;
-        //         border-radius: 10px;
-        //         text-align: center;
-        //         max-width: 600px;
-        //         max-height: 80vh;
-        //         overflow-y: auto;
-        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        //         position: relative;
-        //     `;
-            
-        //     // Style close button
-        //     notification.querySelector('.close-btn').style.cssText = `
-        //         position: absolute;
-        //         top: 10px;
-        //         right: 15px;
-        //         background: #ff4444;
-        //         color: white;
-        //         border: none;
-        //         width: 30px;
-        //         height: 30px;
-        //         border-radius: 50%;
-        //         cursor: pointer;
-        //         font-size: 18px;
-        //         font-weight: bold;
-        //         display: flex;
-        //         align-items: center;
-        //         justify-content: center;
-        //     `;
-            
-        //     // Style reward options
-        //     const rewardOptionsDiv = notification.querySelector('.reward-options');
-        //     if (rewardOptionsDiv) {
-        //         rewardOptionsDiv.style.cssText = `
-        //             display: grid;
-        //             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        //             gap: 1rem;
-        //             margin: 1rem 0;
-        //         `;
-                
-        //         notification.querySelectorAll('.reward-option').forEach(option => {
-        //             option.style.cssText = `
-        //                 border: 2px solid #e0e0e0;
-        //                 border-radius: 8px;
-        //                 padding: 1rem;
-        //                 background: #f9f9f9;
-        //             `;
-        //         });
-                
-        //         notification.querySelectorAll('.select-reward-btn').forEach(btn => {
-        //             btn.style.cssText = `
-        //                 background: #4CAF50;
-        //                 color: white;
-        //                 border: none;
-        //                 padding: 8px 16px;
-        //                 border-radius: 5px;
-        //                 cursor: pointer;
-        //                 margin-top: 0.5rem;
-        //             `;
-        //         });
-        //     }
-            
-        //     // Style regular button
-        //     const regularBtn = notification.querySelector('button');
-        //     if (regularBtn) {
-        //         regularBtn.style.cssText = `
-        //             background: #4CAF50;
-        //             color: white;
-        //             border: none;
-        //             padding: 10px 20px;
-        //             border-radius: 5px;
-        //             cursor: pointer;
-        //             margin-top: 1rem;
-        //         `;
-        //     }
-            
-        //     // Add to page
-        //     document.body.appendChild(notification);
-            
-        //     // Auto-remove after 30 seconds if no reward options
-        //     if (!rewardOptions || rewardOptions.length === 0) {
-        //         setTimeout(() => {
-        //             if (notification.parentElement) {
-        //                 notification.remove();
-        //             }
-        //         }, 5000);
-        //     }
-        // }
-        
-        // DISABLED: Rewards system temporarily disabled
-        // Function to select a reward option
-        // async function selectRewardOption(optionId) {
-        //     try {
-        //         const response = await fetch(`/api/reward-options/${optionId}/select`, {
-        //             method: 'POST'
-        //         });
-                
-        //         if (response.ok) {
-        //             const data = await response.json();
-                    
-                    
-        //             // Remove the notification
-        //             const notification = document.querySelector('.reward-notification');
-        //             if (notification) {
-        //                 notification.remove();
-        //             }
-        //         }
-        //     } catch (error) {
-        //         console.error('Error selecting reward:', error);
-        //     }
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to show reward earned notification (simpler version)
-        // function showRewardEarnedNotification() {
-        //     console.log('DEBUG: showRewardEarnedNotification called');
-        //     // Create notification element
-        //     const notification = document.createElement('div');
-        //     notification.className = 'reward-notification';
-        //     notification.innerHTML = `
-        //         <div class="reward-notification-content">
-        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-        //             <h3>🎉 Reward Earned!</h3>
-        //             <p>You've earned a reward for completing a difficult task!</p>
-        //             <p><em>Check your pending rewards to claim it.</em></p>
-        //             <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
-        //         </div>
-        //     `;
-            
-        //     // Add styles
-        //     notification.style.cssText = `
-        //         position: fixed;
-        //         top: 0;
-        //         left: 0;
-        //         width: 100%;
-        //         height: 100%;
-        //         background: rgba(0, 0, 0, 0.5);
-        //         display: flex;
-        //         justify-content: center;
-        //         align-items: center;
-        //         z-index: 1000;
-        //     `;
-            
-        //     notification.querySelector('.reward-notification-content').style.cssText = `
-        //         background: white;
-        //         padding: 2rem;
-        //         border-radius: 10px;
-        //         text-align: center;
-        //         max-width: 400px;
-        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        //         position: relative;
-        //     `;
-            
-        //     // Style close button
-        //     notification.querySelector('.close-btn').style.cssText = `
-        //         position: absolute;
-        //         top: 10px;
-        //         right: 15px;
-        //         background: #ff4444;
-        //         color: white;
-        //         border: none;
-        //         width: 30px;
-        //         height: 30px;
-        //         border-radius: 50%;
-        //         cursor: pointer;
-        //         font-size: 18px;
-        //         font-weight: bold;
-        //         display: flex;
-        //         align-items: center;
-        //         justify-content: center;
-        //     `;
-            
-        //     notification.querySelector('button:not(.close-btn)').style.cssText = `
-        //         background: #4CAF50;
-        //         color: white;
-        //         border: none;
-        //         padding: 10px 20px;
-        //         border-radius: 5px;
-        //         cursor: pointer;
-        //         margin-top: 1rem;
-        //     `;
-            
-        //     // Add to page
-        //     document.body.appendChild(notification);
-        //     console.log('DEBUG: Notification added to page');
-            
-        //     // Auto-remove after 5 seconds
-        //     setTimeout(() => {
-        //         if (notification.parentElement) {
-        //             notification.remove();
-        //             console.log('DEBUG: Notification auto-removed after 5 seconds');
-        //         }
-        //     }, 5000);
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to check for pending rewards on page load
-        // async function checkPendingRewards() {
-        //     try {
-        //         const response = await fetch('/api/earned-rewards');
-        //         const data = await response.json();
-                
-        //         const trophyIndicator = document.getElementById('trophy-indicator');
-                
-        //         if (data.status === 'success' && data.pending_rewards && data.pending_rewards.length > 0) {
-        //             // Show trophy indicator instead of auto-popup
-        //             trophyIndicator.style.display = 'block';
-        //             trophyIndicator.title = `You have ${data.pending_rewards.length} pending reward${data.pending_rewards.length > 1 ? 's' : ''}! Click to claim them.`;
-        //         } else {
-        //             trophyIndicator.style.display = 'none';
-        //         }
-        //     } catch (error) {
-        //         console.error('Failed to check pending rewards:', error);
-        //     }
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to show pending rewards notification
-        // function showPendingRewardsNotification(pendingRewards) {
-        //     // Create notification element
-        //     const notification = document.createElement('div');
-        //     notification.className = 'reward-notification';
-            
-        //     let content = `
-        //         <div class="reward-notification-content">
-        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-        //             <h3>🎁 Pending Rewards!</h3>
-        //             <p>You have ${pendingRewards.length} reward${pendingRewards.length > 1 ? 's' : ''} waiting to be claimed!</p>
-        //             <div class="pending-rewards">
-        //     `;
-            
-        //     pendingRewards.forEach((reward, index) => {
-        //         content += `
-        //             <div class="pending-reward" data-reward-id="${reward.id}">
-        //                 <h4>Reward ${index + 1}</h4>
-        //                 <p>Earned from difficulty ${reward.task_difficulty} task</p>
-        //                 <button class="claim-reward-btn" onclick="claimReward('${reward.id}')">Claim This Reward</button>
-        //             </div>
-        //         `;
-        //     });
-            
-        //     content += `
-        //             </div>
-        //             <p><em>Choose a reward to claim it!</em></p>
-        //         </div>
-        //     `;
-        //     notification.innerHTML = content;
-            
-        //     // Add styles
-        //     notification.style.cssText = `
-        //         position: fixed;
-        //         top: 0;
-        //         left: 0;
-        //         width: 100%;
-        //         height: 100%;
-        //         background: rgba(0, 0, 0, 0.5);
-        //         display: flex;
-        //         justify-content: center;
-        //         align-items: center;
-        //         z-index: 1000;
-        //     `;
-            
-        //     notification.querySelector('.reward-notification-content').style.cssText = `
-        //         background: white;
-        //         padding: 2rem;
-        //         border-radius: 10px;
-        //         text-align: center;
-        //         max-width: 600px;
-        //         max-height: 80vh;
-        //         overflow-y: auto;
-        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        //         position: relative;
-        //     `;
-            
-        //     // Style close button
-        //     notification.querySelector('.close-btn').style.cssText = `
-        //         position: absolute;
-        //         top: 10px;
-        //         right: 15px;
-        //         background: #ff4444;
-        //         color: white;
-        //         border: none;
-        //         width: 30px;
-        //         height: 30px;
-        //         border-radius: 50%;
-        //         cursor: pointer;
-        //         font-size: 18px;
-        //         font-weight: bold;
-        //         display: flex;
-        //         align-items: center;
-        //         justify-content: center;
-        //     `;
-            
-        //     // Style close button
-        //     notification.querySelector('.close-btn').style.cssText = `
-        //         position: absolute;
-        //         top: 10px;
-        //         right: 15px;
-        //         background: #ff4444;
-        //         color: white;
-        //         border: none;
-        //         width: 30px;
-        //         height: 30px;
-        //         border-radius: 50%;
-        //         cursor: pointer;
-        //         font-size: 18px;
-        //         font-weight: bold;
-        //         display: flex;
-        //         align-items: center;
-        //         justify-content: center;
-        //     `;
-            
-        //     // Style pending rewards
-        //     const pendingRewardsDiv = notification.querySelector('.pending-rewards');
-        //     if (pendingRewardsDiv) {
-        //         pendingRewardsDiv.style.cssText = `
-        //             display: grid;
-        //             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        //             gap: 1rem;
-        //             margin: 1rem 0;
-        //         `;
-                
-        //         notification.querySelectorAll('.pending-reward').forEach(reward => {
-        //             reward.style.cssText = `
-        //                 border: 2px solid #e0e0e0;
-        //                 border-radius: 8px;
-        //                 padding: 1rem;
-        //                 background: #f9f9f9;
-        //             `;
-        //         });
-                
-        //         notification.querySelectorAll('.claim-reward-btn').forEach(btn => {
-        //             btn.style.cssText = `
-        //                 background: #4CAF50;
-        //                 color: white;
-        //                 border: none;
-        //                 padding: 8px 16px;
-        //                 border-radius: 5px;
-        //                 cursor: pointer;
-        //                 margin-top: 0.5rem;
-        //             `;
-        //         });
-        //     }
-            
-        //     // Add to page
-        //     document.body.appendChild(notification);
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to claim a reward (generate options and show selection)
-        // async function claimReward(rewardId) {
-        //     try {
-        //         // Generate reward options
-        //         const response = await fetch(`/api/earned-rewards/${rewardId}/generate-options`, {
-        //             method: 'POST'
-        //         });
-                
-        //         if (response.ok) {
-        //             const data = await response.json();
-                    
-        //             // Remove the pending rewards notification
-        //             const notification = document.querySelector('.reward-notification');
-        //             if (notification) {
-        //                 notification.remove();
-        //             }
-                    
-        //             // Show reward options selection
-        //             showRewardOptionsSelection(data.reward_options, rewardId);
-        //         } else {
-        //             alert('Failed to generate reward options. Please try again.');
-        //         }
-        //     } catch (error) {
-        //         console.error('Error claiming reward:', error);
-        //         alert('Failed to claim reward. Please try again.');
-        //     }
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to show reward options selection
-        // function showRewardOptionsSelection(rewardOptions, earnedRewardId) {
-        //     // Create notification element
-        //     const notification = document.createElement('div');
-        //     notification.className = 'reward-notification';
-            
-        //     let content = `
-        //         <div class="reward-notification-content">
-        //             <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
-        //             <h3>🎁 Choose Your Reward!</h3>
-        //             <p>Select one of these reward options:</p>
-        //             <div class="reward-options">
-        //     `;
-            
-        //     rewardOptions.forEach((option, index) => {
-        //         content += `
-        //             <div class="reward-option" data-option-id="${option.id}">
-        //                 <h4>Option ${index + 1}</h4>
-        //                 <p>${option.display}</p>
-        //                 <button class="select-reward-btn" onclick="selectRewardOption('${option.id}', '${earnedRewardId}')">Select This Reward</button>
-        //             </div>
-        //         `;
-        //     });
-            
-        //     content += `
-        //             </div>
-        //             <p><em>Choose your reward to continue!</em></p>
-        //         </div>
-        //     `;
-        //     notification.innerHTML = content;
-            
-        //     // Add styles
-        //     notification.style.cssText = `
-        //         position: fixed;
-        //         top: 0;
-        //         left: 0;
-        //         width: 100%;
-        //         height: 100%;
-        //         background: rgba(0, 0, 0, 0.5);
-        //         display: flex;
-        //         justify-content: center;
-        //         align-items: center;
-        //         z-index: 1000;
-        //     `;
-            
-        //     notification.querySelector('.reward-notification-content').style.cssText = `
-        //         background: white;
-        //         padding: 2rem;
-        //         border-radius: 10px;
-        //         text-align: center;
-        //         max-width: 600px;
-        //         max-height: 80vh;
-        //         overflow-y: auto;
-        //         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        //         position: relative;
-        //     `;
-            
-        //     // Style close button
-        //     notification.querySelector('.close-btn').style.cssText = `
-        //         position: absolute;
-        //         top: 10px;
-        //         right: 15px;
-        //         background: #ff4444;
-        //         color: white;
-        //         border: none;
-        //         width: 30px;
-        //         height: 30px;
-        //         border-radius: 50%;
-        //         cursor: pointer;
-        //         font-size: 18px;
-        //         font-weight: bold;
-        //         display: flex;
-        //         align-items: center;
-        //         justify-content: center;
-        //     `;
-            
-        //     // Style reward options
-        //     const rewardOptionsDiv = notification.querySelector('.reward-options');
-        //     if (rewardOptionsDiv) {
-        //         rewardOptionsDiv.style.cssText = `
-        //             display: grid;
-        //             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        //             gap: 1rem;
-        //             margin: 1rem 0;
-        //         `;
-                
-        //         notification.querySelectorAll('.reward-option').forEach(option => {
-        //             option.style.cssText = `
-        //                 border: 2px solid #e0e0e0;
-        //                 border-radius: 8px;
-        //                 padding: 1rem;
-        //                 background: #f9f9f9;
-        //             `;
-        //         });
-                
-        //         notification.querySelectorAll('.select-reward-btn').forEach(btn => {
-        //             btn.style.cssText = `
-        //                 background: #4CAF50;
-        //                 color: white;
-        //                 border: none;
-        //                 padding: 8px 16px;
-        //                 border-radius: 5px;
-        //                 cursor: pointer;
-        //                 margin-top: 0.5rem;
-        //             `;
-        //         });
-        //     }
-            
-        //     // Add to page
-        //     document.body.appendChild(notification);
-        // }
-
-        // DISABLED: Rewards system temporarily disabled
-        // Function to select a reward option
-        // async function selectRewardOption(optionId, earnedRewardId) {
-        //     try {
-        //         const response = await fetch(`/api/earned-rewards/${earnedRewardId}/select-option`, {
-        //             method: 'POST',
-        //             headers: {
-        //                 'Content-Type': 'application/json'
-        //             },
-        //             body: JSON.stringify({ option_id: optionId })
-        //         });
-                
-        //         if (response.ok) {
-        //             const data = await response.json();
-                    
-                    
-        //             // Remove the notification
-        //             const notification = document.querySelector('.reward-notification');
-        //             if (notification) {
-        //                 notification.remove();
-        //             }
-        //         }
-        //     } catch (error) {
-        //         console.error('Error selecting reward:', error);
-        //     }
-        // }
-
-        // DISABLED: Stats system temporarily disabled
-        // Function to load weekly points
-        // async function loadWeeklyPoints() {
-        //     try {
-        //         const response = await fetch('/api/weekly-points');
-        //         const data = await response.json();
-                
-        //         if (data.status === 'success') {
-        //             document.getElementById('weekly-points').textContent = data.weekly_points;
-                    
-        //             // Show different text based on whether we're showing last week's score
-        //             if (data.showing_last_week) {
-        //                 document.getElementById('weekly-detail').textContent = 
-        //                     `Last week: ${data.completed_tasks} tasks completed`;
-        //             } else {
-        //                 document.getElementById('weekly-detail').textContent = 
-        //                     `${data.completed_tasks} tasks completed`;
-        //             }
-        //         } else {
-        //             document.getElementById('weekly-points').textContent = 'Error';
-        //             document.getElementById('weekly-detail').textContent = 'Failed to load';
-        //         }
-        //     } catch (error) {
-        //         console.error('Failed to load weekly points:', error);
-        //         document.getElementById('weekly-points').textContent = 'Error';
-        //         document.getElementById('weekly-detail').textContent = 'Failed to load';
-        //     }
-        // }
-        
-        // DISABLED: Stats system temporarily disabled
-        // Function to load pending rewards comparison
-        // async function loadPendingRewards() {
-        //     try {
-        //         const response = await fetch('/api/reward-comparison');
-        //         const data = await response.json();
-                
-        //         if (data.status === 'success') {
-        //             const userRewards = data.user_rewards;
-        //             const spouseRewards = data.spouse_rewards;
-        //             const totalRewards = userRewards + spouseRewards;
-                    
-        //             document.getElementById('goal-comparison').textContent = totalRewards;
-        //             document.getElementById('user-rewards').textContent = `${data.user_name}: ${userRewards}`;
-        //             document.getElementById('spouse-rewards').textContent = `${data.spouse_name}: ${spouseRewards}`;
-        //         } else {
-        //             document.getElementById('goal-comparison').textContent = 'Error';
-        //             document.getElementById('user-rewards').textContent = 'Error';
-        //             document.getElementById('spouse-rewards').textContent = 'Error';
-        //         }
-        //     } catch (error) {
-        //         console.error('Failed to load reward comparison:', error);
-        //         document.getElementById('goal-comparison').textContent = 'Error';
-        //         document.getElementById('user-rewards').textContent = 'Error';
-        //         document.getElementById('spouse-rewards').textContent = 'Error';
-        //     }
-        // }
-
-        // Tasks and rewards are now loaded in the DOMContentLoaded event
-        // after authentication is established
 </script>
 {% endblock %}

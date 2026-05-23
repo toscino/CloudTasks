@@ -112,7 +112,7 @@
         <div class="section">
             <h3>Statistics</h3>
             <button onclick="getTaskStats()">Task Queue Stats</button>
-            <button onclick="getRewardStats()">Reward System Health</button>
+            <button onclick="getRewardStats()">Performance Rewards Health</button>
             <button onclick="getSystemHealth()">System Health</button>
             <button onclick="getQueueManagement()">Queue Management</button>
             <button onclick="getWeeklyPoints()">Weekly Points</button>
@@ -124,8 +124,9 @@
             <button onclick="checkGenerationLocks()">Check Generation Locks</button>
             <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
             <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
-            <button onclick="unlockMorningCards()">Unlock Morning Cards (Testing)</button>
             <button onclick="addDiceRollCredits()">Add 4 Dice Roll Credits</button>
+            <button onclick="addTestPerformanceBonus()">Add Random Performance Bonus</button>
+            <button onclick="clearOwedPoints()">Clear Owed Points (Couple)</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
             <button onclick="viewAllTrackerHistory()">View All Tracker History (with test status)</button>
             <button onclick="getTrackerAt2am()">Get Tracker Value at 2am</button>
@@ -229,82 +230,33 @@
 
         async function getRewardStats() {
             const resultDiv = document.getElementById('statsResult');
-            resultDiv.textContent = 'Loading reward system health...';
+            resultDiv.textContent = 'Loading performance reward health...';
             
             try {
-                // Get multiple reward-related endpoints
-                const [earnedRewardsResponse, challengesResponse] = await Promise.all([
-                    fetch('/api/earned-rewards'),
-                    fetch('/api/challenges')
+                const [owedResponse, tiersResponse, tasksResponse] = await Promise.all([
+                    fetch('/api/owed-points'),
+                    fetch('/api/performance-tier-settings'),
+                    fetch('/api/tasks')
                 ]);
                 
-                const earnedRewardsData = await earnedRewardsResponse.json();
-                const challengesData = await challengesResponse.json();
+                const owedData = await owedResponse.json();
+                const tiersData = await tiersResponse.json();
+                const tasksData = await tasksResponse.json();
                 
-                if (earnedRewardsData.status === 'success' && challengesData.status === 'success') {
+                if (owedData.status === 'success' && tiersData.status === 'success' && tasksData.status === 'success') {
                     const stats = {
-                        reward_goals: {
-                            pending: 0,
-                            completed: 0,
-                            total: 0
-                        },
-                        earned_rewards: {
-                            pending: 0,
-                            selected: 0,
-                            expired: 0,
-                            total: 0
-                        },
-                        reward_tasks: {
-                            pending: 0,
-                            completed: 0,
-                            total: 0
-                        },
-                        system_health: {
-                            has_pending_goals: false,
-                            has_pending_rewards: false,
-                            has_active_challenges: false,
-                            reward_system_active: false
-                        }
+                        owed_points: owedData.balances || {},
+                        tier_count: (tiersData.tiers || []).length,
+                        pending_bonus_items: (tasksData.bonus_items || []).length,
                     };
-                    
-                    // Process earned rewards data
-                    if (earnedRewardsData.pending_rewards) {
-                        earnedRewardsData.pending_rewards.forEach(reward => {
-                            const status = reward.status || 'pending';
-                            stats.earned_rewards[status] = (stats.earned_rewards[status] || 0) + 1;
-                            stats.earned_rewards.total++;
-                        });
-                    }
-                    
-                    // Process challenges data
-                    if (challengesData.challenges) {
-                        challengesData.challenges.forEach(challenge => {
-                            const isCompleted = challenge.completed || false;
-                            if (isCompleted) {
-                                stats.reward_tasks.completed++;
-                            } else {
-                                stats.reward_tasks.pending++;
-                            }
-                            stats.reward_tasks.total++;
-                        });
-                    }
-                    
-                    // Calculate system health indicators
-                    stats.system_health.has_pending_goals = stats.reward_goals.pending > 0;
-                    stats.system_health.has_pending_rewards = stats.earned_rewards.pending > 0;
-                    stats.system_health.has_active_challenges = stats.reward_tasks.pending > 0;
-                    stats.system_health.reward_system_active = 
-                        stats.system_health.has_pending_goals || 
-                        stats.system_health.has_pending_rewards || 
-                        stats.system_health.has_active_challenges;
-                    
                     resultDiv.className = 'result success';
                     resultDiv.textContent = JSON.stringify(stats, null, 2);
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = JSON.stringify({
-                        earned_rewards: earnedRewardsData,
-                        challenges: challengesData
+                        owed: owedData,
+                        tiers: tiersData,
+                        tasks: tasksData
                     }, null, 2);
                 }
             } catch (error) {
@@ -533,30 +485,37 @@
             }
         }
         
-        async function unlockMorningCards() {
+        async function addTestPerformanceBonus() {
             const resultDiv = document.getElementById('debugResult');
             resultDiv.className = 'result';
-            resultDiv.textContent = 'Unlocking morning cards...';
-            
+            resultDiv.textContent = 'Adding random performance bonus...';
             try {
-                const response = await fetch('/api/morning-cards/today/unlock', {
-                    method: 'POST'
-                });
-                
+                const response = await fetch('/api/performance-bonus/test', { method: 'POST' });
                 const data = await response.json();
-                if (data.status === 'success') {
-                    resultDiv.className = 'result success';
-                    resultDiv.textContent = 'Morning cards unlocked! You can now select cards again.';
-                } else {
-                    resultDiv.className = 'result error';
-                    resultDiv.textContent = 'Failed to unlock: ' + data.message;
-                }
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
             } catch (error) {
                 resultDiv.className = 'result error';
                 resultDiv.textContent = 'Error: ' + error.message;
             }
         }
-        
+
+        async function clearOwedPoints() {
+            if (!confirm('Clear owed points for you and your spouse?')) return;
+            const resultDiv = document.getElementById('debugResult');
+            resultDiv.className = 'result';
+            resultDiv.textContent = 'Clearing owed points...';
+            try {
+                const response = await fetch('/api/owed-points/clear', { method: 'POST' });
+                const data = await response.json();
+                resultDiv.className = 'result ' + (data.status === 'success' ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
         async function addDiceRollCredits() {
             const resultDiv = document.getElementById('debugResult');
             resultDiv.className = 'result';

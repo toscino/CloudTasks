@@ -155,11 +155,6 @@ function updateUserStatusNav() {
     }
 }
 
-async function checkPendingMorningCards() {
-    const indicator = document.getElementById('morning-cards-indicator');
-    if (indicator) indicator.style.display = 'none';
-}
-
 async function checkPendingStreakMinimum() {
     const indicator = document.getElementById('streak-indicator');
     if (!indicator) return;
@@ -216,7 +211,6 @@ async function checkPendingStreakMinimum() {
 document.addEventListener('DOMContentLoaded', async function () {
     await getAuthStatus();
     updateUserStatusNav();
-    checkPendingMorningCards();
     checkPendingStreakMinimum();
     checkForInitialLogin();
 });

@@ -415,7 +415,10 @@ class DailyTaskService:
             }
     
     def check_and_reset_daily_tasks(self, username: str) -> Dict[str, Any]:
-        """Check and reset daily tasks after 2am"""
+        """
+        Lazy daily reset (runs on site visit, not cron). At most once per calendar day.
+        See docs/DAILY_RESET_BEHAVIOR.md for late reset, skipped days, and performance bonuses.
+        """
         try:
             now_central = datetime.now(self.central_tz)
             today_central = now_central.date()
@@ -452,28 +455,28 @@ class DailyTaskService:
                     # Reset yesterday, no need to reset today yet
                     return {'status': 'success', 'message': 'Reset not needed yet'}
             
-            # Need to reset - reset for current user
-            instances_created = self._reset_user_daily_tasks(username, today_central)
-            
-            # Also reset for spouse if linked
             user_service = getattr(self.app_manager, 'user_service', None)
             if not user_service:
                 from src.services.user_service import UserService
                 user_service = UserService(self.app_manager)
-            
+
             user_settings = user_service.get_user_settings(username)
             spouse_username = user_settings.get('spouse_username')
+
+            perf = getattr(self.app_manager, 'performance_reward_service', None)
+            if perf:
+                perf.process_missed_reset_rewards(username, today_central)
+                if spouse_username:
+                    perf.process_missed_reset_rewards(spouse_username, today_central)
+                perf.expire_due_items(today_central)
+
+            # Need to reset - reset for current user
+            instances_created = self._reset_user_daily_tasks(username, today_central)
             
             if spouse_username:
                 self.logger.info(f"Also resetting daily tasks for spouse {spouse_username}")
                 spouse_instances_created = self._reset_user_daily_tasks(spouse_username, today_central)
                 instances_created += spouse_instances_created
-            
-            # Reset morning cards
-            from src.services.morning_card_service import MorningCardService
-            morning_card_service = MorningCardService(self.app_manager)
-            morning_card_reset = morning_card_service.check_and_reset_cards()
-            self.logger.info(f"Morning card reset: {morning_card_reset.get('message', 'unknown')}")
             
             return {
                 'status': 'success',
@@ -602,6 +605,20 @@ class DailyTaskService:
             if task_points_service:
                 locked_day = today_central - timedelta(days=1)
                 task_points_service.lock_daily_threshold_for_date(username, locked_day)
+
+            perf = getattr(self.app_manager, 'performance_reward_service', None)
+            if perf:
+                last_reset = perf.get_last_reset_date(username)
+                gap = 0
+                if last_reset is not None:
+                    from src.services.performance_reward_service import missed_reset_dates
+                    gap = len(missed_reset_dates(last_reset, today_central))
+                if gap == 0:
+                    perf.create_item_for_yesterday(username, today_central)
+                else:
+                    perf.easiest_for_earned_day(
+                        username, today_central - timedelta(days=1)
+                    )
             
             # Before creating new instances, delete any existing instances for today
             # This includes ALL instances regardless of status (completed, abandoned, presented)

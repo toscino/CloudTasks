@@ -42,9 +42,22 @@ class TaskService:
                     'completed_points': stats_data.get('completed_points', 0)
                 }
         
+            bonus_items = []
+            perf = getattr(self.app_manager, 'performance_reward_service', None)
+            if perf:
+                bonus_items = perf.get_pending_bonus_items(username)
+
+            owed_points = None
+            if perf:
+                owed_result = perf.get_owed_points(username)
+                if owed_result.get('status') == 'success':
+                    owed_points = owed_result.get('balances', {})
+
             return {
                 'status': 'success',
                 'tasks': tasks,
+                'bonus_items': bonus_items,
+                'owed_points': owed_points,
                 'stats': stats
             }
         except Exception as e:

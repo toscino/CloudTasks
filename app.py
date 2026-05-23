@@ -15,8 +15,8 @@ from src.services.goal_service import GoalService
 from src.services.statistics_service import StatisticsService
 from src.services.daily_task_service import DailyTaskService
 from src.services.collaboration_service import CollaborationService
-from src.services.morning_card_service import MorningCardService
 from src.services.user_service import UserService
+from src.services.performance_reward_service import PerformanceRewardService
 from src.services.dice_roll_service import DiceRollService
 from src.services.task_points_service import TaskPointsService
 from src.utils.config import get_timezone
@@ -47,14 +47,15 @@ task_service = TaskService(app_manager, task_master)
 goal_service = GoalService(app_manager)
 statistics_service = StatisticsService(app_manager, task_master)
 collaboration_service = CollaborationService(app_manager)
-morning_card_service = MorningCardService(app_manager)
 user_service = UserService(app_manager)
+performance_reward_service = PerformanceRewardService(app_manager)
 dice_roll_service = DiceRollService(app_manager)
 
 # Store services on app_manager for easy access
 app_manager.collaboration_service = collaboration_service
 app_manager.user_service = user_service
 app_manager.task_points_service = task_points_service
+app_manager.performance_reward_service = performance_reward_service
 
 # Error handler for rate limit exceeded
 @app.errorhandler(429)
@@ -68,28 +69,28 @@ app_manager.page("test.html")
 app_manager.page("settings.html")
 app_manager.page("goals.html")
 app_manager.page("daily_tasks.html")
-app_manager.page("rewards_owed.html")
-app_manager.page("morning_cards.html")
+app_manager.page("performance_tiers.html")
 app_manager.page("dice-rolls.html")
+app_manager.page("dice_manage.html")
 
 # flask-base only auto-populates nav for auth-gated pages; set explicitly for public pages
 app_manager._pages = [
     {"route": "/", "title": "📋 Tasks", "permission": None},
     {"route": "/stats", "title": "📊 Stats", "permission": None},
-    {"route": "/morning-cards", "title": "🌅 Morning Cards", "permission": None},
     {"route": "/dice-rolls", "title": "🎲 Dice Rolls", "permission": None},
+    {"route": "/dice-rolls/manage", "title": "⚙️ Manage Dice", "permission": None},
     {"route": "/daily-tasks", "title": "📅 Daily Tasks", "permission": None},
-    {"route": "/morning-cards/manage", "title": "🃏 Manage Cards", "permission": None},
+    {"route": "/performance-tiers", "title": "🎁 Performance Tiers", "permission": None},
     {"route": "/goals", "title": "🎯 Goals", "permission": None},
     {"route": "/test", "title": "🧪 Test", "permission": None},
     {"route": "/settings", "title": "⚙️ Settings", "permission": None},
-    {"route": "/rewards-owed", "title": "💝 Rewards Owed", "permission": None},
 ]
 
-@app_manager.route('/morning-cards/manage')
-def morning_cards_manage_page():
-    """Morning cards management page"""
-    return render_template('morning_cards_manage.html')
+@app_manager.route('/dice-rolls/manage')
+def dice_manage_page():
+    """Dice configuration (rules per die, import/export)."""
+    return render_template('dice_manage.html')
+
 
 @app_manager.route('/simple-test')
 def simple_test():
@@ -216,15 +217,6 @@ def delete_goal(goal_id):
 def get_categories():
     """Get available goal categories"""
     return goal_service.get_categories()
-
-@app_manager.route('/api/reward-goals/test', ['GET'])
-def test_reward_goals():
-    """Test endpoint to check if reward goals API is reachable"""
-    return app_manager.jsonify({
-        'status': 'success',
-        'message': 'Reward goals API is working',
-        'timestamp': datetime.now().isoformat()
-    })
 
 # Daily Tasks API Routes
 @app_manager.route('/api/daily-tasks', ['GET'], limit="50 per minute")
@@ -488,87 +480,66 @@ def progress_day_testing():
     result = daily_task_service.check_and_reset_daily_tasks(username)
     return result
 
-# Rewards Owed Routes
-@app_manager.route('/api/rewards-owed', ['GET'], limit="50 per minute")
+# Performance reward routes
+@app_manager.route('/api/performance-tier-settings', ['GET'], limit="50 per minute")
 @with_error_handling
-def get_rewards_owed():
-    """Get pending rewards owed for current user"""
+def get_performance_tier_settings():
     username = get_user_info(app_manager)
-    return goal_service.get_rewards_owed(username)
+    return performance_reward_service.get_tier_settings(username)
 
-@app_manager.route('/api/rewards-owed/<goal_id>/complete', ['POST'], limit="10 per minute")
-@with_error_handling
-def complete_reward_owed(goal_id):
-    """Complete a reward owed"""
-    username = get_user_info(app_manager)
-    return goal_service.complete_reward_owed(goal_id, username)
 
-# Morning Card API Routes
-@app_manager.route('/api/morning-cards', ['GET'], limit="50 per minute")
+@app_manager.route('/api/performance-tier-settings', ['PUT'], limit="20 per minute")
 @with_error_handling
-def get_morning_cards():
-    """Get all morning card templates for current user"""
-    username = get_user_info(app_manager)
-    return morning_card_service.get_card_templates(username)
-
-@app_manager.route('/api/morning-cards', ['POST'], limit="20 per minute")
-@with_error_handling
-def create_morning_card():
-    """Create a new morning card template"""
+def save_performance_tier_settings():
     username = get_user_info(app_manager)
     data = app_manager.get_json()
-    data['username'] = username
-    return morning_card_service.create_card_template(data)
+    if not data or 'tiers' not in data:
+        return app_manager.jsonify({'status': 'error', 'message': 'tiers array is required'}), 400
+    return performance_reward_service.save_tier_settings(username, data['tiers'])
 
-@app_manager.route('/api/morning-cards/<card_id>', ['PUT'], limit="20 per minute")
+
+@app_manager.route('/api/performance-tier-settings/preview', ['GET'], limit="50 per minute")
 @with_error_handling
-def update_morning_card(card_id):
-    """Update an existing morning card template"""
+def preview_performance_bands():
     username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    return morning_card_service.update_card_template(card_id, data, username)
+    return performance_reward_service.get_band_preview(username)
 
-@app_manager.route('/api/morning-cards/<card_id>', ['DELETE'], limit="20 per minute")
+
+@app_manager.route('/api/performance-bonus/<item_id>/complete', ['PUT'], limit="30 per minute")
 @with_error_handling
-def delete_morning_card(card_id):
-    """Delete a morning card template"""
+def complete_performance_bonus(item_id):
     username = get_user_info(app_manager)
-    return morning_card_service.delete_card_template(card_id, username)
+    return performance_reward_service.complete_bonus_item(item_id, username)
 
-@app_manager.route('/api/morning-cards/import', ['POST'], limit="20 per minute")
+
+@app_manager.route('/api/performance-bonus/<item_id>/abandon', ['PUT'], limit="20 per minute")
 @with_error_handling
-def import_morning_cards():
-    """Import card templates from JSON array"""
+def abandon_performance_bonus(item_id):
     username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    if not data or 'templates' not in data:
-        return app_manager.jsonify({'status': 'error', 'message': 'templates array is required'}), 400
-    return morning_card_service.import_card_templates(username, data['templates'])
+    return performance_reward_service.abandon_bonus_item(item_id, username)
 
-@app_manager.route('/api/morning-cards/today', ['GET'], limit="50 per minute")
-@with_error_handling
-def get_todays_morning_cards():
-    """Get today's morning card selection"""
-    return morning_card_service.get_todays_selection()
 
-@app_manager.route('/api/morning-cards/today/select', ['POST'], limit="10 per minute")
+@app_manager.route('/api/owed-points', ['GET'], limit="50 per minute")
 @with_error_handling
-def select_morning_cards():
-    """Lock in card selection (Karleigh only)"""
+def get_owed_points():
     username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    if not data or 'card_ids' not in data:
-        return app_manager.jsonify({
-            'status': 'error',
-            'message': 'Card IDs are required'
-        }), 400
-    return morning_card_service.select_cards(data['card_ids'], username)
+    return performance_reward_service.get_owed_points(username)
 
-@app_manager.route('/api/morning-cards/today/unlock', ['POST'], limit="10 per minute")
+
+@app_manager.route('/api/performance-bonus/test', ['POST'], limit="10 per minute")
 @with_error_handling
-def unlock_morning_cards():
-    """Unlock today's card selection for testing"""
-    return morning_card_service.unlock_todays_selection()
+def create_test_performance_bonus():
+    """Add a random pending bonus item for the current user (testing)."""
+    username = get_user_info(app_manager)
+    return performance_reward_service.create_test_bonus_item(username)
+
+
+@app_manager.route('/api/owed-points/clear', ['POST'], limit="10 per minute")
+@with_error_handling
+def clear_owed_points():
+    """Clear owed-point balances for the couple (testing)."""
+    username = get_user_info(app_manager)
+    return performance_reward_service.clear_owed_points(username)
 
 # Dice Roll API Routes
 @app_manager.route('/api/dice-rolls/credits', ['GET'], limit="50 per minute")

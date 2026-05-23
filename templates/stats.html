@@ -282,7 +282,7 @@
         }
     }
 
-    function renderBalanceDetails(balanceData) {
+    function renderBalanceDetails(balanceData, owedData) {
         const grid = document.getElementById('task-points-grid');
         const details = document.getElementById('stats-details-section');
         if (!grid) return;
@@ -310,16 +310,30 @@
             }
         }
 
+        if (owedData?.status === 'success' && owedData.balances) {
+            for (const [user, amount] of Object.entries(owedData.balances)) {
+                html += `
+                    <div class="task-points-item">
+                        <div class="label">${user} owed</div>
+                        <div class="value">${amount} pts</div>
+                    </div>
+                `;
+            }
+        }
+
         grid.innerHTML = html;
     }
 
     async function loadBalanceDetails() {
         try {
-            const balanceData = await apiCall('/api/task-points/balance');
-            renderBalanceDetails(balanceData);
+            const [balanceData, owedData] = await Promise.all([
+                apiCall('/api/task-points/balance'),
+                apiCall('/api/owed-points'),
+            ]);
+            renderBalanceDetails(balanceData, owedData);
         } catch (error) {
             console.error('Error loading balance details:', error);
-            renderBalanceDetails(null);
+            renderBalanceDetails(null, null);
         }
     }
 

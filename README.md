@@ -1,6 +1,6 @@
 # CloudTasks
 
-Task management app for Google App Engine with Firestore, spouse collaboration, daily routines, morning cards, and task points.
+Task management app for Google App Engine with Firestore, spouse collaboration, daily routines, performance rewards, and task points.
 
 ## Setup
 
@@ -46,8 +46,8 @@ Each deploy adds a large image to `gae-standard`. Without cleanup, storage cost 
 - **Daily tasks** — Task Setup and Init, reocurring weekly tasks, Some Randomization Possible
 - **Goals** — Personal goals; Not Used, Want better Integrtion with Tasks
 - **Task points** — Tracked But Not Well Used
-- **Morning cards** — Alternate System for Daily Selection, Probably needs Removed
-- **Dice rolls** — Alternate System for Partner Interactions, Should be Migrated to its own App
+- **Performance rewards** — Daily band bonuses from yesterday's points; assignee completes or abandons; owed points on expiry
+- **Dice rolls** — Partner dice interactions (config at `/dice-rolls/manage`)
 - **Stats** — Weekly and collaboration metrics
 - **Auth** — Session-based login via flask-base (demo + named users)
 
@@ -59,10 +59,9 @@ Each deploy adds a large image to `gae-standard`. Without cleanup, storage cost 
 | `/stats` | stats.html |
 | `/goals` | goals.html |
 | `/daily-tasks` | daily_tasks.html |
-| `/rewards-owed` | rewards_owed.html |
-| `/morning-cards` | morning_cards.html |
-| `/morning-cards/manage` | morning_cards_manage.html |
+| `/performance-tiers` | performance_tiers.html |
 | `/dice-rolls` | dice-rolls.html |
+| `/dice-rolls/manage` | dice_manage.html |
 | `/settings` | settings.html |
 | `/test` | test.html |
 
@@ -74,11 +73,10 @@ Routes are defined in `app.py`. Main groups:
 |------|----------|
 | Tasks | `GET/POST /api/tasks`, complete/save/abandon |
 | Goals | `GET/POST /api/goals`, categories |
-| Daily tasks | `/api/daily-tasks`, today instances, reset |
+| Daily tasks | `/api/daily-tasks`, today instances, lazy reset on visit ([behavior](docs/DAILY_RESET_BEHAVIOR.md)) |
 | Task points | today (fast), balance, spend, config, history |
 | Collaboration | tracker, today's points, history |
-| Rewards owed | `GET /api/rewards-owed`, complete by goal id |
-| Morning cards | CRUD, today select/unlock, import |
+| Performance rewards | tier settings, bonus complete/abandon, owed points |
 | Dice rolls | credits, config, roll, import |
 | User | settings, spouse link/unlink, preferences |
 | Debug | locks, queue reset (dev/test) |
@@ -120,7 +118,7 @@ src/
 templates/             # HTML pages
 tests/                 # pytest suites
 scripts/               # GAE image prune and Artifact Registry policy
-docs/                  # CONFIG_GUIDE, frontend notes, etc.
+docs/                  # CONFIG_GUIDE, DAILY_RESET_BEHAVIOR, API_CONTRACTS, etc.
 ```
 
 ## Performance note
@@ -131,6 +129,7 @@ Queries currently use single-field Firestore ordering and filter incomplete task
 
 - **Tasks** — Regular work (Work, Kids, Spouse, House, Self, General)
 - **Goals** — Longer-term targets; can tie to tasks
-- **Rewards owed** — Rewards your spouse chose for you to fulfill
+- **Performance bonus items** — Earned from yesterday's band; assignee completes or abandons within two nights
+- **Owed points** — Stash credited when a bonus expires or is abandoned
 - **Daily tasks** — Repeating items with per-day instances
-- **Task points** — Currency earned from tasks and spent on configured rewards
+- **Task points** — Currency earned from daily tasks; joint balance on stats
