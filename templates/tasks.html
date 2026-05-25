@@ -37,14 +37,6 @@
             background-color: #e8f5e9;
             color: #2e7d32;
         }
-        .owed-points-bar {
-            font-size: 13px;
-            color: #666;
-            margin-bottom: 16px;
-            padding: 8px 12px;
-            background: #f8f9fa;
-            border-radius: 6px;
-        }
         .task-item {
             position: relative;
             background-color: #ffffff;
@@ -154,7 +146,6 @@
 {% endblock %}
 
 {% block content %}
-        <div id="owed-points-bar" class="owed-points-bar" style="display: none;"></div>
         <ul id="task-list">
             <li class="empty-state">Authenticating...</li>
         </ul>
@@ -173,8 +164,6 @@
     const taskListElement = document.getElementById('task-list');
     const bonusListElement = document.getElementById('bonus-task-list');
     const bonusSection = document.getElementById('bonus-section');
-    const owedPointsBar = document.getElementById('owed-points-bar');
-
     // Wait for authentication to be ready, then load tasks
     document.addEventListener('DOMContentLoaded', async function() {
         await waitForAuth();
@@ -262,26 +251,11 @@
             }
 
             renderBonusItems(tasksData);
-            renderOwedPoints(tasksData.owed_points);
 
         } catch (error) {
             console.error("Failed to fetch tasks:", error);
             taskListElement.innerHTML = '<li class="empty-state">Error loading tasks. Please try again.</li>';
         }
-    }
-
-    function renderOwedPoints(balances) {
-        if (!owedPointsBar || !balances || typeof balances !== 'object') {
-            if (owedPointsBar) owedPointsBar.style.display = 'none';
-            return;
-        }
-        const parts = Object.entries(balances).map(([u, n]) => `${u}: ${n} owed`);
-        if (parts.length === 0) {
-            owedPointsBar.style.display = 'none';
-            return;
-        }
-        owedPointsBar.textContent = 'Owed points — ' + parts.join(' · ');
-        owedPointsBar.style.display = 'block';
     }
 
     function buildBonusItemHtml(item) {

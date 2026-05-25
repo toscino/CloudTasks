@@ -376,6 +376,12 @@ class PerformanceRewardService:
         doc = self.db.collection(self.COL_OWED).document(username).get()
         return int(doc.to_dict().get("balance", 0)) if doc.exists else 0
 
+    @staticmethod
+    def minimum_dice_roll_points(owed_balance: int) -> int:
+        """Min points a roll must score: +5 per full 10 owed (0 if owed < 10)."""
+        owed = max(0, int(owed_balance))
+        return (owed // 10) * 5
+
     def debit_owed_for_dice_roll(
         self, username: str, amount: int, *, roll_id: str
     ) -> Dict[str, Any]:
@@ -750,10 +756,17 @@ class PerformanceRewardService:
             spouse = self._get_spouse_username(username)
             if spouse:
                 users.append(spouse)
+            min_roll_points = {}
             for u in users:
                 doc = self.db.collection(self.COL_OWED).document(u).get()
-                balances[u] = int(doc.to_dict().get("balance", 0)) if doc.exists else 0
-            return {"status": "success", "balances": balances}
+                bal = int(doc.to_dict().get("balance", 0)) if doc.exists else 0
+                balances[u] = bal
+                min_roll_points[u] = self.minimum_dice_roll_points(bal)
+            return {
+                "status": "success",
+                "balances": balances,
+                "min_roll_points": min_roll_points,
+            }
         except Exception as e:
             return handle_exception(e, "Failed to get owed points")
 

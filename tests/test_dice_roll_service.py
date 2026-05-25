@@ -9,6 +9,17 @@ from src.services.dice_roll_service import (
     DEFAULT_POINT_VALUE,
     DEFAULT_MAX_ROLLS,
 )
+from src.services.performance_reward_service import PerformanceRewardService
+
+
+class TestMinimumDiceRollPoints(unittest.TestCase):
+    def test_formula(self):
+        from src.services.performance_reward_service import PerformanceRewardService
+        self.assertEqual(PerformanceRewardService.minimum_dice_roll_points(0), 0)
+        self.assertEqual(PerformanceRewardService.minimum_dice_roll_points(9), 0)
+        self.assertEqual(PerformanceRewardService.minimum_dice_roll_points(10), 5)
+        self.assertEqual(PerformanceRewardService.minimum_dice_roll_points(30), 15)
+        self.assertEqual(PerformanceRewardService.minimum_dice_roll_points(35), 15)
 
 
 class TestComputeRollPoints(unittest.TestCase):
@@ -271,6 +282,8 @@ class TestRollDiceIntegration(unittest.TestCase):
         self.app_manager.logger = MagicMock()
         self.app_manager.db = MagicMock()
         self.perf = MagicMock()
+        self.perf.minimum_dice_roll_points = PerformanceRewardService.minimum_dice_roll_points
+        self.perf._get_owed_balance.return_value = 0
         self.svc = DiceRollService(self.app_manager, self.perf)
 
     @patch.object(DiceRollService, "_save_roll_session")
@@ -352,6 +365,28 @@ class TestRollDiceIntegration(unittest.TestCase):
         faces = [i["face_value"] for i in result["roll_instances"]]
         self.assertEqual(len(faces), 2)
         self.assertEqual(len(set(faces)), 2)
+
+    @patch.object(DiceRollService, "_save_roll_session")
+    @patch.object(DiceRollService, "get_couple_id", return_value="alice_bob")
+    @patch.object(DiceRollService, "get_dice_configuration")
+    def test_rejects_roll_below_minimum_for_owed(self, mock_config, _couple, _save):
+        mock_config.return_value = {
+            "status": "success",
+            "dice_configs": {
+                "die_1": self.svc._normalize_one_die(
+                    {"point_value": 2, "for_usernames": ["alice"]}, ["alice", "bob"]
+                ),
+                "die_2": self.svc._normalize_one_die(
+                    {"point_value": 3, "for_usernames": ["alice"]}, ["alice", "bob"]
+                ),
+            },
+            "couple_usernames": ["alice", "bob"],
+        }
+        self.perf._get_owed_balance.return_value = 30
+        result = self.svc.roll_dice("alice", selected_dice=[0])
+        self.assertEqual(result["status"], "error")
+        self.assertIn("at least 15", result["message"])
+        _save.assert_not_called()
 
     @patch.object(DiceRollService, "_save_roll_session")
     @patch.object(DiceRollService, "get_couple_id", return_value="alice_bob")

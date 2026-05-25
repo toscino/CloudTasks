@@ -623,9 +623,15 @@ Assignee only. Immediately credits `owed_conversion_points` to assignee's `owed_
   "balances": {
     "ian": 0,
     "karleigh": 25
+  },
+  "min_roll_points": {
+    "ian": 0,
+    "karleigh": 10
   }
 }
 ```
+
+`min_roll_points[user]` = `(balances[user] // 10) * 5` (0 when owed &lt; 10; e.g. 30 owed → 15 pt minimum per roll).
 
 ## Dice rolls
 
@@ -682,6 +688,8 @@ or
 Indices refer to sorted `die_N` keys. Count per die must not exceed that die's `max_rolls`. Server rejects dice the roller is not allowed to use (`for_usernames`).
 
 **Scoring**: `sum(point_value of rolled dice) - min(point_value)` (0 if fewer than 2 dice rolled). Face values per die are chosen without replacement (no duplicate faces on the same die in one roll). Selection count for a die cannot exceed `face_count`.
+
+**Minimum roll**: When the roller owes at least 10 points, each roll must score at least `(owed // 10) * 5` points (e.g. 30 owed → 15 minimum). Rolls below that minimum are rejected before debiting owed balance.
 
 **Debit**: Subtracts `min(points_scored, roller's owed balance)` from `owed_points_balance/{username}`; ledger id `dice_roll_{roll_id}`.
 

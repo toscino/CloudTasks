@@ -311,11 +311,17 @@
         }
 
         if (owedData?.status === 'success' && owedData.balances) {
+            const mins = owedData.min_roll_points || {};
             for (const [user, amount] of Object.entries(owedData.balances)) {
+                const minRoll = mins[user] ?? 0;
+                const minNote = minRoll > 0
+                    ? `<div class="goal" style="margin-top:4px;">Min dice roll: ${minRoll} pts</div>`
+                    : '';
                 html += `
                     <div class="task-points-item">
                         <div class="label">${user} owed</div>
                         <div class="value">${amount} pts</div>
+                        ${minNote}
                     </div>
                 `;
             }

@@ -740,11 +740,31 @@ class DiceRollService:
                 })
 
             points_scored = self.compute_roll_points(rolled_point_values)
-            roll_id = str(uuid.uuid4())
 
             owed_balance_before = 0
+            if self.performance_reward_service:
+                owed_balance_before = self.performance_reward_service._get_owed_balance(
+                    username
+                )
+            min_required = 0
+            if self.performance_reward_service:
+                min_required = self.performance_reward_service.minimum_dice_roll_points(
+                    owed_balance_before
+                )
+            if min_required > 0 and points_scored < min_required:
+                return {
+                    'status': 'error',
+                    'message': (
+                        f'This roll scores {points_scored} points, but with '
+                        f'{owed_balance_before} owed you must roll at least '
+                        f'{min_required} points'
+                    ),
+                }
+
+            roll_id = str(uuid.uuid4())
+
             points_subtracted = 0
-            owed_balance_after = 0
+            owed_balance_after = owed_balance_before
             if self.performance_reward_service and points_scored > 0:
                 debit = self.performance_reward_service.debit_owed_for_dice_roll(
                     username, points_scored, roll_id=roll_id

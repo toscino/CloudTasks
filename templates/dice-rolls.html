@@ -335,6 +335,7 @@
     import { waitForAuth, apiCall, alert, getCurrentUsername } from '/static/js/utils.js';
     
     let owedBalance = 0;
+    let minRollPoints = 0;
     let coupleUsernames = [];
     let dieMetaByIndex = [];
     let currentRollId = null;
@@ -356,15 +357,22 @@
             const data = await apiCall('/api/owed-points');
             if (data.status === 'success' && data.balances) {
                 owedBalance = parseInt(data.balances[username], 10) || 0;
+                minRollPoints = parseInt(data.min_roll_points?.[username], 10) || 0;
             }
         } catch (e) {
             console.error('Error loading owed points:', e);
         }
         const banner = document.getElementById('owed-banner');
         if (banner) {
-            banner.textContent = owedBalance > 0
-                ? `You owe ${owedBalance} points`
-                : 'No owed points — rolls will not reduce your balance';
+            if (owedBalance > 0) {
+                let text = `You owe ${owedBalance} points`;
+                if (minRollPoints > 0) {
+                    text += ` — each roll must score at least ${minRollPoints} points`;
+                }
+                banner.textContent = text;
+            } else {
+                banner.textContent = 'No owed points — rolls will not reduce your balance';
+            }
             banner.classList.toggle('zero', owedBalance <= 0);
         }
     }
@@ -484,15 +492,29 @@
             return;
         }
         const pts = scoreForSelection(pvs);
-        hint.textContent = `${n} dice selected → ${pts} points toward owed balance`;
+        let msg = `${n} dice selected → ${pts} points toward owed balance`;
+        if (minRollPoints > 0) {
+            msg += pts >= minRollPoints
+                ? ` (meets ${minRollPoints} pt minimum)`
+                : ` (need ${minRollPoints} pt minimum)`;
+        }
+        hint.textContent = msg;
     }
     
     function updateRollButton() {
         const button = document.getElementById('roll-button');
         const n = totalDiceSelected();
         const noOwed = owedBalance <= 0;
-        button.disabled = n < 1 || noOwed;
-        button.textContent = noOwed ? 'No owed points' : 'Roll Dice';
+        const pts = scoreForSelection(getSelectedPointValues());
+        const belowMin = minRollPoints > 0 && pts < minRollPoints;
+        button.disabled = n < 1 || noOwed || belowMin;
+        if (noOwed) {
+            button.textContent = 'No owed points';
+        } else if (belowMin && n >= 1) {
+            button.textContent = `Need ${minRollPoints}+ points`;
+        } else {
+            button.textContent = 'Roll Dice';
+        }
     }
     
     async function rollDice() {
