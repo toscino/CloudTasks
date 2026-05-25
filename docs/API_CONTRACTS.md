@@ -627,6 +627,132 @@ Assignee only. Immediately credits `owed_conversion_points` to assignee's `owed_
 }
 ```
 
+## Dice rolls
+
+Configuration is stored per couple in `dice_configurations`. Each die (`die_1`, `die_2`, …) includes:
+
+- `point_value` (int ≥ 0) — contribution when rolled
+- `face_count` (2–20) — sides of the die (random face 1…N when rolled)
+- `face_rules` (object) — keys `"1"` … `"face_count"`; text shown when that face is rolled
+- `for_usernames` (string[]) — one username (that person only) or both couple members
+- `max_rolls` (1–10, capped at `face_count`) — how many times this die may be included in one roll action; each roll uses a distinct face on that die
+- `title` — display label
+
+Missing fields on read default to `point_value: 1`, `face_count: 6`, `for_usernames: all couple members`, `max_rolls: 1`.
+
+### Get dice config
+
+**GET** `/api/dice-rolls/config`
+
+**Response** (excerpt):
+```json
+{
+  "status": "success",
+  "dice_configs": { "die_1": { "point_value": 2, "face_count": 6, "for_usernames": ["ian"], "...": "..." } },
+  "couple_usernames": ["ian", "karleigh"],
+  "saved_dice_selection": [],
+  "can_roll": true
+}
+```
+
+### Save dice config
+
+**POST** `/api/dice-rolls/config` — body `{ "dice_configs": { ... } }`
+
+### Import dice config (partial)
+
+**POST** `/api/dice-rolls/config/import` — each die key present is full-replaced.
+
+### Roll dice
+
+**POST** `/api/dice-rolls/roll`
+
+**Request** — explicit selection (no random die pick). Either form:
+
+```json
+{ "selected_dice": { "0": 2, "1": 1 } }
+```
+
+or
+
+```json
+{ "selected_dice": [0, 0, 1] }
+```
+
+Indices refer to sorted `die_N` keys. Count per die must not exceed that die's `max_rolls`. Server rejects dice the roller is not allowed to use (`for_usernames`).
+
+**Scoring**: `sum(point_value of rolled dice) - min(point_value)` (0 if fewer than 2 dice rolled). Face values per die are chosen without replacement (no duplicate faces on the same die in one roll). Selection count for a die cannot exceed `face_count`.
+
+**Debit**: Subtracts `min(points_scored, roller's owed balance)` from `owed_points_balance/{username}`; ledger id `dice_roll_{roll_id}`.
+
+**Response** (excerpt):
+```json
+{
+  "status": "success",
+  "roll_id": "uuid",
+  "reroll_used": false,
+  "roll_instances": [
+    {
+      "instance_index": 0,
+      "die_index": 0,
+      "title": "Chore",
+      "point_value": 2,
+      "face_value": 3,
+      "face_rule": "Do the dishes",
+      "rerollable": true
+    }
+  ],
+  "points_scored": 5,
+  "points_subtracted": 5,
+  "owed_balance_before": 10,
+  "owed_balance_after": 5
+}
+```
+
+Each successful roll is persisted in Firestore `dice_roll_sessions/{roll_id}` (`username`, `couple_id`, `created_at`, `roll_instances`, point summary fields, `reroll_used`). Only the roller’s **two newest** sessions are kept per user (older docs pruned on save).
+
+`rerollable` on an instance: session `reroll_used` is false and at least one **other** face is available on that die (not only the current face; same uniqueness rule as the initial roll).
+
+### Roll history
+
+**GET** `/api/dice-rolls/history`
+
+Returns the current user’s last **2** saved sessions (newest first), read-only.
+
+**Response** (excerpt):
+```json
+{
+  "status": "success",
+  "sessions": [
+    {
+      "roll_id": "uuid",
+      "created_at": "2026-05-23T12:00:00",
+      "roll_instances": [ "..." ],
+      "points_scored": 5,
+      "points_subtracted": 5,
+      "owed_balance_after": 5,
+      "reroll_used": false
+    }
+  ]
+}
+```
+
+### Reroll one instance
+
+**POST** `/api/dice-rolls/roll/<roll_id>/reroll`
+
+**Request**:
+```json
+{ "instance_index": 0 }
+```
+
+- Only the roller (`username` on the session) may reroll.
+- **One** reroll per session (`reroll_used` must be false).
+- New `face_value` is chosen from faces not used by other instances of the same die (current face excluded from the “used” set for this calculation).
+- **Does not** change owed balance or re-run debit; `points_scored` / `points_subtracted` unchanged.
+
+**Response**: Same shape as roll response (updated `roll_instances`, all `rerollable: false`, `reroll_used: true`).
+
 ## Error Handling
 
 ### HTTP Status Codes

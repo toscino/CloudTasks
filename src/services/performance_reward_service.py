@@ -372,6 +372,64 @@ class PerformanceRewardService:
         })
         return True
 
+    def _get_owed_balance(self, username: str) -> int:
+        doc = self.db.collection(self.COL_OWED).document(username).get()
+        return int(doc.to_dict().get("balance", 0)) if doc.exists else 0
+
+    def debit_owed_for_dice_roll(
+        self, username: str, amount: int, *, roll_id: str
+    ) -> Dict[str, Any]:
+        """Subtract owed balance for a dice roll (idempotent per roll_id)."""
+        try:
+            if not username:
+                return {"status": "error", "message": "Username required"}
+            amount = int(amount)
+            if amount <= 0:
+                balance = self._get_owed_balance(username)
+                return {
+                    "status": "success",
+                    "points_subtracted": 0,
+                    "owed_balance_before": balance,
+                    "owed_balance_after": balance,
+                }
+
+            ledger_id = f"dice_roll_{roll_id}"
+            balance_before = self._get_owed_balance(username)
+            if self._ledger_exists(ledger_id):
+                return {
+                    "status": "success",
+                    "points_subtracted": 0,
+                    "owed_balance_before": balance_before,
+                    "owed_balance_after": balance_before,
+                }
+
+            points_subtracted = min(amount, balance_before)
+            balance_after = balance_before - points_subtracted
+
+            owed_ref = self.db.collection(self.COL_OWED).document(username)
+            owed_ref.set({
+                "username": username,
+                "balance": balance_after,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            }, merge=True)
+
+            self.db.collection(self.COL_LEDGER).document(ledger_id).set({
+                "username": username,
+                "amount": -points_subtracted,
+                "source": "dice_roll",
+                "roll_id": roll_id,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            })
+
+            return {
+                "status": "success",
+                "points_subtracted": points_subtracted,
+                "owed_balance_before": balance_before,
+                "owed_balance_after": balance_after,
+            }
+        except Exception as e:
+            return handle_exception(e, "Failed to debit owed points for dice roll")
+
     def create_item_for_earned_day(
         self,
         earner_username: str,
@@ -716,10 +774,7 @@ class PerformanceRewardService:
             item_id = f"test_{assignee_username}_{int(self._now().timestamp())}"
             expires_at = self._reset_time_on(today + timedelta(days=2))
             earner = assignee_username
-            spouse = self._get_spouse_username(assignee_username)
-            if spouse and random.choice((True, False)):
-                earner = spouse
-            assignee = self.resolve_assignee(earner, cfg["assign_to"])
+            assignee = assignee_username
 
             self.db.collection(self.COL_ITEMS).document(item_id).set({
                 "earner_username": earner,

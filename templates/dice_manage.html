@@ -41,12 +41,18 @@
         margin-bottom: 4px;
         font-size: 13px;
     }
-    .dice-die-fields .form-group input {
+    .dice-die-fields .form-group input,
+    .dice-die-fields .form-group select {
         width: 100%;
         padding: 8px 10px;
         border: 1px solid #ddd;
         border-radius: 4px;
         box-sizing: border-box;
+    }
+    .dice-meta-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
     }
     .dice-face-row {
         display: flex;
@@ -55,7 +61,6 @@
         margin-bottom: 6px;
     }
     .dice-face-row .dice-face-num { flex: 0 0 24px; font-size: 12px; color: #666; }
-    .dice-face-row .face-name { flex: 0 0 100px; }
     .dice-face-row .face-rule { flex: 1; }
     .import-export-dice {
         margin-top: 20px;
@@ -82,7 +87,7 @@
 <div class="dice-manage-container">
     <p class="nav-back"><a href="/dice-rolls">← Back to dice rolls</a></p>
     <h2>🎲 Manage dice</h2>
-    <p class="intro">Configure rules for each die. Base rule applies when the die is not selected; alternate + face rule when selected.</p>
+    <p class="intro">Configure each die: title, point value, face count, face rules (one per face), who can use it, and max rolls per turn.</p>
 
     <div id="dice-config-form"></div>
 
@@ -97,7 +102,7 @@
     <div class="import-export-dice">
         <button type="button" class="btn btn-secondary" id="export-dice-btn">Export dice</button>
         <div style="margin-top: 15px;">
-            <label for="import-dice-textarea" style="display: block; margin-bottom: 5px; font-size: 14px;">Import dice (paste JSON; partial ok — each die present is full-replaced)</label>
+            <label for="import-dice-textarea" style="display: block; margin-bottom: 5px; font-size: 14px;">Import dice (paste JSON; partial ok — each die present is full-replaced). Fields: title, point_value, face_count, face_rules, for_usernames, max_rolls.</label>
             <textarea id="import-dice-textarea" rows="6" placeholder='{"dice_configs": {"die_1": {...}}}'></textarea>
             <button type="button" class="btn" id="import-dice-btn" style="margin-top: 8px;">Import dice</button>
             <span id="import-dice-status" style="margin-left: 10px; font-size: 14px;"></span>
@@ -111,13 +116,41 @@
 <script type="module">
     import { waitForAuth, apiCall } from '/static/js/utils.js';
 
+    let coupleUsernames = [];
+
+    function faceRowsHTML(num, faceCount) {
+        const rows = [];
+        for (let f = 1; f <= faceCount; f++) {
+            rows.push(`
+            <div class="dice-face-row"><span class="dice-face-num">${f}</span>
+            <input type="text" id="die-${num}-face-${f}" class="face-rule" placeholder="Rule for this face"></div>`);
+        }
+        return rows.join('');
+    }
+
+    function forUserOptionsHTML(num, selectedFor) {
+        const users = coupleUsernames.length ? coupleUsernames : [''];
+        const sel = new Set(Array.isArray(selectedFor) ? selectedFor : users);
+        const isBoth = users.length > 1 && users.every(u => sel.has(u));
+        let html = '';
+        users.forEach(u => {
+            const selected = !isBoth && sel.size === 1 && sel.has(u);
+            html += `<option value="${u}" ${selected ? 'selected' : ''}>${u}</option>`;
+        });
+        if (users.length > 1) {
+            html += `<option value="__both__" ${isBoth ? 'selected' : ''}>Both</option>`;
+        }
+        return html;
+    }
+
     function createDieBlockHTML(dieKey, data = {}) {
         const num = dieKey.replace(/^die_/, '') || '1';
         const title = (data.title || '').trim() || ('Die ' + num);
-        const faceRows = [1, 2, 3, 4, 5, 6].map(f => `
-            <div class="dice-face-row"><span class="dice-face-num">${f}</span>
-            <input type="text" id="die-${num}-face-${f}-name" class="face-name" placeholder="Name">
-            <input type="text" id="die-${num}-face-${f}" class="face-rule" placeholder="Rule"></div>`).join('');
+        const faceCount = Math.max(2, parseInt(data.face_count, 10) || 6);
+        const pointValue = parseInt(data.point_value, 10);
+        const pv = Number.isFinite(pointValue) ? pointValue : 1;
+        const forUsers = data.for_usernames || coupleUsernames;
+        const effectiveMaxRolls = Math.min(Math.max(1, parseInt(data.max_rolls, 10) || 1), faceCount);
         return `
         <details class="dice-die-block" data-die-key="${dieKey}" open>
             <summary class="dice-die-summary">${title}</summary>
@@ -127,12 +160,18 @@
                 </div>
                 <div class="form-group"><label for="die-${num}-title">Title</label>
                     <input type="text" id="die-${num}-title" placeholder="e.g. Chore"></div>
-                <div class="form-group"><label for="die-${num}-base">Base rule (when not selected)</label>
-                    <input type="text" id="die-${num}-base" placeholder="Rule when this die is not rolled"></div>
-                <div class="form-group"><label for="die-${num}-alt">Alternate rule (when selected)</label>
-                    <input type="text" id="die-${num}-alt" placeholder="Rule when this die is rolled"></div>
-                <div class="form-group"><label>Face rules (1–6): name and rule</label>
-                    <div class="dice-face-rows">${faceRows}</div></div>
+                <div class="dice-meta-row">
+                    <div class="form-group"><label for="die-${num}-point">Point value</label>
+                        <input type="number" id="die-${num}-point" min="0" value="${pv}"></div>
+                    <div class="form-group"><label for="die-${num}-faces">Face count</label>
+                        <input type="number" id="die-${num}-faces" min="2" max="20" value="${faceCount}"></div>
+                    <div class="form-group"><label for="die-${num}-for">For</label>
+                        <select id="die-${num}-for">${forUserOptionsHTML(num, forUsers)}</select></div>
+                    <div class="form-group"><label for="die-${num}-max-rolls">Max rolls per turn</label>
+                        <input type="number" id="die-${num}-max-rolls" min="1" max="${faceCount}" value="${effectiveMaxRolls}" title="Cannot exceed face count (unique face per roll)"></div>
+                </div>
+                <div class="form-group"><label>Face rules</label>
+                    <div class="dice-face-rows" id="die-${num}-face-rows">${faceRowsHTML(num, faceCount)}</div></div>
             </div>
         </details>`;
     }
@@ -144,15 +183,79 @@
     }
 
     function updateRemoveButtons() {
-        const blocks = document.querySelectorAll('.dice-die-block');
-        blocks.forEach(block => {
+        document.querySelectorAll('.dice-die-block').forEach(block => {
             const btn = block.querySelector('.remove-die-btn');
-            if (btn) btn.disabled = blocks.length <= 1;
+            if (btn) btn.disabled = document.querySelectorAll('.dice-die-block').length <= 1;
         });
+    }
+
+    function clampMaxRollsToFaces(num) {
+        const facesEl = document.getElementById('die-' + num + '-faces');
+        const maxRollsEl = document.getElementById('die-' + num + '-max-rolls');
+        if (!facesEl || !maxRollsEl) return;
+        const faceCount = Math.max(2, Math.min(20, parseInt(facesEl.value, 10) || 6));
+        maxRollsEl.max = String(faceCount);
+        const current = parseInt(maxRollsEl.value, 10) || 1;
+        if (current > faceCount) maxRollsEl.value = String(faceCount);
+    }
+
+    function rebuildFaceRows(num) {
+        const facesEl = document.getElementById('die-' + num + '-faces');
+        const container = document.getElementById('die-' + num + '-face-rows');
+        if (!facesEl || !container) return;
+        let faceCount = parseInt(facesEl.value, 10) || 6;
+        faceCount = Math.max(2, Math.min(20, faceCount));
+        facesEl.value = faceCount;
+        clampMaxRollsToFaces(num);
+        const oldRules = {};
+        for (let f = 1; f <= 20; f++) {
+            const ruleEl = document.getElementById('die-' + num + '-face-' + f);
+            if (ruleEl) oldRules[f] = ruleEl.value;
+        }
+        container.innerHTML = faceRowsHTML(num, faceCount);
+        for (let f = 1; f <= faceCount; f++) {
+            const ruleEl = document.getElementById('die-' + num + '-face-' + f);
+            if (ruleEl && oldRules[f] !== undefined) ruleEl.value = oldRules[f];
+        }
+    }
+
+    function readForUsernames(num) {
+        const sel = document.getElementById('die-' + num + '-for');
+        if (!sel) return [...coupleUsernames];
+        if (sel.value === '__both__') return [...coupleUsernames];
+        return [sel.value];
+    }
+
+    function populateDieFields(key, d) {
+        const num = key.replace(/^die_/, '');
+        const titleEl = document.getElementById('die-' + num + '-title');
+        const pointEl = document.getElementById('die-' + num + '-point');
+        const facesEl = document.getElementById('die-' + num + '-faces');
+        const forEl = document.getElementById('die-' + num + '-for');
+        if (titleEl) titleEl.value = (d.title || '').trim();
+        if (pointEl) pointEl.value = d.point_value ?? 1;
+        if (facesEl) facesEl.value = d.face_count ?? 6;
+        const maxRollsEl = document.getElementById('die-' + num + '-max-rolls');
+        if (maxRollsEl) maxRollsEl.value = d.max_rolls ?? 1;
+        rebuildFaceRows(num);
+        clampMaxRollsToFaces(num);
+        const fr = d.face_rules || {};
+        const fc = parseInt(facesEl?.value, 10) || 6;
+        for (let f = 1; f <= fc; f++) {
+            const ruleEl = document.getElementById('die-' + num + '-face-' + f);
+            if (ruleEl) ruleEl.value = (fr[String(f)] || '').trim();
+        }
+        if (forEl) {
+            forEl.innerHTML = forUserOptionsHTML(num, d.for_usernames);
+        }
+        const block = document.querySelector(`[data-die-key="${key}"]`);
+        const sum = block && block.querySelector('summary.dice-die-summary');
+        if (sum) sum.textContent = (d.title || '').trim() || ('Die ' + num);
     }
 
     async function loadDiceConfig() {
         const data = await apiCall('/api/dice-rolls/config');
+        coupleUsernames = (data.status === 'success' && data.couple_usernames) ? data.couple_usernames : [];
         const dice_configs = (data.status === 'success' && data.dice_configs) ? data.dice_configs : {};
         let keys = sortedDieKeys(dice_configs);
         if (keys.length === 0) keys = ['die_1'];
@@ -164,27 +267,7 @@
             div.innerHTML = createDieBlockHTML(key, d);
             container.appendChild(div.firstElementChild);
         });
-        keys.forEach(key => {
-            const d = dice_configs[key] || {};
-            const num = key.replace(/^die_/, '');
-            const titleEl = document.getElementById('die-' + num + '-title');
-            const baseEl = document.getElementById('die-' + num + '-base');
-            const altEl = document.getElementById('die-' + num + '-alt');
-            if (titleEl) titleEl.value = (d.title || '').trim();
-            if (baseEl) baseEl.value = (d.base_rule || '').trim();
-            if (altEl) altEl.value = (d.alternate_rule || '').trim();
-            const fr = d.face_rules || {};
-            const fn = d.face_names || {};
-            for (let f = 1; f <= 6; f++) {
-                const ruleEl = document.getElementById('die-' + num + '-face-' + f);
-                const nameEl = document.getElementById('die-' + num + '-face-' + f + '-name');
-                if (ruleEl) ruleEl.value = (fr[String(f)] || '').trim();
-                if (nameEl) nameEl.value = (fn[String(f)] || '').trim();
-            }
-            const block = container.querySelector(`[data-die-key="${key}"]`);
-            const sum = block && block.querySelector('summary.dice-die-summary');
-            if (sum) sum.textContent = (d.title || '').trim() || ('Die ' + num);
-        });
+        keys.forEach(key => populateDieFields(key, dice_configs[key] || {}));
         updateRemoveButtons();
     }
 
@@ -194,23 +277,19 @@
             const key = block.getAttribute('data-die-key');
             if (!key) return;
             const num = key.replace(/^die_/, '');
-            const titleEl = document.getElementById('die-' + num + '-title');
-            const baseEl = document.getElementById('die-' + num + '-base');
-            const altEl = document.getElementById('die-' + num + '-alt');
+            const faceCount = Math.max(2, Math.min(20, parseInt(document.getElementById('die-' + num + '-faces')?.value, 10) || 6));
             const face_rules = {};
-            const face_names = {};
-            for (let f = 1; f <= 6; f++) {
+            for (let f = 1; f <= faceCount; f++) {
                 const ruleEl = document.getElementById('die-' + num + '-face-' + f);
-                const nameEl = document.getElementById('die-' + num + '-face-' + f + '-name');
                 face_rules[String(f)] = ruleEl ? (ruleEl.value || '').trim() : '';
-                face_names[String(f)] = nameEl ? (nameEl.value || '').trim() : '';
             }
             dice_configs[key] = {
-                title: titleEl ? (titleEl.value || '').trim() : '',
-                base_rule: baseEl ? (baseEl.value || '').trim() : '',
-                alternate_rule: altEl ? (altEl.value || '').trim() : '',
+                title: (document.getElementById('die-' + num + '-title')?.value || '').trim(),
+                point_value: parseInt(document.getElementById('die-' + num + '-point')?.value, 10) || 0,
+                face_count: faceCount,
                 face_rules,
-                face_names,
+                max_rolls: Math.max(1, Math.min(10, parseInt(document.getElementById('die-' + num + '-max-rolls')?.value, 10) || 1)),
+                for_usernames: readForUsernames(num),
             };
         });
         return dice_configs;
@@ -282,9 +361,8 @@
     }
 
     function addDie() {
-        const blocks = document.querySelectorAll('.dice-die-block');
         let maxNum = 0;
-        blocks.forEach(block => {
+        document.querySelectorAll('.dice-die-block').forEach(block => {
             const key = block.getAttribute('data-die-key');
             const m = key && key.match(/^die_(\d+)$/);
             if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
@@ -294,6 +372,7 @@
         const div = document.createElement('div');
         div.innerHTML = createDieBlockHTML(newKey, {});
         container.appendChild(div.firstElementChild);
+        populateDieFields(newKey, {});
         updateRemoveButtons();
     }
 
@@ -315,6 +394,20 @@
         document.addEventListener('click', (e) => {
             if (e.target.matches('.remove-die-btn') && !e.target.disabled) {
                 removeDie(e.target.getAttribute('data-die-key'));
+            }
+        });
+        document.addEventListener('change', (e) => {
+            if (e.target.matches('[id^="die-"][id$="-faces"]')) {
+                const num = e.target.id.replace(/^die-/, '').replace(/-faces$/, '');
+                rebuildFaceRows(num);
+            }
+        });
+        document.addEventListener('input', (e) => {
+            if (e.target.matches('[id^="die-"][id$="-title"]')) {
+                const num = e.target.id.replace(/^die-/, '').replace(/-title$/, '');
+                const block = document.querySelector(`.dice-die-block [id="die-${num}-title"]`)?.closest('.dice-die-block');
+                const sum = block?.querySelector('summary.dice-die-summary');
+                if (sum) sum.textContent = e.target.value.trim() || ('Die ' + num);
             }
         });
     });

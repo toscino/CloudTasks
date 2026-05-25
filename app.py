@@ -49,7 +49,7 @@ statistics_service = StatisticsService(app_manager, task_master)
 collaboration_service = CollaborationService(app_manager)
 user_service = UserService(app_manager)
 performance_reward_service = PerformanceRewardService(app_manager)
-dice_roll_service = DiceRollService(app_manager)
+dice_roll_service = DiceRollService(app_manager, performance_reward_service)
 
 # Store services on app_manager for easy access
 app_manager.collaboration_service = collaboration_service
@@ -542,13 +542,6 @@ def clear_owed_points():
     return performance_reward_service.clear_owed_points(username)
 
 # Dice Roll API Routes
-@app_manager.route('/api/dice-rolls/credits', ['GET'], limit="50 per minute")
-@with_error_handling
-def get_dice_roll_credits():
-    """Get current shared credits and cap (both users can access)"""
-    username = get_user_info(app_manager)
-    return dice_roll_service.get_credits(username)
-
 @app_manager.route('/api/dice-rolls/config', ['GET'], limit="50 per minute")
 @with_error_handling
 def get_dice_roll_config():
@@ -570,7 +563,7 @@ def save_dice_roll_config():
     couple_id = dice_roll_service.get_couple_id(username)
     if not couple_id:
         return app_manager.jsonify({'status': 'error', 'message': 'Could not determine couple_id'}), 400
-    return dice_roll_service.save_dice_configuration(couple_id, data)
+    return dice_roll_service.save_dice_configuration(couple_id, data, username)
 
 @app_manager.route('/api/dice-rolls/selection', ['POST'], limit="20 per minute")
 @with_error_handling
@@ -593,7 +586,7 @@ def import_dice_roll_config():
     couple_id = dice_roll_service.get_couple_id(username)
     if not couple_id:
         return app_manager.jsonify({'status': 'error', 'message': 'Could not determine couple_id'}), 400
-    return dice_roll_service.import_dice_configuration(couple_id, data)
+    return dice_roll_service.import_dice_configuration(couple_id, data, username)
 
 @app_manager.route('/api/dice-rolls/roll', ['POST'], limit="20 per minute")
 @with_error_handling
@@ -607,24 +600,40 @@ def roll_dice():
             'message': 'Request body required'
         }), 400
     
-    available_dice = data.get('available_dice', [])
-    num_dice = data.get('num_dice')
-    return dice_roll_service.roll_dice(username, available_dice, num_dice)
-
-@app_manager.route('/api/dice-rolls/test/add-credits', ['POST'], limit="10 per minute")
-@with_error_handling
-def test_add_dice_credits():
-    """Test endpoint to add credits manually (test only)"""
-    username = get_user_info(app_manager)
-    data = app_manager.get_json()
-    if not data or 'amount' not in data:
+    selected_dice = data.get('selected_dice')
+    if selected_dice is None:
         return app_manager.jsonify({
             'status': 'error',
-            'message': 'Amount is required'
+            'message': 'selected_dice is required',
         }), 400
-    
-    amount = int(data['amount'])
-    return dice_roll_service.test_add_credits(username, amount)
+    return dice_roll_service.roll_dice(username, selected_dice)
+
+@app_manager.route('/api/dice-rolls/history', ['GET'], limit="50 per minute")
+@with_error_handling
+def get_dice_roll_history():
+    """Last two saved roll sessions for the current user."""
+    username = get_user_info(app_manager)
+    return dice_roll_service.get_roll_history(username, limit=2)
+
+@app_manager.route('/api/dice-rolls/roll/<roll_id>/reroll', ['POST'], limit="20 per minute")
+@with_error_handling
+def reroll_dice_instance(roll_id):
+    """Reroll one die instance once for a saved roll session."""
+    username = get_user_info(app_manager)
+    data = app_manager.get_json()
+    if not data or 'instance_index' not in data:
+        return app_manager.jsonify({
+            'status': 'error',
+            'message': 'instance_index is required',
+        }), 400
+    try:
+        instance_index = int(data['instance_index'])
+    except (TypeError, ValueError):
+        return app_manager.jsonify({
+            'status': 'error',
+            'message': 'instance_index must be an integer',
+        }), 400
+    return dice_roll_service.reroll_one_instance(username, roll_id, instance_index)
 
 # User Settings API Endpoints
 @app_manager.route('/api/user/settings', ['GET'], limit="50 per minute")

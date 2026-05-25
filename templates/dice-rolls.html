@@ -3,12 +3,29 @@
 {% block title %}CloudTasks - Dice Rolls{% endblock %}
 
 {% block styles %}
-        /* Dice Roll page styles */
         h2 {
             color: #1c1e21;
             margin-bottom: 15px;
             font-size: 18px;
             font-weight: 600;
+        }
+        
+        .owed-banner {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        
+        .owed-banner.zero {
+            background-color: #f8f9fa;
+            border-color: #e0e0e0;
+            color: #6c757d;
+            font-weight: 500;
         }
         
         .roll-info {
@@ -59,29 +76,34 @@
             font-weight: 600;
         }
         
-        .dice-checkbox-group {
+        .dice-select-list {
             display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .dice-select-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
         }
         
-        .dice-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .dice-select-row .die-name {
+            flex: 1 1 160px;
+            font-size: 15px;
         }
         
-        .dice-checkbox input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
+        .dice-select-row select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 15px;
+            min-width: 72px;
         }
         
-        .dice-checkbox label {
-            font-size: 16px;
-            cursor: pointer;
-            user-select: none;
+        .die-badge {
+            font-size: 11px;
+            color: #6c757d;
         }
         
         .results-section {
@@ -102,6 +124,15 @@
             margin-bottom: 15px;
             font-size: 16px;
             font-weight: 600;
+        }
+        
+        .points-summary {
+            background-color: #e8f5e9;
+            border: 1px solid #c3e6cb;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
         }
         
         .dice-results {
@@ -136,25 +167,115 @@
             line-height: 1.3;
         }
         
-        .rules-display {
-            margin-top: 20px;
+        .die-result .die-points {
+            font-size: 11px;
+            color: #28a745;
+            margin-top: 4px;
         }
         
-        .rules-display h4 {
-            margin: 15px 0 10px 0;
-            font-size: 14px;
-            font-weight: 600;
+        .die-result .die-face-num {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        
+        .die-result.rerollable {
+            cursor: pointer;
+            border-color: #28a745;
+        }
+        
+        .die-result.rerollable:hover {
+            background-color: #e8f5e9;
+        }
+        
+        .die-result.not-rerollable {
+            opacity: 0.75;
+            border-color: #dee2e6;
+        }
+        
+        .die-result .reroll-hint {
+            font-size: 10px;
+            color: #28a745;
+            margin-top: 6px;
+        }
+        
+        .die-result .reroll-confirm {
+            display: none;
+            margin-top: 8px;
+            gap: 6px;
+            flex-direction: column;
+        }
+        
+        .die-result.reroll-confirming .reroll-confirm {
+            display: flex;
+        }
+        
+        .die-result.reroll-confirming .die-value {
+            display: none;
+        }
+        
+        .reroll-confirm button {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .reroll-yes-btn {
+            background: #28a745;
+            color: #fff;
+        }
+        
+        .reroll-cancel-btn {
+            background: #e9ecef;
             color: #495057;
         }
         
-        .rule-item {
-            display: block;
-            padding: 10px;
-            margin: 5px 0;
-            background-color: #f8f9fa;
-            border-left: 3px solid #007bff;
-            border-radius: 4px;
-            font-size: 14px;
+        .history-section {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .history-section h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .history-card {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        
+        .history-card:last-child {
+            margin-bottom: 0;
+        }
+        
+        .history-meta {
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+        
+        .history-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .history-chip {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
         }
         
         .loading-state {
@@ -177,45 +298,31 @@
 {% block content %}
     <div class="daily-tasks-container">
         <h2>🎲 Dice Rolls</h2>
-        <p style="font-size: 14px; margin: -8px 0 16px 0;"><a href="/dice-rolls/manage">Configure dice rules</a></p>
+        <p style="font-size: 14px; margin: -8px 0 16px 0;"><a href="/dice-rolls/manage">Configure dice</a></p>
         
         <div id="loading-state" class="loading-state">Loading...</div>
         <div id="main-content" style="display: none;">
-            <!-- Roll Info -->
+            <div id="owed-banner" class="owed-banner">Owed points: …</div>
+            <div class="history-section" id="history-section">
+                <h3>Recent rolls</h3>
+                <div id="history-list"><p style="color:#6c757d;margin:0;">No recent rolls yet.</p></div>
+            </div>
             <div class="roll-info">
-                Either partner can roll. 1) Check which dice are available. 2) Pick number of dice to roll. 3) Roll that many random dice from the pool.
+                Choose how many times to roll each die (0 = skip). Each roll of the same die gets a different face (at most once per face). Points = sum of selected dice values minus the lowest. That total is subtracted from your owed balance (need at least 2 dice rolled for points). After rolling, you may reroll one die once if another face is still available.
             </div>
             <div class="dice-pool">
-                <h3>Available dice (include in pool)</h3>
-                <div class="dice-checkbox-group" id="dice-checkboxes">
-                    <!-- Checkboxes rendered dynamically from config -->
-                </div>
-                <div style="margin-top: 15px;">
-                    <label for="num-dice" style="font-weight: 600; margin-right: 10px;">Number of dice:</label>
-                    <select id="num-dice" style="padding: 8px 12px; border-radius: 6px; font-size: 16px;">
-                        <!-- Options populated dynamically -->
-                    </select>
-                    <span id="roll-range-hint" style="margin-left: 10px; color: #6c757d; font-size: 14px;"></span>
-                </div>
+                <h3>Select dice to roll</h3>
+                <div class="dice-select-list" id="dice-select-list"></div>
+                <p id="roll-points-hint" style="margin: 15px 0 0 0; color: #6c757d; font-size: 14px;"></p>
             </div>
             
-            <!-- Roll Button -->
             <button class="roll-button" id="roll-button">Roll Dice</button>
             
-            <!-- Results Section -->
             <div class="results-section" id="results-section">
                 <h3>Roll Results</h3>
-                <div class="dice-results" id="dice-results">
-                    <!-- Dice results will be displayed here -->
-                </div>
-                <div class="rules-display">
-                    <h4>Final Rules</h4>
-                    <div id="final-rules">
-                        <!-- Final rules will be displayed here -->
-                    </div>
-                </div>
+                <div id="points-summary" class="points-summary" style="display: none;"></div>
+                <div class="dice-results" id="dice-results"></div>
             </div>
-            
         </div>
         
         <div id="error-message" class="error-message" style="display: none;"></div>
@@ -225,101 +332,171 @@
 {% block scripts %}
     {{ super() }}
 <script type="module">
-    import { waitForAuth, apiCall, alert } from '/static/js/utils.js';
+    import { waitForAuth, apiCall, alert, getCurrentUsername } from '/static/js/utils.js';
     
-    // Dice Roll page JavaScript
+    let owedBalance = 0;
+    let coupleUsernames = [];
+    let dieMetaByIndex = [];
+    let currentRollId = null;
+    let rerollUsed = false;
     
-    // Wait for authentication to be ready
     document.addEventListener('DOMContentLoaded', async function() {
         await waitForAuth();
-        
-        await loadDiceConfig();
+        await Promise.all([loadOwedPoints(), loadDiceConfig(), loadRollHistory()]);
         setupEventListeners();
-        updateRollHint();
+        updatePointsHint();
         updateRollButton();
-        
         document.getElementById('loading-state').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
     });
     
-    // Load dice config and render checkboxes + num-dice options
+    async function loadOwedPoints() {
+        try {
+            const username = getCurrentUsername();
+            const data = await apiCall('/api/owed-points');
+            if (data.status === 'success' && data.balances) {
+                owedBalance = parseInt(data.balances[username], 10) || 0;
+            }
+        } catch (e) {
+            console.error('Error loading owed points:', e);
+        }
+        const banner = document.getElementById('owed-banner');
+        if (banner) {
+            banner.textContent = owedBalance > 0
+                ? `You owe ${owedBalance} points`
+                : 'No owed points — rolls will not reduce your balance';
+            banner.classList.toggle('zero', owedBalance <= 0);
+        }
+    }
+    
+    function dieAudienceLabel(forUsers, currentUser) {
+        const users = Array.isArray(forUsers) ? forUsers : [];
+        if (users.length > 1) return 'Both';
+        if (users.length === 1 && users[0] === currentUser) return 'Yours';
+        if (users.length === 1) return users[0];
+        return '';
+    }
+    
     async function loadDiceConfig() {
         try {
+            const username = getCurrentUsername();
             const data = await apiCall('/api/dice-rolls/config');
             const cfg = (data.status === 'success' && data.dice_configs) ? data.dice_configs : {};
+            coupleUsernames = data.couple_usernames || [];
             window.diceConfig = cfg;
             const keys = Object.keys(cfg).filter(k => /^die_\d+$/.test(k) && k !== 'die_0')
                 .sort((a, b) => parseInt(a.replace('die_', ''), 10) - parseInt(b.replace('die_', ''), 10));
-            const container = document.getElementById('dice-checkboxes');
-            container.innerHTML = '';
-            keys.forEach((key, idx) => {
+            dieMetaByIndex = keys.map((key, idx) => {
                 const d = cfg[key] || {};
-                const t = (d.title || '').trim() || ('Die ' + (idx + 1));
-                const div = document.createElement('div');
-                div.className = 'dice-checkbox';
-                div.innerHTML = `<input type="checkbox" id="die-${idx}" value="${idx}" checked><label for="die-${idx}">${t}</label>`;
-                container.appendChild(div);
+                const forUsers = d.for_usernames || coupleUsernames;
+                const faceCount = Math.max(2, parseInt(d.face_count, 10) || 6);
+                const maxRolls = Math.max(1, Math.min(10, parseInt(d.max_rolls, 10) || 1, faceCount));
+                const rollLimit = Math.min(maxRolls, faceCount);
+                return {
+                    idx,
+                    key,
+                    title: (d.title || '').trim() || ('Die ' + (idx + 1)),
+                    pointValue: parseInt(d.point_value, 10) || 0,
+                    faceCount,
+                    maxRolls,
+                    rollLimit,
+                    forUsers,
+                    allowed: forUsers.includes(username),
+                };
             });
-            updateNumDiceOptions();
-            updateRollHint();
+            const container = document.getElementById('dice-select-list');
+            container.innerHTML = '';
+            const allowedDice = dieMetaByIndex.filter(m => m.allowed);
+            if (allowedDice.length === 0) {
+                container.innerHTML = '<p style="color:#6c757d;">No dice assigned to you. Configure dice in Manage Dice.</p>';
+            } else {
+                allowedDice.forEach(m => {
+                    const badge = dieAudienceLabel(m.forUsers, username);
+                    let opts = '';
+                    for (let c = 0; c <= m.rollLimit; c++) {
+                        opts += `<option value="${c}">${c}</option>`;
+                    }
+                    const row = document.createElement('div');
+                    row.className = 'dice-select-row';
+                    row.innerHTML = `
+                        <span class="die-name">${m.title}
+                            <span class="die-badge">(${m.pointValue} pt${m.pointValue === 1 ? '' : 's'}${badge ? ' · ' + badge : ''} · max ${m.rollLimit}, ${m.faceCount} faces)</span>
+                        </span>
+                        <label>Rolls: <select id="die-count-${m.idx}" data-idx="${m.idx}" data-point="${m.pointValue}">${opts}</select></label>`;
+                    container.appendChild(row);
+                });
+            }
+            updatePointsHint();
         } catch (e) {
             console.error('Error loading dice config:', e);
             window.diceConfig = {};
         }
     }
 
-    function updateNumDiceOptions() {
-        const available = getAvailableDice();
-        const numSelect = document.getElementById('num-dice');
-        numSelect.innerHTML = '';
-        for (let i = 0; i <= available.length; i++) {
-            const opt = document.createElement('option');
-            opt.value = i;
-            opt.textContent = i;
-            if (i === available.length) opt.selected = true;
-            numSelect.appendChild(opt);
-        }
+    function scoreForSelection(pointValues) {
+        if (pointValues.length < 2) return 0;
+        return pointValues.reduce((a, b) => a + b, 0) - Math.min(...pointValues);
+    }
+
+    function getSelectedDiceMap() {
+        const map = {};
+        document.querySelectorAll('#dice-select-list select[data-idx]').forEach(sel => {
+            const idx = sel.getAttribute('data-idx');
+            const count = parseInt(sel.value, 10) || 0;
+            if (count > 0) map[idx] = count;
+        });
+        return map;
+    }
+
+    function getSelectedPointValues() {
+        const pvs = [];
+        document.querySelectorAll('#dice-select-list select[data-idx]').forEach(sel => {
+            const count = parseInt(sel.value, 10) || 0;
+            const pv = parseInt(sel.getAttribute('data-point'), 10) || 0;
+            for (let i = 0; i < count; i++) pvs.push(pv);
+        });
+        return pvs;
+    }
+
+    function totalDiceSelected() {
+        return getSelectedPointValues().length;
     }
     
-    // Setup event listeners
     function setupEventListeners() {
         document.getElementById('roll-button').addEventListener('click', rollDice);
-        document.getElementById('dice-checkboxes').addEventListener('change', () => {
-            updateNumDiceOptions();
-            updateRollHint();
+        document.getElementById('dice-select-list').addEventListener('change', () => {
+            updatePointsHint();
+            updateRollButton();
         });
-        document.getElementById('num-dice').addEventListener('change', updateRollHint);
     }
     
-    function getAvailableDice() {
-        const checkboxes = document.querySelectorAll('#dice-checkboxes input[type="checkbox"]:checked');
-        return Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
-    }
-    
-    function getNumDice() {
-        return parseInt(document.getElementById('num-dice').value, 10) || 0;
-    }
-    
-    function updateRollHint() {
-        const available = getAvailableDice();
-        const numDice = getNumDice();
-        const n = Math.min(numDice, available.length);
-        const hint = document.getElementById('roll-range-hint');
-        if (hint) hint.textContent = n === available.length && available.length > 0
-            ? '→ roll all ' + n + ' dice'
-            : '→ roll ' + n + ' dice from ' + available.length + ' available';
+    function updatePointsHint() {
+        const hint = document.getElementById('roll-points-hint');
+        if (!hint) return;
+        const pvs = getSelectedPointValues();
+        const n = pvs.length;
+        if (n === 0) {
+            hint.textContent = 'Select at least one die to roll.';
+            return;
+        }
+        if (n < 2) {
+            hint.textContent = `${n} die selected → 0 points (need 2+ dice)`;
+            return;
+        }
+        const pts = scoreForSelection(pvs);
+        hint.textContent = `${n} dice selected → ${pts} points toward owed balance`;
     }
     
     function updateRollButton() {
         const button = document.getElementById('roll-button');
-        button.disabled = false;
-        button.textContent = 'Roll Dice';
+        const n = totalDiceSelected();
+        const noOwed = owedBalance <= 0;
+        button.disabled = n < 1 || noOwed;
+        button.textContent = noOwed ? 'No owed points' : 'Roll Dice';
     }
     
-    // Roll dice (exact number of random dice from available pool)
     async function rollDice() {
-        const availableDice = getAvailableDice();
-        const numDice = getNumDice();
+        const selected_dice = getSelectedDiceMap();
         try {
             const button = document.getElementById('roll-button');
             button.disabled = true;
@@ -327,11 +504,22 @@
             
             const data = await apiCall('/api/dice-rolls/roll', {
                 method: 'POST',
-                body: JSON.stringify({ available_dice: availableDice, num_dice: numDice })
+                body: JSON.stringify({ selected_dice })
             });
             
             if (data.status === 'success') {
-                displayResults(data);
+                owedBalance = data.owed_balance_after ?? owedBalance;
+                const banner = document.getElementById('owed-banner');
+                if (banner) {
+                    banner.textContent = owedBalance > 0
+                        ? `You owe ${owedBalance} points`
+                        : 'No owed points — rolls will not reduce your balance';
+                    banner.classList.toggle('zero', owedBalance <= 0);
+                }
+                currentRollId = data.roll_id || null;
+                rerollUsed = !!data.reroll_used;
+                displayResults(data, { interactive: true });
+                await loadRollHistory();
             } else {
                 alert('Failed to roll dice: ' + data.message);
             }
@@ -339,86 +527,156 @@
             console.error('Error rolling dice:', error);
             alert('Error rolling dice. Please try again.');
         } finally {
-            const button = document.getElementById('roll-button');
-            button.disabled = false;
             updateRollButton();
         }
     }
     
-    // Display roll results
-    function displayResults(data) {
+    async function loadRollHistory() {
+        const list = document.getElementById('history-list');
+        if (!list) return;
+        try {
+            const data = await apiCall('/api/dice-rolls/history');
+            if (data.status !== 'success') return;
+            const sessions = data.sessions || [];
+            if (sessions.length === 0) {
+                list.innerHTML = '<p style="color:#6c757d;margin:0;">No recent rolls yet.</p>';
+                return;
+            }
+            list.innerHTML = '';
+            sessions.forEach(session => {
+                list.appendChild(buildHistoryCard(session));
+            });
+        } catch (e) {
+            console.error('Error loading roll history:', e);
+        }
+    }
+    
+    function formatRollTime(iso) {
+        if (!iso) return 'Unknown time';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString();
+        } catch (_) {
+            return iso;
+        }
+    }
+    
+    function buildHistoryCard(session) {
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        const chips = (session.roll_instances || []).map(inst => {
+            const rule = (inst.face_rule || '').trim();
+            const label = rule || `Face ${inst.face_value}`;
+            const title = inst.title || `Die ${(inst.die_index || 0) + 1}`;
+            return `<span class="history-chip">${title}: ${label}</span>`;
+        }).join('');
+        const sub = session.points_subtracted ?? 0;
+        const scored = session.points_scored ?? 0;
+        card.innerHTML = `
+            <div class="history-meta">${formatRollTime(session.created_at)} · scored ${scored}${sub > 0 ? `, −${sub} owed` : ''}</div>
+            <div class="history-chips">${chips || '<span class="history-chip">—</span>'}</div>`;
+        return card;
+    }
+    
+    function instanceTooltip(inst) {
+        if (inst.rerollable) return 'Tap to reroll this die (one per roll)';
+        if (rerollUsed) return 'Reroll already used';
+        return 'No other faces left for this die';
+    }
+    
+    function displayResults(data, options = {}) {
+        const interactive = !!options.interactive;
         const resultsSection = document.getElementById('results-section');
         const diceResultsDiv = document.getElementById('dice-results');
-        const finalRulesDiv = document.getElementById('final-rules');
+        const pointsSummary = document.getElementById('points-summary');
         
-        // Clear previous results
         diceResultsDiv.innerHTML = '';
-        finalRulesDiv.innerHTML = '';
+        if (data.reroll_used != null) rerollUsed = !!data.reroll_used;
         
-        // Display dice results (use die_titles and face_names_by_die when present)
-        if (data.dice_results && Object.keys(data.dice_results).length > 0) {
-            Object.keys(data.dice_results).forEach(dieIdx => {
-                const ruleIdx = parseInt(dieIdx, 10) + 1;
-                const faceVal = data.dice_results[dieIdx];
-                const dieTitle = (data.die_titles && data.die_titles[ruleIdx]) || ('Die ' + ruleIdx);
-                const fnByDie = data.face_names_by_die && data.face_names_by_die[ruleIdx];
-                const faceName = (fnByDie && fnByDie[String(faceVal)]) || String(faceVal);
+        if (data.points_scored != null) {
+            pointsSummary.style.display = 'block';
+            const sub = data.points_subtracted ?? 0;
+            const after = data.owed_balance_after ?? 0;
+            let summary = sub > 0
+                ? `Scored ${data.points_scored} → subtracted ${sub} from owed (${after} remaining)`
+                : `Scored ${data.points_scored} (nothing subtracted — ${after} owed remaining)`;
+            if (interactive && !rerollUsed) {
+                summary += ' · Tap a highlighted die to use your one reroll';
+            }
+            pointsSummary.textContent = summary;
+        } else {
+            pointsSummary.style.display = 'none';
+        }
+        
+        const instances = data.roll_instances || [];
+        if (instances.length > 0) {
+            instances.forEach(inst => {
+                const rule = (inst.face_rule || '').trim();
                 const dieDiv = document.createElement('div');
-                dieDiv.className = 'die-result';
+                const idx = inst.instance_index;
+                const canReroll = interactive && !rerollUsed && inst.rerollable && currentRollId;
+                dieDiv.className = 'die-result' + (canReroll ? ' rerollable' : ' not-rerollable');
+                if (!canReroll) dieDiv.title = instanceTooltip(inst);
                 dieDiv.innerHTML = `
-                    <div class="die-label">${dieTitle}</div>
-                    <div class="die-value">${faceName}</div>
-                `;
+                    <div class="die-label">${inst.title || ('Die ' + (inst.die_index + 1))}</div>
+                    <div class="die-value">${rule || inst.face_value}</div>
+                    ${rule ? `<div class="die-face-num">Face ${inst.face_value}</div>` : ''}
+                    <div class="die-points">${inst.point_value} pts</div>
+                    ${canReroll ? '<div class="reroll-hint">Tap to reroll</div>' : ''}
+                    <div class="reroll-confirm">
+                        <span style="font-size:12px;">Reroll this die?</span>
+                        <button type="button" class="reroll-yes-btn">Yes</button>
+                        <button type="button" class="reroll-cancel-btn">Cancel</button>
+                    </div>`;
+                if (canReroll) {
+                    dieDiv.dataset.instanceIndex = String(idx);
+                    dieDiv.addEventListener('click', (e) => {
+                        if (e.target.closest('.reroll-confirm')) return;
+                        document.querySelectorAll('.die-result.reroll-confirming').forEach(el => {
+                            el.classList.remove('reroll-confirming');
+                        });
+                        dieDiv.classList.add('reroll-confirming');
+                    });
+                    const yesBtn = dieDiv.querySelector('.reroll-yes-btn');
+                    const cancelBtn = dieDiv.querySelector('.reroll-cancel-btn');
+                    yesBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        confirmReroll(idx);
+                    });
+                    cancelBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        dieDiv.classList.remove('reroll-confirming');
+                    });
+                }
                 diceResultsDiv.appendChild(dieDiv);
             });
         } else {
-            diceResultsDiv.innerHTML = '<p style="color: #6c757d;">No dice rolled (base event)</p>';
+            diceResultsDiv.innerHTML = '<p style="color: #6c757d;">No dice rolled</p>';
         }
         
-        // Display final rules: per-die alternate and face on separate lines.
-        const rd = data.rules_detail || {};
-        const ruleIndices = Object.keys(rd).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a, b) => a - b);
-        ruleIndices.forEach(ruleIdx => {
-            const key = String(ruleIdx);
-            const d = rd[key];
-            if (d && typeof d === 'object') {
-                const alt = (d.alternate != null ? String(d.alternate) : '').trim();
-                const face = (d.face != null ? String(d.face) : '').trim();
-                if (alt) {
-                    const div = document.createElement('div');
-                    div.className = 'rule-item';
-                    div.textContent = alt;
-                    finalRulesDiv.appendChild(div);
-                }
-                if (face) {
-                    const div = document.createElement('div');
-                    div.className = 'rule-item';
-                    div.textContent = face;
-                    finalRulesDiv.appendChild(div);
-                }
-            } else if (data.final_rules) {
-                const val = (data.final_rules['rule_' + ruleIdx] || '').trim();
-                if (val) {
-                    const div = document.createElement('div');
-                    div.className = 'rule-item';
-                    div.textContent = val;
-                    finalRulesDiv.appendChild(div);
-                }
-            }
-        });
-        
-        // Show results section
         resultsSection.classList.add('show');
-        
-        // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     
-    // Show error message
-    function showError(message) {
-        const errorDiv = document.getElementById('error-message');
-        errorDiv.textContent = message;
-        errorDiv.style.display = 'block';
+    async function confirmReroll(instanceIndex) {
+        if (!currentRollId || rerollUsed) return;
+        try {
+            const data = await apiCall(`/api/dice-rolls/roll/${currentRollId}/reroll`, {
+                method: 'POST',
+                body: JSON.stringify({ instance_index: instanceIndex })
+            });
+            if (data.status === 'success') {
+                currentRollId = data.roll_id || currentRollId;
+                rerollUsed = true;
+                displayResults(data, { interactive: true });
+                await loadRollHistory();
+            } else {
+                alert('Reroll failed: ' + (data.message || 'Unknown error'));
+            }
+        } catch (e) {
+            console.error('Reroll error:', e);
+            alert('Error rerolling. Please try again.');
+        }
     }
 </script>
 {% endblock %}

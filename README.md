@@ -47,7 +47,7 @@ Each deploy adds a large image to `gae-standard`. Without cleanup, storage cost 
 - **Goals** — Personal goals; Not Used, Want better Integrtion with Tasks
 - **Task points** — Tracked But Not Well Used
 - **Performance rewards** — Daily band bonuses from yesterday's points; assignee completes or abandons; owed points on expiry
-- **Dice rolls** — Partner dice interactions (config at `/dice-rolls/manage`)
+- **Dice rolls** — Roll configured dice to pay down your owed points (config at `/dice-rolls/manage`)
 - **Stats** — Weekly and collaboration metrics
 - **Auth** — Session-based login via flask-base (demo + named users)
 
@@ -77,7 +77,7 @@ Routes are defined in `app.py`. Main groups:
 | Task points | today (fast), balance, spend, config, history |
 | Collaboration | tracker, today's points, history |
 | Performance rewards | tier settings, bonus complete/abandon, owed points |
-| Dice rolls | credits, config, roll, import |
+| Dice rolls | config, roll, import (subtracts from owed points) |
 | User | settings, spouse link/unlink, preferences |
 | Debug | locks, queue reset (dev/test) |
 
