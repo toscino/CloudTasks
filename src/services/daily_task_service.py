@@ -5,7 +5,12 @@ from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
 import pytz
-from src.utils.config import get_timezone, get_collection
+from src.utils.config import (
+    get_timezone,
+    get_collection,
+    VACATION_WEEKDAY,
+    TRAVEL_DAY_WEEKDAY,
+)
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
 from src.utils.error_handlers import handle_exception
@@ -31,7 +36,23 @@ class DailyTaskService:
         self.logger = app_manager.logger
         self.db = app_manager.db
         self.central_tz = get_timezone()
-    
+
+    def get_effective_weekday(self, username: str, target_date: date) -> int:
+        """Weekday used for template matching (travel > vacation > calendar)."""
+        user_service = getattr(self.app_manager, 'user_service', None)
+        if not user_service:
+            from src.services.user_service import UserService
+            user_service = UserService(self.app_manager)
+
+        user_settings = user_service.get_user_settings(username)
+        if user_settings.get('travel_day_mode', False):
+            self.logger.debug(f"Travel day mode for {username}, using weekday {TRAVEL_DAY_WEEKDAY}")
+            return TRAVEL_DAY_WEEKDAY
+        if user_settings.get('vacation_mode', False):
+            self.logger.debug(f"Vacation mode for {username}, using weekday {VACATION_WEEKDAY}")
+            return VACATION_WEEKDAY
+        return target_date.weekday()
+
     def get_daily_tasks(self, username: str) -> Dict[str, Any]:
         """Get daily task templates"""
         try:
@@ -83,9 +104,9 @@ class DailyTaskService:
             
             is_backup = bool(data.get('is_backup', False))
 
-            # Validate days_of_week (0=Monday, 6=Sunday)
+            # Validate days_of_week (0=Monday, 6=Sunday, 7=Travel)
             days_of_week = data.get('days_of_week', [])
-            if not all(0 <= day <= 6 for day in days_of_week):
+            if not all(0 <= day <= TRAVEL_DAY_WEEKDAY for day in days_of_week):
                 raise ValidationError(
                     "Invalid days of week",
                     user_message="Invalid days of week"
@@ -108,8 +129,8 @@ class DailyTaskService:
             
             # Check if today is in selected days and create instance
             today_central = datetime.now(self.central_tz).date()
-            today_weekday = today_central.weekday()
-            
+            today_weekday = self.get_effective_weekday(username, today_central)
+
             if today_weekday in days_of_week:
                 instance_data = {
                     'username': username,
@@ -164,7 +185,7 @@ class DailyTaskService:
                 days_of_week = data['days_of_week']
                 if not days_of_week or len(days_of_week) == 0:
                     return {'status': 'error', 'message': 'At least one day of week must be selected'}
-                if not all(0 <= day <= 6 for day in days_of_week):
+                if not all(0 <= day <= TRAVEL_DAY_WEEKDAY for day in days_of_week):
                     return {'status': 'error', 'message': 'Invalid days of week'}
             
             # Update fields
@@ -595,7 +616,26 @@ class DailyTaskService:
                 'status': 'error',
                 'message': f'Failed to reset daily tasks: {str(e)}'
             }
-    
+
+    def reset_daily_tasks_for_user_only(self, username: str, today_central: date = None) -> Dict[str, Any]:
+        """Reset daily tasks for one user only (no spouse reset or tracker reversal)."""
+        try:
+            if today_central is None:
+                today_central = datetime.now(self.central_tz).date()
+
+            instances_created = self._reset_user_daily_tasks(username, today_central)
+            return {
+                'status': 'success',
+                'message': f'Reset completed, created {instances_created} instances',
+                'instances_created': instances_created,
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to reset daily tasks for {username}: {e}")
+            return {
+                'status': 'error',
+                'message': f'Failed to reset daily tasks: {str(e)}',
+            }
+
     def _reset_user_daily_tasks(self, username: str, today_central: date) -> int:
         """Reset daily tasks for a specific user (helper method)"""
         try:
@@ -660,21 +700,12 @@ class DailyTaskService:
             templates_query = self.db.collection('daily_task_templates').where('username', '==', username)
             templates_docs = templates_query.stream()
             
-            # Check if user is in vacation mode - if so, use Sunday (weekday 6) for task selection
-            user_service = getattr(self.app_manager, 'user_service', None)
-            if not user_service:
-                from src.services.user_service import UserService
-                user_service = UserService(self.app_manager)
-            
-            user_settings = user_service.get_user_settings(username)
-            vacation_mode = user_settings.get('vacation_mode', False)
-            
-            if vacation_mode:
-                today_weekday = 6  # Sunday in vacation mode
+            today_weekday = self.get_effective_weekday(username, today_central)
+            if today_weekday == TRAVEL_DAY_WEEKDAY:
+                self.logger.info(f"Travel day mode enabled for {username}, using travel tasks")
+            elif today_weekday == VACATION_WEEKDAY:
                 self.logger.info(f"Vacation mode enabled for {username}, using Sunday tasks")
-            else:
-                today_weekday = today_central.weekday()  # 0=Monday, 6=Sunday
-            
+
             instances_created = 0
             for template_doc in templates_docs:
                 template_data = template_doc.to_dict()

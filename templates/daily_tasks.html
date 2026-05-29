@@ -66,6 +66,11 @@
             background-color: #e9ecef;
         }
         
+        .day-checkbox.day-travel {
+            border-style: dashed;
+            font-style: italic;
+        }
+
         .day-checkbox.checked {
             background-color: #007bff;
             color: white;
@@ -343,6 +348,7 @@
                     <div class="day-checkbox checked" data-day="4">Fri</div>
                     <div class="day-checkbox" data-day="5">Sat</div>
                     <div class="day-checkbox" data-day="6">Sun</div>
+                    <div class="day-checkbox day-travel" data-day="7">Travel</div>
                 </div>
             </div>
             <!-- Points and button together on second row -->
@@ -467,7 +473,7 @@
             li.dataset.templateId = template.id;
             
             // Format days of week
-            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Travel'];
             const selectedDays = template.days_of_week.map(day => dayNames[day]).join(', ');
             
             // Determine status
@@ -684,6 +690,7 @@
                 cb.classList.remove('checked');
             }
         });
+        // Travel (7) is never selected by default
         
         // Reset button
         const addBtn = document.getElementById('add-task-btn');

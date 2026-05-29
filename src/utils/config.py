@@ -32,6 +32,10 @@ TASK_CATEGORIES = ['Work', 'Kids', 'Spouse', 'House', 'Self']
 # Goal Categories
 GOAL_CATEGORIES = ['Work', 'Kids', 'Spouse', 'House', 'Self']
 
+# Daily task weekdays (0=Monday .. 6=Sunday; 7=Travel, never matches calendar)
+VACATION_WEEKDAY = 6
+TRAVEL_DAY_WEEKDAY = 7
+
 # Default Values
 DEFAULT_TASK_DIFFICULTY = 3
 DEFAULT_TASK_DURATION = 10

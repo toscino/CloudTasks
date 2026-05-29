@@ -255,8 +255,27 @@ All API endpoints return JSON in this format:
 **Validation**:
 - `description` (required): String, not empty
 - `points` (required): Integer, not zero, range -100 to 100
-- `days_of_week` (required): Array of integers (0-6), at least one day
-  - 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+- `days_of_week` (required): Array of integers (0-7), at least one day
+  - 0 = Monday, 1 = Tuesday, ..., 6 = Sunday, 7 = Travel (never matches calendar; only when user has Travel Day mode on)
+
+### Update User Preferences
+
+**POST** `/api/user/preferences`
+
+**Request** (allowed fields):
+
+```json
+{
+  "can_select_morning_cards": true,
+  "inverted": false,
+  "vacation_mode": false,
+  "travel_day_mode": false
+}
+```
+
+- `vacation_mode`: Treats every day as Sunday for **both** linked users' tasks; synced to spouse; resets both users with tracker reversal.
+- `travel_day_mode`: Treats today as Travel (weekday 7) for **this user only**; not synced to spouse; resets only this user's tasks.
+- When both are enabled for the same user, `travel_day_mode` takes precedence over `vacation_mode`.
 
 **Response**:
 ```json

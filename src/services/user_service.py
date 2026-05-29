@@ -39,6 +39,7 @@ class UserService:
                 'spouse_username': None,
                 'can_select_morning_cards': False,
                 'vacation_mode': False,
+                'travel_day_mode': False,
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP
             }
@@ -53,7 +54,8 @@ class UserService:
                 'username': username,
                 'spouse_username': None,
                 'can_select_morning_cards': False,
-                'vacation_mode': False
+                'vacation_mode': False,
+                'travel_day_mode': False,
             }
     
     def generate_pairing_code(self, username: str) -> dict:
@@ -236,20 +238,29 @@ class UserService:
             user_settings = self.get_user_settings(username)
             
             # Only allow specific preference updates
-            allowed_prefs = ['can_select_morning_cards', 'inverted', 'vacation_mode']
+            allowed_prefs = [
+                'can_select_morning_cards',
+                'inverted',
+                'vacation_mode',
+                'travel_day_mode',
+            ]
             update_data = {
                 'updated_at': firestore.SERVER_TIMESTAMP
             }
             
-            # Track if vacation_mode changed
+            # Track if vacation_mode or travel_day_mode changed
             old_vacation_mode = user_settings.get('vacation_mode', False)
+            old_travel_day_mode = user_settings.get('travel_day_mode', False)
             vacation_mode_changed = False
+            travel_day_mode_changed = False
             
             for key, value in preferences.items():
                 if key in allowed_prefs:
                     update_data[key] = value
                     if key == 'vacation_mode' and value != old_vacation_mode:
                         vacation_mode_changed = True
+                    if key == 'travel_day_mode' and value != old_travel_day_mode:
+                        travel_day_mode_changed = True
             
             user_ref.update(update_data)
             
@@ -276,6 +287,19 @@ class UserService:
                 # Reset tasks with tracker reversal (undoes points earned today)
                 self.logger.info(f"Resetting tasks with tracker reversal for {username} due to vacation_mode change")
                 daily_task_service.reset_daily_tasks_with_tracker_reversal(username, today_central)
+
+            if travel_day_mode_changed:
+                from src.services.daily_task_service import DailyTaskService
+                daily_task_service = DailyTaskService(self.app_manager)
+
+                central_tz = get_timezone()
+                now_central = datetime.now(central_tz)
+                today_central = now_central.date()
+
+                self.logger.info(
+                    f"Resetting tasks for {username} only due to travel_day_mode change"
+                )
+                daily_task_service.reset_daily_tasks_for_user_only(username, today_central)
             
             self.logger.info(f"Updated preferences for {username}: {preferences}")
             
