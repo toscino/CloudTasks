@@ -6,6 +6,7 @@ import pytz
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from src.utils.config import get_timezone, get_spouse
+from src.utils.reset_period import get_reset_day, get_reset_period_bounds, get_reset_time_on
 from src.utils.error_handlers import handle_exception
 
 
@@ -71,21 +72,17 @@ class CollaborationService:
                 if not instance_data.get('abandoned', False):
                     total_points += instance_data.get('points', 0)
             
-            # Get completed regular tasks for this date using completed_at timestamp
-            # Convert date to start and end of day timestamps in Central time
-            start_of_day = datetime.combine(date, datetime.min.time())
-            end_of_day = datetime.combine(date, datetime.max.time())
-            
-            # Localize to Central timezone then convert to UTC for Firestore
-            start_timestamp = self.central_tz.localize(start_of_day).astimezone(pytz.UTC)
-            end_timestamp = self.central_tz.localize(end_of_day).astimezone(pytz.UTC)
+            # Get completed regular tasks for this reset period using completed_at
+            start_of_period, end_of_period = get_reset_period_bounds(date, tz=self.central_tz)
+            start_timestamp = start_of_period.astimezone(pytz.UTC)
+            end_timestamp = end_of_period.astimezone(pytz.UTC)
             
             tasks_query = self.db.collection('tasks').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
                     FieldFilter('completed', '==', True),
                     FieldFilter('completed_at', '>=', start_timestamp),
-                    FieldFilter('completed_at', '<=', end_timestamp)
+                    FieldFilter('completed_at', '<', end_timestamp)
                 ])
             )
             tasks_docs = tasks_query.stream()
@@ -105,10 +102,10 @@ class CollaborationService:
     def check_and_update_tracker_on_threshold(self, username):
         """Check if user crossed 100-point threshold and update tracker"""
         try:
-            today_central = datetime.now(self.central_tz).date()
+            reset_day = get_reset_day(tz=self.central_tz)
             
             # Get current total points for user today (with inverted support)
-            current_points = self._get_daily_points_for_date(username, today_central)
+            current_points = self._get_daily_points_for_date(username, reset_day)
             
             self.logger.debug(f"Checking threshold for {username}: {current_points} points, threshold_count calculation")
             
@@ -119,7 +116,7 @@ class CollaborationService:
             self.logger.debug(f"Threshold count for {username}: {threshold_count} (from {current_points} points)")
             
             # Get last recorded threshold count for today
-            threshold_key = f"threshold_{today_central.isoformat()}_{username}"
+            threshold_key = f"threshold_{reset_day.isoformat()}_{username}"
             threshold_ref = self.db.collection('threshold_tracking').document(threshold_key)
             threshold_doc = threshold_ref.get()
             
@@ -182,16 +179,16 @@ class CollaborationService:
                 # Update threshold tracking for this user
                 threshold_ref.set({
                     'username': username,
-                    'date': today_central.isoformat(),
+                    'date': reset_day.isoformat(),
                     'threshold_count': threshold_count,
                     'points': current_points,
                     'updated_at': firestore.SERVER_TIMESTAMP
                 }, merge=True)
                 
                 # Log to history (get spouse points for logging, but don't check their threshold)
-                spouse_points = self._get_daily_points_for_date(spouse_username, today_central) if spouse_username else 0
+                spouse_points = self._get_daily_points_for_date(spouse_username, reset_day) if spouse_username else 0
                 self._log_tracker_history(
-                    today_central, 
+                    reset_day, 
                     current_points, 
                     spouse_points, 
                     old_value, 
@@ -288,16 +285,13 @@ class CollaborationService:
     def get_todays_total_points(self, username):
         """Get total points today"""
         try:
-            # Get today's date in Central time
-            today_central = datetime.now(self.central_tz).date()
-            
-            # Use existing method to get daily points
-            total_points = self._get_daily_points_for_date(username, today_central)
+            reset_day = get_reset_day(tz=self.central_tz)
+            total_points = self._get_daily_points_for_date(username, reset_day)
             
             return {
                 'status': 'success',
                 'total_points': total_points,
-                'date': today_central.isoformat()
+                'date': reset_day.isoformat()
             }
         except Exception as e:
             self.logger.error(f"Failed to get today's points for {username}: {e}")
@@ -306,78 +300,66 @@ class CollaborationService:
                 'message': str(e)
             }
     
-    def get_tracker_at_2am(self):
-        """Get the collaboration tracker value at 2am reset time (last event before 2am today)"""
+    def get_tracker_at_reset(self):
+        """Get collaboration tracker value at last reset boundary (4am Chicago)"""
         try:
-            now_central = datetime.now(self.central_tz)
-            today_central = now_central.date()
+            reset_day = get_reset_day(tz=self.central_tz)
+            reset_boundary = get_reset_time_on(reset_day, tz=self.central_tz)
             
-            # Calculate 2am today in Central timezone
-            reset_time_today = datetime.combine(today_central, datetime.min.time().replace(hour=2))
-            reset_time_today = self.central_tz.localize(reset_time_today)
-            
-            # Query tracker_history for entries before 2am today
-            # Order by date descending to get the most recent entry
             history_query = self.db.collection('tracker_history').order_by(
                 'date', direction=firestore.Query.DESCENDING
             )
             
-            # Get all history entries and find the last one before 2am today
-            last_entry_before_2am = None
+            last_entry_before_reset = None
             for doc in history_query.stream():
                 history_data = doc.to_dict()
                 entry_date_str = history_data.get('date', '')
                 
-                # Parse the date string
                 try:
                     entry_date = datetime.fromisoformat(entry_date_str).date()
-                    # Check if this entry is from before today, or from today but before 2am
-                    if entry_date < today_central:
-                        # This is from a previous day, so it's before 2am today
-                        last_entry_before_2am = history_data
+                    if entry_date < reset_day:
+                        last_entry_before_reset = history_data
                         break
-                    elif entry_date == today_central:
-                        # This is from today, check the created_at timestamp
+                    elif entry_date == reset_day:
                         created_at = history_data.get('created_at')
                         if created_at:
-                            # Convert Firestore timestamp to datetime
                             if hasattr(created_at, 'timestamp'):
-                                created_datetime = datetime.fromtimestamp(created_at.timestamp(), tz=self.central_tz)
+                                created_datetime = datetime.fromtimestamp(
+                                    created_at.timestamp(), tz=self.central_tz
+                                )
                             else:
                                 created_datetime = created_at
                             
-                            if created_datetime < reset_time_today:
-                                # This entry was created before 2am today
-                                last_entry_before_2am = history_data
+                            if created_datetime < reset_boundary:
+                                last_entry_before_reset = history_data
                                 break
                 except (ValueError, AttributeError) as e:
                     self.logger.warning(f"Failed to parse date from history entry: {e}")
                     continue
             
-            if last_entry_before_2am:
-                tracker_value = last_entry_before_2am.get('new_value', 5)
-                entry_date = last_entry_before_2am.get('date', 'unknown')
+            if last_entry_before_reset:
+                tracker_value = last_entry_before_reset.get('new_value', 5)
+                entry_date = last_entry_before_reset.get('date', 'unknown')
                 return {
                     'status': 'success',
                     'tracker_value': tracker_value,
                     'date': entry_date,
                     'source': 'history'
                 }
-            else:
-                # No history found before 2am, return current tracker value
-                tracker = self.get_or_create_tracker()
-                current_value = tracker['current_value'] if tracker else 5
-                return {
-                    'status': 'success',
-                    'tracker_value': current_value,
-                    'date': today_central.isoformat(),
-                    'source': 'current'
-                }
+
+            tracker = self.get_or_create_tracker()
+            current_value = tracker['current_value'] if tracker else 5
+            return {
+                'status': 'success',
+                'tracker_value': current_value,
+                'date': reset_day.isoformat(),
+                'source': 'current'
+            }
                 
         except Exception as e:
-            self.logger.error(f"Failed to get tracker at 2am: {e}")
+            self.logger.error(f"Failed to get tracker at reset: {e}")
             return {
                 'status': 'error',
-                'message': f'Failed to get tracker at 2am: {str(e)}'
+                'message': f'Failed to get tracker at reset: {str(e)}'
             }
     

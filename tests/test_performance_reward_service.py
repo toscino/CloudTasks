@@ -36,21 +36,21 @@ class TestDaysRemaining(unittest.TestCase):
         now = self.svc.central_tz.localize(datetime(2025, 5, 25, 10, 0))
         self.assertEqual(self.svc.days_remaining(self._item_expiring(reset_day), now), 0)
 
-    def test_last_morning_before_third_2am(self):
+    def test_last_morning_before_third_reset(self):
         reset_day = date(2025, 5, 22)
-        now = self.svc.central_tz.localize(datetime(2025, 5, 24, 1, 30))
+        now = self.svc.central_tz.localize(datetime(2025, 5, 24, 3, 30))
         self.assertEqual(self.svc.days_remaining(self._item_expiring(reset_day), now), 1)
 
     def test_expire_boundary_not_rolling_48h(self):
-        """Late reset run time does not push expiry — fixed 2am on R+2."""
+        """Late reset run time does not push expiry — fixed 4am on R+2."""
         reset_day = date(2025, 5, 22)
         exp = self.svc.expire_at_for_created_reset(reset_day)
-        self.assertEqual(exp, self.svc.central_tz.localize(datetime(2025, 5, 24, 2, 0)))
-        late_create_moment = self.svc.central_tz.localize(datetime(2025, 5, 22, 2, 47))
+        self.assertEqual(exp, self.svc.central_tz.localize(datetime(2025, 5, 24, 4, 0)))
+        late_create_moment = self.svc.central_tz.localize(datetime(2025, 5, 22, 4, 47))
         self.assertLess(late_create_moment, exp)
         self.assertGreater(
             exp,
-            self.svc.central_tz.localize(datetime(2025, 5, 24, 1, 59)),
+            self.svc.central_tz.localize(datetime(2025, 5, 24, 3, 59)),
         )
 
 

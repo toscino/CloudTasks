@@ -11,6 +11,7 @@ from src.utils.config import (
     VACATION_WEEKDAY,
     TRAVEL_DAY_WEEKDAY,
 )
+from src.utils.reset_period import get_reset_day
 from src.utils.firestore_helpers import prepare_firestore_document
 from src.utils.exceptions import ValidationError, NotFoundError, UnauthorizedError, FirestoreError
 from src.utils.error_handlers import handle_exception
@@ -128,8 +129,8 @@ class DailyTaskService:
             template_id = doc_ref[1].id
             
             # Check if today is in selected days and create instance
-            today_central = datetime.now(self.central_tz).date()
-            today_weekday = self.get_effective_weekday(username, today_central)
+            reset_day = get_reset_day(tz=self.central_tz)
+            today_weekday = self.get_effective_weekday(username, reset_day)
 
             if today_weekday in days_of_week:
                 instance_data = {
@@ -138,7 +139,7 @@ class DailyTaskService:
                     'description': data['description'].strip(),
                     'points': int(data['points']),
                     'is_backup': is_backup,
-                    'date': today_central.isoformat(),
+                    'date': reset_day.isoformat(),
                     'completed': False,
                     'created_at': firestore.SERVER_TIMESTAMP
                 }
@@ -202,11 +203,11 @@ class DailyTaskService:
             doc_ref.update(update_data)
             
             # Update today's instance if it exists
-            today_central = datetime.now(self.central_tz).date()
+            reset_day = get_reset_day(tz=self.central_tz)
             instance_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
                     FieldFilter('template_id', '==', task_id),
-                    FieldFilter('date', '==', today_central.isoformat())
+                    FieldFilter('date', '==', reset_day.isoformat())
                 ])
             )
             instances = list(instance_query.stream())
@@ -286,14 +287,13 @@ class DailyTaskService:
             # First check if reset is needed
             self.check_and_reset_daily_tasks(username)
             
-            # Get today's date in Central time
-            today_central = datetime.now(self.central_tz).date()
+            reset_day = get_reset_day(tz=self.central_tz)
             
             # Query today's instances
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
-                    FieldFilter('date', '==', today_central.isoformat())
+                    FieldFilter('date', '==', reset_day.isoformat())
                 ])
             )
             instances_docs = instances_query.stream()
@@ -314,7 +314,7 @@ class DailyTaskService:
                 'instances': instances,
                 'total_points': total_points,
                 'completed_points': completed_points,
-                'date': today_central.isoformat()
+                'date': reset_day.isoformat()
             }
         except Exception as e:
             self.logger.error(f"Failed to get today's instances for {username}: {e}")
@@ -437,44 +437,23 @@ class DailyTaskService:
     
     def check_and_reset_daily_tasks(self, username: str) -> Dict[str, Any]:
         """
-        Lazy daily reset (runs on site visit, not cron). At most once per calendar day.
+        Lazy daily reset (runs on site visit, not cron). At most once per reset day (4am–4am Chicago).
         See docs/DAILY_RESET_BEHAVIOR.md for late reset, skipped days, and performance bonuses.
         """
         try:
             now_central = datetime.now(self.central_tz)
-            today_central = now_central.date()
+            reset_day = get_reset_day(now_central, tz=self.central_tz)
             
-            # Check if we've already reset today
             reset_query = self.db.collection('daily_task_resets').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
-                    FieldFilter('last_reset_date', '==', today_central.isoformat())
+                    FieldFilter('last_reset_date', '==', reset_day.isoformat())
                 ])
             )
             reset_docs = list(reset_query.stream())
             
             if reset_docs:
-                # Already reset today
                 return {'status': 'success', 'message': 'Already reset today'}
-            
-            # Check if it's past 2am today
-            reset_time_today = datetime.combine(today_central, datetime.min.time().replace(hour=2))
-            reset_time_today = self.central_tz.localize(reset_time_today)
-            
-            if now_central < reset_time_today:
-                # Not yet 2am today, check if we need to reset from yesterday
-                yesterday_central = today_central - timedelta(days=1)
-                yesterday_reset_query = self.db.collection('daily_task_resets').where(
-                    filter=firestore.And([
-                        FieldFilter('username', '==', username),
-                        FieldFilter('last_reset_date', '==', yesterday_central.isoformat())
-                    ])
-                )
-                yesterday_reset_docs = list(yesterday_reset_query.stream())
-                
-                if yesterday_reset_docs:
-                    # Reset yesterday, no need to reset today yet
-                    return {'status': 'success', 'message': 'Reset not needed yet'}
             
             user_service = getattr(self.app_manager, 'user_service', None)
             if not user_service:
@@ -486,17 +465,16 @@ class DailyTaskService:
 
             perf = getattr(self.app_manager, 'performance_reward_service', None)
             if perf:
-                perf.process_missed_reset_rewards(username, today_central)
+                perf.process_missed_reset_rewards(username, reset_day)
                 if spouse_username:
-                    perf.process_missed_reset_rewards(spouse_username, today_central)
-                perf.expire_due_items(today_central)
+                    perf.process_missed_reset_rewards(spouse_username, reset_day)
+                perf.expire_due_items(reset_day)
 
-            # Need to reset - reset for current user
-            instances_created = self._reset_user_daily_tasks(username, today_central)
+            instances_created = self._reset_user_daily_tasks(username, reset_day)
             
             if spouse_username:
                 self.logger.info(f"Also resetting daily tasks for spouse {spouse_username}")
-                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, today_central)
+                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, reset_day)
                 instances_created += spouse_instances_created
             
             return {
@@ -578,11 +556,11 @@ class DailyTaskService:
             self.logger.error(f"Failed to reverse tracker movement from history for {today_central}: {e}")
             return False
     
-    def reset_daily_tasks_with_tracker_reversal(self, username: str, today_central: date = None) -> Dict[str, Any]:
+    def reset_daily_tasks_with_tracker_reversal(self, username: str, reset_day: date = None) -> Dict[str, Any]:
         """Reset daily tasks and reverse collaboration tracker movement from today's history"""
         try:
-            if today_central is None:
-                today_central = datetime.now(self.central_tz).date()
+            if reset_day is None:
+                reset_day = get_reset_day(tz=self.central_tz)
             
             # Get user settings to check for spouse
             user_service = getattr(self.app_manager, 'user_service', None)
@@ -595,13 +573,13 @@ class DailyTaskService:
             
             # Reverse tracker movement from history (this handles both user and spouse movements)
             # History entries already contain both user_movement and spouse_movement
-            self._reverse_tracker_movement_from_history(username, today_central)
+            self._reverse_tracker_movement_from_history(username, reset_day)
             
             # Now reset tasks normally (this will delete instances and clear threshold tracking)
-            instances_created = self._reset_user_daily_tasks(username, today_central)
+            instances_created = self._reset_user_daily_tasks(username, reset_day)
             
             if spouse_username:
-                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, today_central)
+                spouse_instances_created = self._reset_user_daily_tasks(spouse_username, reset_day)
                 instances_created += spouse_instances_created
             
             return {
@@ -617,13 +595,13 @@ class DailyTaskService:
                 'message': f'Failed to reset daily tasks: {str(e)}'
             }
 
-    def reset_daily_tasks_for_user_only(self, username: str, today_central: date = None) -> Dict[str, Any]:
+    def reset_daily_tasks_for_user_only(self, username: str, reset_day: date = None) -> Dict[str, Any]:
         """Reset daily tasks for one user only (no spouse reset or tracker reversal)."""
         try:
-            if today_central is None:
-                today_central = datetime.now(self.central_tz).date()
+            if reset_day is None:
+                reset_day = get_reset_day(tz=self.central_tz)
 
-            instances_created = self._reset_user_daily_tasks(username, today_central)
+            instances_created = self._reset_user_daily_tasks(username, reset_day)
             return {
                 'status': 'success',
                 'message': f'Reset completed, created {instances_created} instances',

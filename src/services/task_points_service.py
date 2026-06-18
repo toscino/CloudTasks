@@ -6,6 +6,7 @@ from google.cloud.firestore import FieldFilter
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 from src.utils.config import get_timezone
+from src.utils.reset_period import get_reset_day
 
 if TYPE_CHECKING:
     from src.services.daily_task_service import DailyTaskService
@@ -29,7 +30,7 @@ class TaskPointsService:
         self._daily_task_service = daily_task_service
 
     def _today(self) -> date:
-        return datetime.now(self.central_tz).date()
+        return get_reset_day(tz=self.central_tz)
 
     def get_daily_goal(self, username: str, target_date: date) -> int:
         """Per-day goal from scheduled instances (active day reads and write paths)."""
@@ -251,7 +252,7 @@ class TaskPointsService:
         return self.get_daily_points(username, self._today())
 
     def clear_daily_points_for_reset(self, username: str, target_date: date) -> None:
-        """Clear per-person daily points for a date (called during 2am reset).
+        """Clear per-person daily points for a date (called during daily reset).
         Balance is NOT modified - only the daily tally for a clean new day."""
         try:
             date_str = target_date.isoformat()
@@ -266,7 +267,7 @@ class TaskPointsService:
     def lock_daily_threshold_for_date(
         self, username: str, locked_date: date, threshold: Optional[int] = None
     ) -> None:
-        """Write final streak_threshold for a locked calendar day (2am reset)."""
+        """Write final streak_threshold for a locked reset day (4am Chicago reset)."""
         try:
             if locked_date >= self._today():
                 return

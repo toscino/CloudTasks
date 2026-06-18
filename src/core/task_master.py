@@ -5,9 +5,9 @@ import random
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime
-import pytz
 from src.utils.logger import logger
-from src.utils.config import get_spouse
+from src.utils.config import get_spouse, get_timezone
+from src.utils.reset_period import get_reset_day
 from src.utils.random_selection import resolve_random_selection
 
 
@@ -42,17 +42,16 @@ class TaskMaster:
     def _select_tasks_by_points(self, username, tasks_needed=5, exclude_task_ids=None):
         """Select tasks by point value: highest absolute points first, then next tier down."""
         try:
-            local_tz = pytz.timezone('US/Central')
-            today_central = datetime.now(local_tz).date()
+            reset_day = get_reset_day(tz=get_timezone())
 
             points_earned_today = 0
             if self.task_points_service:
                 points_earned_today = self.task_points_service.get_daily_points_today(username)
 
             if self.daily_task_service:
-                goal_points = self.daily_task_service.compute_daily_goal(username, today_central)
+                goal_points = self.daily_task_service.compute_daily_goal(username, reset_day)
             elif self.task_points_service:
-                goal_points = self.task_points_service.get_daily_goal(username, today_central)
+                goal_points = self.task_points_service.get_daily_goal(username, reset_day)
             else:
                 goal_points = 0
 
@@ -60,7 +59,7 @@ class TaskMaster:
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
-                    FieldFilter('date', '==', today_central.isoformat()),
+                    FieldFilter('date', '==', reset_day.isoformat()),
                     FieldFilter('completed', '==', False)
                 ])
             )
@@ -159,15 +158,15 @@ class TaskMaster:
     def get_active_session_tasks(self, username):
         """Get active task session (up to 5 tasks, fewer if not enough available)"""
         try:
-            local_tz = pytz.timezone('US/Central')
-            today_central = datetime.now(local_tz).date()
+            local_tz = get_timezone()
+            reset_day = get_reset_day(tz=local_tz)
             now = datetime.now(local_tz)
             
             # Get all daily task instances for today (not completed, not abandoned)
             instances_query = self.db.collection('daily_task_instances').where(
                 filter=firestore.And([
                     FieldFilter('username', '==', username),
-                    FieldFilter('date', '==', today_central.isoformat()),
+                    FieldFilter('date', '==', reset_day.isoformat()),
                     FieldFilter('completed', '==', False)
                 ])
             )
@@ -282,7 +281,7 @@ class TaskMaster:
                     'presented_at': firestore.SERVER_TIMESTAMP,
                     'description': resolved_description  # Store resolved description in instance
                 })
-                local_tz = pytz.timezone('US/Central')
+                local_tz = get_timezone()
                 task['presented_at'] = datetime.now(local_tz)  # For immediate use
                 
                 # Format for frontend compatibility (use resolved description)
@@ -351,7 +350,7 @@ class TaskMaster:
                     'presented_at': firestore.SERVER_TIMESTAMP,
                     'description': resolved_description  # Store resolved description in instance
                 })
-                local_tz = pytz.timezone('US/Central')
+                local_tz = get_timezone()
                 task['presented_at'] = datetime.now(local_tz)
                 
                 # Format for frontend compatibility (use resolved description)

@@ -123,12 +123,12 @@
             <h3>Debug Actions</h3>
             <button onclick="checkGenerationLocks()">Check Generation Locks</button>
             <button onclick="checkTimeAndWeights()">Check Time & Weights</button>
-            <button onclick="resetDailyTasks()">Reset Daily Tasks (2am Simulation)</button>
+            <button onclick="resetDailyTasks()">Reset Daily Tasks (4am Simulation)</button>
             <button onclick="addTestPerformanceBonus()">Add Random Performance Bonus</button>
             <button onclick="clearOwedPoints()">Clear Owed Points (Couple)</button>
             <button onclick="viewTrackerHistory()">View Tracker History (Last 7 Days)</button>
             <button onclick="viewAllTrackerHistory()">View All Tracker History (with test status)</button>
-            <button onclick="getTrackerAt2am()">Get Tracker Value at 2am</button>
+            <button onclick="getTrackerAtReset()">Get Tracker Value at Reset</button>
             <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h4>Progress Day Simulation</h4>
                 <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
@@ -144,7 +144,7 @@
                     </div>
                     <button onclick="progressDay()">Progress Day</button>
                 </div>
-                <small style="color: #666;">Simulates end-of-day processing (2am reset). Enter custom points or leave blank to calculate from completed tasks.</small>
+                <small style="color: #666;">Simulates end-of-day processing (4am reset). Enter custom points or leave blank to calculate from completed tasks.</small>
             </div>
             <button onclick="resetTrackerHistory()" style="background-color: #dc3545;">Reset Tracker History</button>
             <div id="debugResult" class="result"></div>
@@ -684,24 +684,24 @@
             }
         }
         
-        async function getTrackerAt2am() {
+        async function getTrackerAtReset() {
             const resultDiv = document.getElementById('debugResult');
             resultDiv.className = 'result';
-            resultDiv.textContent = 'Getting tracker value at 2am...';
+            resultDiv.textContent = 'Getting tracker value at reset...';
             
             try {
-                const response = await fetch('/api/collaboration/tracker-at-2am');
+                const response = await fetch('/api/collaboration/tracker-at-reset');
                 const data = await response.json();
                 
                 if (data.status === 'success') {
                     resultDiv.className = 'result success';
-                    let message = `Tracker value at 2am reset: ${data.tracker_value}\n`;
+                    let message = `Tracker value at reset (4am Central): ${data.tracker_value}\n`;
                     message += `Source: ${data.source === 'history' ? 'History entry' : 'Current value (no history found)'}\n`;
                     message += `Date: ${data.date}`;
                     resultDiv.textContent = message;
                 } else {
                     resultDiv.className = 'result error';
-                    resultDiv.textContent = 'Failed to get tracker at 2am: ' + data.message;
+                    resultDiv.textContent = 'Failed to get tracker at reset: ' + data.message;
                 }
             } catch (error) {
                 resultDiv.className = 'result error';

@@ -9,6 +9,7 @@ import string
 from src.utils.error_handlers import handle_exception
 from src.utils.firestore_helpers import convert_firestore_timestamp
 from src.utils.config import get_timezone
+from src.utils.reset_period import get_reset_day
 
 
 class UserService:
@@ -279,27 +280,22 @@ class UserService:
                 from src.services.daily_task_service import DailyTaskService
                 daily_task_service = DailyTaskService(self.app_manager)
                 
-                # Get current time in central timezone for date calculation
-                central_tz = get_timezone()
-                now_central = datetime.now(central_tz)
-                today_central = now_central.date()
+                reset_day = get_reset_day(tz=get_timezone())
                 
                 # Reset tasks with tracker reversal (undoes points earned today)
                 self.logger.info(f"Resetting tasks with tracker reversal for {username} due to vacation_mode change")
-                daily_task_service.reset_daily_tasks_with_tracker_reversal(username, today_central)
+                daily_task_service.reset_daily_tasks_with_tracker_reversal(username, reset_day)
 
             if travel_day_mode_changed:
                 from src.services.daily_task_service import DailyTaskService
                 daily_task_service = DailyTaskService(self.app_manager)
 
-                central_tz = get_timezone()
-                now_central = datetime.now(central_tz)
-                today_central = now_central.date()
+                reset_day = get_reset_day(tz=get_timezone())
 
                 self.logger.info(
                     f"Resetting tasks for {username} only due to travel_day_mode change"
                 )
-                daily_task_service.reset_daily_tasks_for_user_only(username, today_central)
+                daily_task_service.reset_daily_tasks_for_user_only(username, reset_day)
             
             self.logger.info(f"Updated preferences for {username}: {preferences}")
             

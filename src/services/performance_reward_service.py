@@ -4,7 +4,7 @@ Performance reward service — daily band bonuses, owed points, tier settings.
 import random
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 from src.models.performance_reward import (
     compute_performance_band,
@@ -18,6 +18,7 @@ from src.models.performance_reward import (
     TOP_BAND_INDEX,
 )
 from src.utils.config import get_timezone
+from src.utils.reset_period import get_reset_day, get_reset_time_on
 from src.utils.error_handlers import handle_exception
 
 
@@ -49,18 +50,17 @@ class PerformanceRewardService:
         return datetime.now(self.central_tz)
 
     def _today(self) -> date:
-        return self._now().date()
+        return get_reset_day(tz=self.central_tz)
 
     def _reset_time_on(self, d: date) -> datetime:
-        dt = datetime.combine(d, time(2, 0))
-        return self.central_tz.localize(dt)
+        return get_reset_time_on(d, tz=self.central_tz)
 
     def expire_on_reset_date(self, created_reset_date: date) -> date:
-        """Calendar day when the 3rd 2am reset removes the item (R+2)."""
+        """Calendar day when the 3rd reset removes the item (R+2)."""
         return created_reset_date + timedelta(days=2)
 
     def expire_at_for_created_reset(self, created_reset_date: date) -> datetime:
-        """Stored 2am timestamp on expire day (audit only; expiry runs on reset)."""
+        """Stored reset timestamp on expire day (audit only; expiry runs on reset)."""
         return self._reset_time_on(self.expire_on_reset_date(created_reset_date))
 
     def _created_reset_date(self, item_data: Dict[str, Any]) -> Optional[date]:

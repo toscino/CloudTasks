@@ -510,6 +510,24 @@ All API endpoints return JSON in this format:
 }
 ```
 
+### Get Tracker at Reset
+
+**GET** `/api/collaboration/tracker-at-reset`
+
+Returns the collaboration tracker value at the last daily reset boundary (4:00 AM America/Chicago). Used by the test page for debugging.
+
+**Response**:
+```json
+{
+  "status": "success",
+  "tracker_value": 5,
+  "date": "2026-06-09",
+  "source": "history"
+}
+```
+
+`source` is `"history"` when a tracker history entry exists before the reset boundary, otherwise `"current"`.
+
 ### Get Today's Points
 
 **GET** `/api/collaboration/todays-points`

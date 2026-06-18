@@ -20,6 +20,7 @@ from src.services.performance_reward_service import PerformanceRewardService
 from src.services.dice_roll_service import DiceRollService
 from src.services.task_points_service import TaskPointsService
 from src.utils.config import get_timezone
+from src.utils.reset_period import get_reset_day
 
 # Load environment variables
 load_dotenv()
@@ -274,10 +275,10 @@ def abandon_daily_task(instance_id):
 def reset_daily_tasks():
     """Reset daily tasks (for testing) - deletes today's instances and recreates them"""
     username = get_user_info(app_manager)
-    today_central = datetime.now(pytz.timezone('America/Chicago')).date()
+    reset_day = get_reset_day()
     instances_query = db.collection('daily_task_instances').where(
         filter=FieldFilter('username', '==', username)
-    ).where(filter=FieldFilter('date', '==', today_central.isoformat()))
+    ).where(filter=FieldFilter('date', '==', reset_day.isoformat()))
     
     deleted_count = 0
     for instance in instances_query.stream():
@@ -286,7 +287,7 @@ def reset_daily_tasks():
     
     reset_query = db.collection('daily_task_resets').where(
         filter=FieldFilter('username', '==', username)
-    ).where(filter=FieldFilter('last_reset_date', '==', today_central.isoformat()))
+    ).where(filter=FieldFilter('last_reset_date', '==', reset_day.isoformat()))
     for reset_doc in reset_query.stream():
         reset_doc.reference.delete()
     
@@ -400,7 +401,7 @@ def _created_at_sort_key(created_at):
 def get_collaboration_history():
     """Get last 7 days of tracker history"""
     username = get_user_info(app_manager)
-    today = datetime.now(tz=get_timezone()).date()
+    today = get_reset_day()
     seven_days_ago = today - timedelta(days=7)
     
     history_query = db.collection('tracker_history').where(
@@ -465,12 +466,12 @@ def reset_tracker_history():
     username = get_user_info(app_manager)
     return collaboration_service.reset_tracker_history()
 
-@app_manager.route('/api/collaboration/tracker-at-2am', ['GET'], limit="20 per minute")
+@app_manager.route('/api/collaboration/tracker-at-reset', ['GET'], limit="20 per minute")
 @with_error_handling
-def get_tracker_at_2am():
-    """Get the collaboration tracker value at 2am reset time"""
+def get_tracker_at_reset():
+    """Get the collaboration tracker value at daily reset boundary (4am Chicago)"""
     username = get_user_info(app_manager)
-    return collaboration_service.get_tracker_at_2am()
+    return collaboration_service.get_tracker_at_reset()
 
 @app_manager.route('/api/collaboration/progress-day', ['POST'], limit="5 per minute")
 @with_error_handling
