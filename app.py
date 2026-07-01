@@ -25,10 +25,12 @@ from src.utils.reset_period import get_reset_day
 # Load environment variables
 load_dotenv()
 
-# TODO: PERFORMANCE OPTIMIZATION
-# Currently using client-side filtering for flexible testing
-# Future: Create Firestore composite indexes and switch to direct queries
-# See README.md "Performance Optimization Notes" section for details
+# NOTE: ARCHITECTURE DESIGN
+# This application intentionally filters and groups collection data in Python (service layer)
+# rather than using database-level composite queries. Given the small scale (2-10 users),
+# this approach performs well, avoids data transfer bottlenecks, and eliminates the need
+# to maintain complex Firestore composite indexes.
+
 
 # Initialize FlaskApp from flask_base (module level for flask_base compatibility)
 app_manager = FlaskApp(app_name="CloudTasks", demo_user="test_user")
@@ -412,12 +414,27 @@ def get_collaboration_history():
     for doc in history_query.stream():
         data = doc.to_dict()
         created_at = data.get('created_at')
+        triggerer = data.get('username')
+        if not triggerer:
+            continue
+        
+        if triggerer.lower() == username.lower():
+            user_points = data.get('user_points', 0)
+            spouse_points = data.get('spouse_points', 0)
+            user_adjustment = data.get('user_movement', data.get('user_adjustment', 0))
+            spouse_adjustment = data.get('spouse_movement', data.get('spouse_adjustment', 0))
+        else:
+            user_points = data.get('spouse_points', 0)
+            spouse_points = data.get('user_points', 0)
+            user_adjustment = data.get('spouse_movement', data.get('spouse_adjustment', 0))
+            spouse_adjustment = data.get('user_movement', data.get('user_adjustment', 0))
+
         history.append({
             'date': data['date'],
-            'ian_points': data['user_points'],
-            'karleigh_points': data['spouse_points'],
-            'ian_adjustment': data.get('user_movement', data.get('user_adjustment', 0)),
-            'karleigh_adjustment': data.get('spouse_movement', data.get('spouse_adjustment', 0)),
+            'user_points': user_points,
+            'spouse_points': spouse_points,
+            'user_adjustment': user_adjustment,
+            'spouse_adjustment': spouse_adjustment,
             'old_tracker': data['old_value'],
             'new_tracker': data['new_value'],
             '_created_at': created_at,
@@ -868,6 +885,15 @@ def check_time_and_weights():
         })
     except Exception as e:
         app_manager.logger.error(f"Failed to check time and weights: {e}")
+        return app_manager.jsonify({
+            'status': 'error',
+            'message': f'Failed to check time and weights: {str(e)}'
+        }), 500
+
+# For gunicorn/app engine compatibility, app is already defined at module level
+if __name__ == '__main__':
+    app_manager.run()
+check time and weights: {e}")
         return app_manager.jsonify({
             'status': 'error',
             'message': f'Failed to check time and weights: {str(e)}'

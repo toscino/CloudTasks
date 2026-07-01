@@ -163,31 +163,43 @@ class DailyTaskService:
             doc = doc_ref.get()
             
             if not doc.exists:
-                return {
-                    'status': 'error',
-                    'message': 'Daily task not found'
-                }
+                raise NotFoundError(
+                    "Daily task template not found",
+                    user_message="Daily task not found"
+                )
             
             template_data = doc.to_dict()
             if template_data.get('username') != username:
-                return {
-                    'status': 'error',
-                    'message': 'Unauthorized: Daily task belongs to another user'
-                }
+                raise UnauthorizedError(
+                    "Unauthorized template modification",
+                    user_message="Unauthorized: Daily task belongs to another user"
+                )
             
             # Validate input
             if 'points' in data:
                 if not data['points'] or data['points'] == 0:
-                    return {'status': 'error', 'message': 'Points cannot be zero'}
+                    raise ValidationError(
+                        "Points cannot be zero",
+                        user_message="Points cannot be zero"
+                    )
                 if data['points'] < -100 or data['points'] > 100:
-                    return {'status': 'error', 'message': 'Points must be between -100 and 100'}
+                    raise ValidationError(
+                        "Points must be between -100 and 100",
+                        user_message="Points must be between -100 and 100"
+                    )
             
             if 'days_of_week' in data:
                 days_of_week = data['days_of_week']
                 if not days_of_week or len(days_of_week) == 0:
-                    return {'status': 'error', 'message': 'At least one day of week must be selected'}
+                    raise ValidationError(
+                        "At least one day of week must be selected",
+                        user_message="At least one day of week must be selected"
+                    )
                 if not all(0 <= day <= TRAVEL_DAY_WEEKDAY for day in days_of_week):
-                    return {'status': 'error', 'message': 'Invalid days of week'}
+                    raise ValidationError(
+                        "Invalid days of week",
+                        user_message="Invalid days of week"
+                    )
             
             # Update fields
             update_data = {'updated_at': firestore.SERVER_TIMESTAMP}
@@ -229,12 +241,10 @@ class DailyTaskService:
                 'status': 'success',
                 'message': 'Daily task updated successfully'
             }
+        except (ValidationError, NotFoundError, UnauthorizedError) as e:
+            return handle_exception(e, f"Failed to update daily task {task_id} for {username}")
         except Exception as e:
-            self.logger.error(f"Failed to update daily task {task_id} for {username}: {e}")
-            return {
-                'status': 'error',
-                'message': f'Failed to update daily task: {str(e)}'
-            }
+            return handle_exception(e, f"Unexpected error updating daily task {task_id} for {username}")
     
     def delete_daily_task(self, task_id: str, username: str) -> Dict[str, Any]:
         """Delete daily task template"""
@@ -469,6 +479,9 @@ class DailyTaskService:
                 if spouse_username:
                     perf.process_missed_reset_rewards(spouse_username, reset_day)
                 perf.expire_due_items(reset_day)
+                perf.apply_interest_for_date(username, reset_day)
+                if spouse_username:
+                    perf.apply_interest_for_date(spouse_username, reset_day)
 
             instances_created = self._reset_user_daily_tasks(username, reset_day)
             

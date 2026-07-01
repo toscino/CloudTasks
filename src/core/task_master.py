@@ -66,14 +66,9 @@ class TaskMaster:
 
             doable_tasks = []  # Presented + unpresented, not completed, not abandoned
             available_tasks = []  # Unpresented only (eligible to be presented)
-            seen_instance_ids = set()
-
             for doc in instances_query.stream():
                 instance_id = doc.id
-                if instance_id in seen_instance_ids:
-                    logger.warning(f"Duplicate instance ID detected in query: {instance_id} for {username}")
-                    continue
-                seen_instance_ids.add(instance_id)
+
 
                 instance_data = doc.to_dict()
                 instance_data['id'] = instance_id
@@ -172,16 +167,9 @@ class TaskMaster:
             )
             
             active_presented_tasks = []
-            seen_instance_ids = set()  # Prevent duplicates from query
-            
             for doc in instances_query.stream():
                 instance_id = doc.id
-                
-                # Skip if we've already seen this instance ID (duplicate prevention)
-                if instance_id in seen_instance_ids:
-                    logger.warning(f"Duplicate instance ID detected in get_active_session_tasks: {instance_id} for {username}")
-                    continue
-                seen_instance_ids.add(instance_id)
+
                 
                 instance_data = doc.to_dict()
                 

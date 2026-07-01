@@ -213,6 +213,7 @@ class CollaborationService:
             
             history_data = {
                 'date': date.isoformat(),
+                'username': username,
                 'user_points': user_points,
                 'spouse_points': spouse_points,
                 'old_value': old_value,

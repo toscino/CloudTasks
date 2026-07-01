@@ -536,17 +536,17 @@
                     html += '</tr></thead><tbody>';
                     
                     data.history.forEach(day => {
-                        const ianClass = day.ian_adjustment > 0 ? 'positive' : day.ian_adjustment < 0 ? 'negative' : 'neutral';
-                        const kClass = day.karleigh_adjustment > 0 ? 'positive' : day.karleigh_adjustment < 0 ? 'negative' : 'neutral';
+                        const userClass = day.user_adjustment > 0 ? 'positive' : day.user_adjustment < 0 ? 'negative' : 'neutral';
+                        const spouseClass = day.spouse_adjustment > 0 ? 'positive' : day.spouse_adjustment < 0 ? 'negative' : 'neutral';
                         const trackerChange = day.new_tracker - day.old_tracker;
                         const trackerClass = trackerChange > 0 ? 'positive' : trackerChange < 0 ? 'negative' : 'neutral';
                         
                         html += '<tr>';
                         html += `<td>${day.date}</td>`;
-                        html += `<td>${day.ian_points}</td>`;
-                        html += `<td>${day.karleigh_points}</td>`;
-                        html += `<td class="${ianClass}">${day.ian_adjustment > 0 ? '+' : ''}${day.ian_adjustment}</td>`;
-                        html += `<td class="${kClass}">${day.karleigh_adjustment > 0 ? '+' : ''}${day.karleigh_adjustment}</td>`;
+                        html += `<td>${day.user_points}</td>`;
+                        html += `<td>${day.spouse_points}</td>`;
+                        html += `<td class="${userClass}">${day.user_adjustment > 0 ? '+' : ''}${day.user_adjustment}</td>`;
+                        html += `<td class="${spouseClass}">${day.spouse_adjustment > 0 ? '+' : ''}${day.spouse_adjustment}</td>`;
                         html += `<td>${day.old_tracker} → ${day.new_tracker} <span class="${trackerClass}">(${trackerChange > 0 ? '+' : ''}${trackerChange})</span></td>`;
                         html += '</tr>';
                     });
@@ -628,8 +628,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        ian_points: userPoints,
-                        karleigh_points: spousePoints
+                        user_points: userPoints,
+                        spouse_points: spousePoints
                     })
                 });
                 
@@ -637,8 +637,8 @@
                 if (data.status === 'success') {
                     resultDiv.className = 'result success';
                     let message = `Day processed successfully! Date: ${data.date}\n\n`;
-                    message += `You: ${data.ian_points} points (${data.ian_adjustment > 0 ? '+' : ''}${data.ian_adjustment})\n`;
-                    message += `Spouse: ${data.karleigh_points} points (${data.karleigh_adjustment > 0 ? '+' : ''}${data.karleigh_adjustment})\n`;
+                    message += `You: ${data.user_points !== undefined ? data.user_points : (data.ian_points !== undefined ? data.ian_points : 'N/A')} points (${data.user_adjustment !== undefined ? (data.user_adjustment > 0 ? '+' : '') + data.user_adjustment : 'N/A'})\n`;
+                    message += `Spouse: ${data.spouse_points !== undefined ? data.spouse_points : (data.karleigh_points !== undefined ? data.karleigh_points : 'N/A')} points (${data.spouse_adjustment !== undefined ? (data.spouse_adjustment > 0 ? '+' : '') + data.spouse_adjustment : 'N/A'})\n`;
                     message += `Tracker: ${data.old_tracker} → ${data.new_tracker}\n\n`;
                     message += `View tracker history to see all results.`;
                     resultDiv.textContent = message;

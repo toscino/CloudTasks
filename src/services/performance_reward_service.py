@@ -614,6 +614,59 @@ class PerformanceRewardService:
             )
             return False
 
+    def apply_interest_for_date(self, username: str, reset_day: date) -> None:
+        """Apply 10% rounded up interest on Sunday night reset (representing Monday reset_day)."""
+        if reset_day.weekday() != 0:
+            return
+
+        ledger_id = f"interest_{username}_{reset_day.isoformat()}"
+        if self._ledger_exists(ledger_id):
+            self.logger.info(f"Interest already applied for {username} on reset {reset_day}")
+            return
+
+        try:
+            import math
+            balance = self._get_owed_balance(username)
+            if balance < 5:
+                interest = 0
+            else:
+                interest = math.ceil(balance * 0.1)
+
+            if interest > 0:
+                owed_ref = self.db.collection(self.COL_OWED).document(username)
+                owed_ref.set({
+                    "username": username,
+                    "balance": balance + interest,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }, merge=True)
+
+                self.db.collection(self.COL_LEDGER).document(ledger_id).set({
+                    "username": username,
+                    "amount": interest,
+                    "source": "interest",
+                    "earned_for_date": (reset_day - timedelta(days=1)).isoformat(),
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "balance_before": balance,
+                    "balance_after": balance + interest,
+                })
+                self.logger.info(
+                    f"Applied {interest} interest to {username} (balance: {balance} -> {balance + interest}) for reset {reset_day}"
+                )
+            else:
+                # Record 0 interest in ledger to prevent reprocessing
+                self.db.collection(self.COL_LEDGER).document(ledger_id).set({
+                    "username": username,
+                    "amount": 0,
+                    "source": "interest",
+                    "earned_for_date": (reset_day - timedelta(days=1)).isoformat(),
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "balance_before": balance,
+                    "balance_after": balance,
+                })
+                self.logger.info(f"No interest applied for {username} (balance: {balance}) on reset {reset_day}")
+        except Exception as e:
+            self.logger.error(f"Failed to apply interest for {username} on reset {reset_day}: {e}")
+
     def process_missed_reset_rewards(
         self, earner_username: str, today_central: date
     ) -> None:
@@ -628,6 +681,10 @@ class PerformanceRewardService:
         missed = missed_reset_dates(last_reset, today_central)
         if not missed:
             return
+
+        # Apply interest for each missed reset day
+        for m in missed:
+            self.apply_interest_for_date(earner_username, m)
 
         gap = len(missed)
         primary_earn = today_central - timedelta(days=gap + 1)

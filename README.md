@@ -121,9 +121,10 @@ scripts/               # GAE image prune and Artifact Registry policy
 docs/                  # CONFIG_GUIDE, DAILY_RESET_BEHAVIOR, API_CONTRACTS, etc.
 ```
 
-## Performance note
+## Database Indexing & Filtering Note
 
-Queries currently use single-field Firestore ordering and filter incomplete tasks in Python for flexibility during development. For production scale, add composite indexes and query filters in Firestore (see comment in `app.py`).
+Given the small deployment scale (2–10 users), this application intentionally uses Python-side filtering and sorting over single-field database queries rather than Firestore composite queries. This eliminates database-level composite index maintenance and keeps Firestore configuration minimal.
+
 
 ## Terminology
 
